@@ -2185,11 +2185,11 @@ textarea{resize:vertical;min-height:68px;}
 <div class="modal-overlay" id="modal-add-user">
   <div class="modal">
     <div class="modal-header"><span class="modal-title" id="au-title">👤 Thêm Tài Khoản Mới</span><button class="close-btn" onclick="closeModal('modal-add-user')">✕</button></div>
-    <div class="form-row">
+    <div class="form-row" id="au-row-1">
       <div class="form-group"><label>Tài khoản đăng nhập <span style="color:var(--red);">*</span></label><input id="au-username" placeholder="VD: ketoan2"></div>
       <div class="form-group"><label>Họ tên <span style="color:var(--red);">*</span></label><input id="au-fullname" placeholder="Nguyễn Văn A"></div>
     </div>
-    <div class="form-row">
+    <div class="form-row" id="au-row-2">
       <div class="form-group"><label>Mật khẩu <span style="color:var(--red);">*</span></label><input type="password" id="au-password" placeholder="Tối thiểu 6 ký tự"></div>
       <div class="form-group"><label>Vai trò <span style="color:var(--red);">*</span></label>
         <select id="au-role" onchange="updateBophanVisibility()">
@@ -2203,7 +2203,7 @@ textarea{resize:vertical;min-height:68px;}
       <label>Bộ phận phụ trách</label>
       <select id="au-bophan"><option value="buong-phong">Buồng phòng</option><option value="nha-hang">Nhà hàng</option><option value="bep">Bếp</option><option value="sale">Sale</option><option value="ky-thuat">Kỹ thuật</option><option value="le-tan">Lễ tân</option><option value="hr">HR</option></select>
     </div>
-    <div style="background:var(--cream);border-radius:8px;padding:10px 13px;font-size:12px;margin-bottom:14px;">
+    <div id="au-role-desc-box" style="background:var(--cream);border-radius:8px;padding:10px 13px;font-size:12px;margin-bottom:14px;">
       <div style="font-weight:600;color:var(--navy);margin-bottom:5px;">Quyền truy cập theo vai trò:</div>
       <div id="au-perm-desc" style="color:var(--text-muted);line-height:1.6;"></div>
     </div>
@@ -2224,7 +2224,7 @@ textarea{resize:vertical;min-height:68px;}
     </div>
     <div style="display:flex;justify-content:flex-end;gap:10px;">
       <button class="btn btn-ghost" onclick="closeModal('modal-add-user')">Huỷ</button>
-      <button class="btn btn-gold" onclick="saveUser()">💾 Lưu tài khoản</button>
+      <button class="btn btn-gold" onclick="saveUser()">💾 Lưu quyền tab</button>
     </div>
   </div>
 </div>
@@ -2469,17 +2469,19 @@ async function doLogin(){
     const {data,error}=await sb.auth.signInWithPassword({email,password:p});
     if(error||!data||!data.session){ errEl.textContent='❌ Email hoặc mật khẩu không đúng!'; return; }
     errEl.textContent='';
-    enterApp(data.session);
+    await enterApp(data.session);
   }catch(e){ errEl.textContent='❌ Lỗi đăng nhập: '+(e.message||e); }
 }
 
 // Vào app sau khi đã có phiên hợp lệ (dùng chung cho đăng nhập & khôi phục phiên)
-function enterApp(session){
+async function enterApp(session){
   currentUser=currentUserFromSession(session);
   if(!currentUser) return;
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='flex';
-  applyPermissions();
+  applyPermissions();               // áp quyền mặc định theo vai trò ngay
+  await loadUserPerms();            // lấy quyền tab tuỳ chỉnh của Giám đốc (nếu có)
+  applyPermissions();               // áp lại theo tab tuỳ chỉnh
   // Chỉ hiện nút Xóa data / Nhập Sheet cũ cho Giám đốc
   const btnClear=document.getElementById('btn-clear-data');
   if(btnClear) btnClear.style.display=currentUser.role==='giamdoc'?'flex':'none';
@@ -2591,10 +2593,11 @@ function applyPermissions(){
   }
 }
 
-// ==================== USER TABLE ====================
-function renderUsersTable(){
-  // Tài khoản nay do Supabase Auth quản lý (không còn lưu trong app). Hiển thị thông
-  // tin tài khoản đang đăng nhập + hướng dẫn quản lý an toàn trong Supabase Dashboard.
+// ==================== USER TABLE (phân quyền tab qua Supabase user_perms) ====================
+const BP_LABELS_USR={'buong-phong':'Buồng phòng','nha-hang':'Nhà hàng','bep':'Bếp','sale':'Sale','ky-thuat':'Kỹ thuật','le-tan':'Lễ tân','hr':'HR'};
+let _permList=[]; // cache danh sách user_perms cho màn quản lý (chỉ giám đốc)
+
+function _usersInfoPanel(msg){
   const tb=document.getElementById('users-tbody'); if(!tb) return;
   const meta=(currentUser&&ROLE_META[currentUser.role])||{};
   const me=currentUser?`<div style="margin-bottom:6px;"><strong>${currentUser.fullname}</strong>
@@ -2602,15 +2605,57 @@ function renderUsersTable(){
       <div style="font-size:12px;color:var(--text-muted);">Email: ${currentUser.email}${currentUser.bophan?' · Bộ phận: '+currentUser.bophan:''}</div>`:'';
   tb.innerHTML=`<tr><td colspan="8" style="padding:20px;">
     <div style="background:var(--gold-pale);border:1px solid rgba(201,168,76,.4);border-radius:10px;padding:16px 18px;">
-      <div style="font-weight:600;color:var(--navy);margin-bottom:8px;">🔐 Tài khoản được bảo mật qua Supabase Auth</div>
-      ${me}
-      <div style="font-size:12.5px;color:var(--text-muted);margin-top:10px;line-height:1.6;">
-        Để <strong>thêm nhân viên, đổi mật khẩu, khóa/mở tài khoản</strong>, vào
-        <strong>Supabase → Authentication → Users</strong>. Sau khi tạo user, gán vai trò bằng
-        câu lệnh SQL cập nhật <code>app_metadata</code> (xem hướng dẫn đã cung cấp).
-        Cách này đảm bảo mật khẩu không nằm trong mã nguồn web và quyền được thực thi ở máy chủ.
-      </div>
+      <div style="font-weight:600;color:var(--navy);margin-bottom:8px;">🔐 Tài khoản bảo mật qua Supabase Auth</div>${me}
+      <div style="font-size:12.5px;color:var(--text-muted);margin-top:10px;line-height:1.6;">${msg}</div>
     </div></td></tr>`;
+}
+
+async function renderUsersTable(){
+  const tb=document.getElementById('users-tbody'); if(!tb) return;
+  // Chỉ Giám đốc mới thấy & sửa quyền tab của mọi người
+  if(!currentUser || currentUser.role!=='giamdoc'){
+    _usersInfoPanel('Thêm nhân viên / đổi mật khẩu / khóa tài khoản: làm trong <strong>Supabase → Authentication → Users</strong>. Việc phân quyền tab do Giám đốc thực hiện tại đây.');
+    return;
+  }
+  if(!sb){ _usersInfoPanel('Chưa cấu hình Supabase nên không tải được danh sách.'); return; }
+  tb.innerHTML=`<tr><td colspan="8" style="padding:16px;color:var(--text-muted);">Đang tải danh sách...</td></tr>`;
+  try{
+    const {data,error}=await sb.from('user_perms').select('*').order('email');
+    if(error) throw error;
+    _permList=data||[];
+    if(!_permList.length){ tb.innerHTML=`<tr><td colspan="8" style="padding:16px;color:var(--text-muted);">Chưa có nhân viên nào đăng nhập. Người đăng nhập lần đầu sẽ tự xuất hiện ở đây để phân quyền.</td></tr>`; return; }
+    tb.innerHTML=_permList.map(u=>{
+      const meta=ROLE_META[u.role]||{};
+      const hasCustom=Array.isArray(u.tabs)&&u.tabs.length>0;
+      const allowedTabs=hasCustom?u.tabs:(DEFAULT_TABS[u.role]||[]);
+      const tabBadges=AU_ALL_TABS.filter(t=>allowedTabs.includes(t.id)).map(t=>`<span class="badge ${t.id.startsWith('kho')?'badge-blue':'badge-navy'}" style="font-size:10px;margin:1px;">${t.label}</span>`).join('');
+      return `<tr>
+        <td><strong>${u.email}</strong></td>
+        <td>${u.fullname||'—'}</td>
+        <td><span class="badge" style="background:${meta.bg||'#eee'};color:${meta.color||'#333'};">${meta.label||u.role}</span></td>
+        <td>${u.bophan?(BP_LABELS_USR[u.bophan]||u.bophan):'—'}</td>
+        <td style="max-width:340px;">${tabBadges||'—'} ${hasCustom?'':'<span style="font-size:10px;color:var(--text-muted);">(mặc định)</span>'}</td>
+        <td><button class="btn btn-primary btn-sm" onclick="editUser('${u.email}')">✏ Sửa tab</button></td>
+      </tr>`;
+    }).join('');
+  }catch(e){
+    _usersInfoPanel('⚠️ Chưa bật bảng phân quyền <code>user_perms</code> (hoặc lỗi tải: '+(e.message||e)+'). Chạy đoạn SQL tạo bảng user_perms trong hướng dẫn rồi tải lại.');
+  }
+}
+
+// Đọc quyền tab của user hiện tại khi đăng nhập; tự tạo dòng nhận diện nếu chưa có
+async function loadUserPerms(){
+  if(!sb || !currentUser) return;
+  try{
+    const {data,error}=await sb.from('user_perms').select('*').eq('email',currentUser.email).maybeSingle();
+    if(error) throw error;
+    if(data){
+      if(Array.isArray(data.tabs)&&data.tabs.length) currentUser.tabs=data.tabs;
+    }else{
+      // Tự đăng ký dòng nhận diện (tabs=null -> dùng mặc định theo vai trò).
+      await sb.from('user_perms').insert({email:currentUser.email,fullname:currentUser.fullname,role:currentUser.role,bophan:currentUser.bophan,tabs:null,tc_filter:currentUser.tc_filter,active:true});
+    }
+  }catch(e){ console.warn('user_perms (bỏ qua nếu chưa tạo bảng):',e.message||e); }
 }
 
 let editingUserId=null;
@@ -2696,14 +2741,39 @@ function updateBophanVisibility(){
 }
 
 
-// Quản lý tài khoản chuyển sang Supabase Dashboard (để bảo mật — không nhúng khoá admin vào web)
-function _accountMgmtNotice(){
-  showToast('🔐 Quản lý tài khoản nay thực hiện trong Supabase → Authentication → Users. Xem tab "Quản Lý Tài Khoản" để biết chi tiết.',4500,'info');
+// Tạo tài khoản/đổi mật khẩu: làm ở Supabase Dashboard (không nhúng khoá admin vào web).
+// Riêng phân quyền TAB hiển thị của từng user: Giám đốc chỉnh tại đây, lưu vào bảng user_perms.
+let editingPermEmail=null;
+function openAddUserModal(){
+  showToast('➕ Tạo tài khoản mới trong Supabase → Authentication → Users. Sau khi nhân viên đăng nhập lần đầu, họ sẽ xuất hiện ở đây để phân quyền tab.',5000,'info');
 }
-function openAddUserModal(){ _accountMgmtNotice(); }
-function editUser(){ _accountMgmtNotice(); }
-function saveUser(){ _accountMgmtNotice(); }
-function toggleUser(){ _accountMgmtNotice(); }
+function editUser(email){
+  const u=_permList.find(x=>x.email===email); if(!u) return;
+  editingPermEmail=email;
+  document.getElementById('au-title').textContent='✏️ Phân quyền tab: '+(u.fullname||u.email);
+  // Ẩn các field do Dashboard quản (tài khoản/mật khẩu/vai trò/bộ phận), chỉ hiện phần chọn tab
+  ['au-row-1','au-row-2','au-bp-wrap','au-role-desc-box','au-tc-filter-wrap'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.display='none';});
+  document.getElementById('au-tab-perm-wrap').style.display='block';
+  const hasCustom=Array.isArray(u.tabs)&&u.tabs.length>0;
+  renderAuTabCheckboxes(hasCustom?u.tabs:(DEFAULT_TABS[u.role]||[]));
+  document.getElementById('modal-add-user').classList.add('open');
+}
+async function saveUser(){
+  if(!editingPermEmail||!sb){ closeModal('modal-add-user'); return; }
+  const tabs=[...document.querySelectorAll('#au-tab-checkboxes input:checked')].map(cb=>cb.value);
+  try{
+    const {error}=await sb.from('user_perms').update({tabs, updated_at:new Date().toISOString()}).eq('email',editingPermEmail);
+    if(error) throw error;
+    showToast('✅ Đã lưu quyền tab. User sẽ thấy ở lần đăng nhập/tải lại tới.',3000,'success');
+    if(currentUser && editingPermEmail===currentUser.email){ currentUser.tabs=tabs; applyPermissions(); }
+    editingPermEmail=null;
+    closeModal('modal-add-user');
+    renderUsersTable();
+  }catch(e){ showToast('❌ Lưu thất bại: '+(e.message||e),3500,'error'); }
+}
+function toggleUser(){
+  showToast('🔒 Khóa/mở tài khoản: làm trong Supabase → Authentication → Users (Ban user).',4000,'info');
+}
 
 // ==================== DATA - CATALOG ====================
 const NCC_LIST=[];
