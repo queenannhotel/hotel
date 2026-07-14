@@ -2494,8 +2494,11 @@ async function enterApp(session){
   syncThuChiSummary();
   renderCongNoPtr();
   renderNccTable();
-  // Push các đề xuất đã duyệt (DX-044, DX-041) vào CHI ngay khi login
-  DX_DATA.filter(d=>d.status==='da-duyet').forEach(dx=>{ if(dx.don_gia_ht) pushDxToChi(dx); });
+  // Push các đề xuất đã duyệt vào CHI — chỉ vai trò được ghi 'chi' (kế toán/giám đốc),
+  // tránh vai trò khác vô tình tạo bản ghi chi bị RLS chặn -> kẹt đồng bộ.
+  if(currentUser.role==='ketoan'||currentUser.role==='giamdoc'){
+    DX_DATA.filter(d=>d.status==='da-duyet').forEach(dx=>{ if(dx.don_gia_ht) pushDxToChi(dx); });
+  }
   updateNsKpi();
   // Nếu trang đang mở không thuộc quyền của user (vd HR không được xem Dashboard tài chính)
   // thì tự chuyển tới tab đầu tiên mà user được phép.
@@ -5527,27 +5530,48 @@ async function cloudPullAll(){
 // ----- ĐẨY LÊN: so sánh snapshot, chỉ gửi bản ghi mới/đổi/xoá -----
 let _flushTimer=null, _flushing=false;
 function scheduleFlush(){ if(!sb||!cloudReady) return; clearTimeout(_flushTimer); _flushTimer=setTimeout(flushToCloud, 1500); }
+// Ma trận GHI theo vai trò — PHẢI khớp đúng với RLS trên Supabase (bảng records).
+// Vai trò không có trong danh sách -> không được ghi collection đó (client bỏ qua, khỏi gửi request cầm chắc lỗi).
+const WRITE_MATRIX = {
+  thu:['giamdoc','ketoan'], chi:['giamdoc','ketoan'],
+  ncc:['giamdoc','ketoan'], catalog:['giamdoc','ketoan'],
+  nsLuong:['giamdoc','hr'],
+  dx:['giamdoc','ketoan','truong-bp','hr'], kho:['giamdoc','ketoan','truong-bp','hr'], yc:['giamdoc','ketoan','truong-bp','hr'],
+  wsData:['giamdoc','truong-bp'], roomStatus:['giamdoc','truong-bp'], amData:['giamdoc','truong-bp'],
+  mbData:['giamdoc','truong-bp'], hvLinen:['giamdoc','truong-bp'], hvRewash:['giamdoc','truong-bp'],
+  hvCols:['giamdoc','truong-bp'], sx:['giamdoc','truong-bp'],
+};
+function canWriteCollection(name){
+  const role=currentUser&&currentUser.role;
+  if(role==='giamdoc') return true;
+  const allow=WRITE_MATRIX[name];
+  return !allow || allow.includes(role); // collection không khai báo -> cho ghi
+}
+
 async function flushToCloud(){
   if(!sb || !cloudReady || _flushing) return;
-  const payload=[];
-  for(const name of Object.keys(COLLECTIONS)){
-    const cur=_snapshotOf(name); const prev=lastSnapshot[name]||{};
-    for(const id in cur){ if(cur[id]!==prev[id]) payload.push({collection:name, id, data:JSON.parse(cur[id]), deleted:false, updated_at:new Date().toISOString()}); }
-    for(const id in prev){ if(!(id in cur)) payload.push({collection:name, id, data:{}, deleted:true, updated_at:new Date().toISOString()}); }
-  }
-  if(!payload.length) return;
-  _flushing=true; setSyncStatus('sync');
+  _flushing=true;
+  let anyChange=false, anyErr=false;
   try{
-    // gửi theo lô để tránh payload quá lớn
-    for(let i=0;i<payload.length;i+=200){
-      const chunk=payload.slice(i,i+200);
-      const {error}=await sb.from('records').upsert(chunk, {onConflict:'collection,id'});
-      if(error) throw error;
-      chunk.forEach(u=>{ lastSnapshot[u.collection]=lastSnapshot[u.collection]||{}; if(u.deleted) delete lastSnapshot[u.collection][u.id]; else lastSnapshot[u.collection][u.id]=JSON.stringify(u.data); });
+    // Đẩy theo TỪNG nhóm: một nhóm lỗi (vd bị RLS chặn) không làm kẹt các nhóm khác
+    for(const name of Object.keys(COLLECTIONS)){
+      if(!canWriteCollection(name)) continue; // vai trò này không được ghi nhóm này -> bỏ qua
+      const cur=_snapshotOf(name); const prev=lastSnapshot[name]||{};
+      const rows=[];
+      for(const id in cur){ if(cur[id]!==prev[id]) rows.push({collection:name, id, data:JSON.parse(cur[id]), deleted:false, updated_at:new Date().toISOString()}); }
+      for(const id in prev){ if(!(id in cur)) rows.push({collection:name, id, data:{}, deleted:true, updated_at:new Date().toISOString()}); }
+      if(!rows.length) continue;
+      anyChange=true; if(!anyErr) setSyncStatus('sync');
+      try{
+        for(let i=0;i<rows.length;i+=200){
+          const chunk=rows.slice(i,i+200);
+          const {error}=await sb.from('records').upsert(chunk, {onConflict:'collection,id'});
+          if(error) throw error;
+          chunk.forEach(u=>{ lastSnapshot[name]=lastSnapshot[name]||{}; if(u.deleted) delete lastSnapshot[name][u.id]; else lastSnapshot[name][u.id]=JSON.stringify(u.data); });
+        }
+      }catch(e){ anyErr=true; console.error('flush nhóm',name,e); /* giữ snapshot nhóm này -> thử lại sau */ }
     }
-    setSyncStatus('ok');
-  }catch(e){
-    console.error('flushToCloud',e); setSyncStatus('err'); // giữ snapshot cũ -> lần sau thử lại
+    if(anyChange) setSyncStatus(anyErr?'err':'ok');
   }finally{ _flushing=false; }
 }
 
