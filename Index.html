@@ -11,11 +11,18 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#1A2744">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
+
+// ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
+// 👉 Dán 2 giá trị dưới đây từ Supabase → Project Settings → API rồi lưu lại là xong.
+//    (Nếu để trống, app vẫn chạy bình thường bằng dữ liệu local, chỉ không đồng bộ đa máy.)
+const SUPABASE_URL      = ''; // ví dụ: https://xxxxxxxx.supabase.co
+const SUPABASE_ANON_KEY = ''; // anon public key (dạng eyJhbGciOi...)
 
 // ===== LOCAL STORAGE =====
 function clearLocalData(){
@@ -33,6 +40,12 @@ function clearLocalData(){
 }
 
 function lsSave(){
+  const ok=_lsSaveRaw();
+  // Ghi local xong thì lên lịch đẩy lên Supabase (nếu bật đồng bộ)
+  try{ if(typeof scheduleFlush==='function') scheduleFlush(); }catch(e){}
+  return ok;
+}
+function _lsSaveRaw(){
   try{
     const data={
       thu:THU_DATA,chi:CHI_DATA,dx:DX_DATA,ncc:NCC_DATA,kho:KHO_DATA,yc:YC_DATA,
@@ -727,13 +740,14 @@ textarea{resize:vertical;min-height:68px;}
         style="display:none;align-items:center;gap:4px;padding:6px 10px;border-radius:8px;border:1.5px solid var(--red);background:none;color:var(--red);cursor:pointer;font-size:12px;font-weight:600;font-family:'Inter',sans-serif;">
         🗑 Xóa data
       </button>
-      <button onclick="gsSaveAll()" title="Lưu & đồng bộ lên Google Sheets"
-        style="display:flex;align-items:center;gap:4px;padding:6px 10px;border-radius:8px;border:1.5px solid var(--gold);background:none;color:var(--gold);cursor:pointer;font-size:12px;font-weight:600;font-family:'Inter',sans-serif;">
-        💾 Lưu
-      </button>
-      <button onclick="gsLoadAll()" title="Tải dữ liệu mới nhất từ Google Sheets"
-        style="display:flex;align-items:center;gap:4px;padding:6px 10px;border-radius:8px;border:1.5px solid #4A6FA5;background:none;color:#4A6FA5;cursor:pointer;font-size:12px;font-weight:600;font-family:'Inter',sans-serif;">
-        🔄 Đồng bộ
+      <span id="sync-status" onclick="cloudPullAll()" title="Trạng thái đồng bộ đám mây — bấm để tải lại dữ liệu mới nhất"
+        style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:20px;border:1.5px solid var(--border);background:#fff;cursor:pointer;font-size:12px;font-weight:600;font-family:'Inter',sans-serif;">
+        <span id="sync-dot" style="width:8px;height:8px;border-radius:50%;background:#9ca3af;flex-shrink:0;"></span>
+        <span id="sync-text" style="color:var(--text-muted);">Đồng bộ</span>
+      </span>
+      <button id="btn-import-old" onclick="gsLoadAll()" title="Nhập 1 lần dữ liệu từ Google Sheet cũ — chỉ Giám đốc"
+        style="display:none;align-items:center;gap:4px;padding:6px 10px;border-radius:8px;border:1.5px solid #4A6FA5;background:none;color:#4A6FA5;cursor:pointer;font-size:12px;font-weight:600;font-family:'Inter',sans-serif;">
+        📥 Nhập Sheet cũ
       </button>
       <button onclick="doLogout()" title="Đăng xuất" style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:#fff;color:var(--red);cursor:pointer;font-size:12px;font-weight:500;font-family:'Inter',sans-serif;transition:all .15s;" onmouseover="this.style.background='var(--red-bg)'" onmouseout="this.style.background='#fff'">
         <span style="font-size:14px;">⏻</span> Đăng xuất
@@ -2457,6 +2471,8 @@ function doLogin(){
   // Chỉ hiện nút Xóa data cho Giám đốc
   const btnClear=document.getElementById('btn-clear-data');
   if(btnClear) btnClear.style.display=found.role==='giamdoc'?'flex':'none';
+  const btnImp=document.getElementById('btn-import-old');
+  if(btnImp) btnImp.style.display=found.role==='giamdoc'?'flex':'none';
   renderUsersTable();
   renderCatalog();
   renderDxTable();
@@ -2467,6 +2483,8 @@ function doLogin(){
   // Push các đề xuất đã duyệt (DX-044, DX-041) vào CHI ngay khi login
   DX_DATA.filter(d=>d.status==='da-duyet').forEach(dx=>{ if(dx.don_gia_ht) pushDxToChi(dx); });
   updateNsKpi();
+  // Bật đồng bộ đám mây: kéo dữ liệu mới nhất về + lắng nghe realtime từ máy khác
+  initCloud();
 }
 
 function doLogout(){
@@ -5417,7 +5435,154 @@ window.addEventListener('DOMContentLoaded',()=>{
 // Auto-save mỗi 2 phút
 setInterval(()=>{ lsSave(); },2*60*1000);
 // Lưu khi đóng tab
-window.addEventListener('beforeunload',()=>lsSave());
+window.addEventListener('beforeunload',()=>{ _lsSaveRaw(); try{ if(sb&&cloudReady) flushToCloud(); }catch(e){} });
+
+// ==================== SUPABASE CLOUD SYNC ENGINE ====================
+// Đồng bộ đa thiết bị: 1 bảng "records" (collection, id, data jsonb, deleted).
+// - Kéo về khi đăng nhập (merge, không mất data local)
+// - Lắng nghe realtime để thấy thay đổi từ máy khác trong vài giây
+// - Tự đẩy thay đổi lên (diff-based), không cần bấm nút
+let sb = null;
+let cloudReady = false;
+const CLOUD_ENABLED = !!(SUPABASE_URL && SUPABASE_ANON_KEY && window.supabase);
+if(CLOUD_ENABLED){
+  try{ sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {realtime:{params:{eventsPerSecond:5}}}); }
+  catch(e){ console.error('Supabase init lỗi',e); }
+}
+
+// ----- Chỉ báo trạng thái ở topbar -----
+function setSyncStatus(state){
+  const dot=document.getElementById('sync-dot'), txt=document.getElementById('sync-text');
+  if(!dot||!txt) return;
+  const M={ ok:['#2E7D5B','Đã đồng bộ'], sync:['#B7860A','Đang lưu…'], err:['#C0392B','Mất kết nối'], off:['#9ca3af','Chưa bật đồng bộ'] };
+  const m=M[state]||M.off; dot.style.background=m[0]; txt.textContent=m[1];
+}
+
+// ----- Registry: mỗi collection <-> biến in-memory. read()=>[{id,obj}]; write(rows)=>dựng lại -----
+function _byIdDump(arr){ return (arr||[]).filter(x=>x&&x.id!=null).map(x=>({id:String(x.id), obj:x})); }
+function _mapDump(map){ return Object.keys(map||{}).map(k=>({id:String(k), obj:map[k]})); }
+const COLLECTIONS = {
+  thu:       { read:()=>_byIdDump(THU_DATA),  write:r=>{THU_DATA=r.map(x=>x.obj);},  render:()=>{try{syncThuChiSummary();}catch(e){} try{updateDashboardKPI();}catch(e){}} },
+  chi:       { read:()=>_byIdDump(CHI_DATA),  write:r=>{CHI_DATA=r.map(x=>x.obj);},  render:()=>{try{syncThuChiSummary();}catch(e){} try{updateDashboardKPI();}catch(e){}} },
+  dx:        { read:()=>_byIdDump(DX_DATA),   write:r=>{DX_DATA=r.map(x=>x.obj);},   render:()=>{try{renderDxTable();}catch(e){} try{renderDashDx();}catch(e){}} },
+  ncc:       { read:()=>_byIdDump(NCC_DATA),  write:r=>{NCC_DATA=r.map(x=>x.obj);},  render:()=>{try{renderNccTable();}catch(e){}} },
+  kho:       { read:()=>_byIdDump(KHO_DATA),  write:r=>{KHO_DATA=r.map(x=>x.obj);},  render:()=>{try{renderKhoTab();}catch(e){}} },
+  yc:        { read:()=>_byIdDump(YC_DATA),   write:r=>{YC_DATA=r.map(x=>x.obj);},   render:()=>{try{renderYeuCau();}catch(e){}} },
+  nsLuong:   { read:()=>_byIdDump(NS_LUONG),  write:r=>{NS_LUONG=r.map(x=>x.obj);},  render:()=>{try{renderNsLuong();}catch(e){} try{updateNsKpi();}catch(e){}} },
+  sx:        { read:()=>_byIdDump(SX_DATA),   write:r=>{SX_DATA=r.map(x=>x.obj);},   render:()=>{try{renderSetupXe();}catch(e){}} },
+  catalog:   { read:()=>_byIdDump(catalogItems), write:r=>{catalogItems=r.map(x=>x.obj);}, render:()=>{try{renderCatalog();}catch(e){}} },
+  hvLinen:   { read:()=>(HV_LINEN||[]).map(x=>({id:`${x.loai}__${x.ngay}`, obj:x})), write:r=>{HV_LINEN=r.map(x=>x.obj);}, render:()=>{try{renderHangVai();}catch(e){}} },
+  wsData:    { read:()=>_mapDump(WS_DATA_BY_DATE),     write:r=>{const m={};r.forEach(x=>m[x.id]=x.obj);WS_DATA_BY_DATE=m;},     render:()=>{try{renderWorksheet();}catch(e){}} },
+  roomStatus:{ read:()=>_mapDump(ROOM_STATUS_BY_DATE), write:r=>{const m={};r.forEach(x=>m[x.id]=x.obj);ROOM_STATUS_BY_DATE=m;}, render:()=>{try{renderWorksheet();}catch(e){}} },
+  amData:    { read:()=>_mapDump(AM_DATA_BY_DATE),     write:r=>{const m={};r.forEach(x=>m[x.id]=x.obj);AM_DATA_BY_DATE=m;},     render:()=>{try{renderAmenity();}catch(e){}} },
+  mbData:    { read:()=>_mapDump(MB_DATE_DATA),        write:r=>{const m={};r.forEach(x=>m[x.id]=x.obj);MB_DATE_DATA=m;},        render:()=>{try{renderMinibar();}catch(e){}} },
+  hvRewash:  { read:()=>[{id:'_', obj:HV_REWASH_DATA}], write:r=>{const x=r.find(v=>v.id==='_'); HV_REWASH_DATA=x?x.obj:{};}, render:()=>{try{renderHangVai();}catch(e){}} },
+  hvCols:    { read:()=>[{id:'_', obj:HV_REWASH_COLS}], write:r=>{const x=r.find(v=>v.id==='_'); HV_REWASH_COLS=x?x.obj:[];}, render:()=>{try{renderHangVai();}catch(e){}} },
+};
+
+// lastSnapshot phản ánh trạng thái ĐÃ ở trên cloud: {collection:{id:json}}
+let lastSnapshot = {};
+function _snapshotOf(name){ const s={}; COLLECTIONS[name].read().forEach(r=>{ s[r.id]=JSON.stringify(r.obj); }); return s; }
+
+// ----- KÉO VỀ: merge theo id, cloud thắng khi trùng, giữ lại bản chỉ-có-ở-local để seed lên -----
+async function cloudPullAll(){
+  if(!sb){ setSyncStatus('off'); return false; }
+  setSyncStatus('sync');
+  try{
+    const {data, error} = await sb.from('records').select('collection,id,data,deleted');
+    if(error) throw error;
+    const grouped={}; (data||[]).forEach(row=>{ (grouped[row.collection]=grouped[row.collection]||[]).push(row); });
+    lastSnapshot={};
+    Object.keys(COLLECTIONS).forEach(name=>{
+      const cloudRows=(grouped[name]||[]).filter(r=>!r.deleted).map(r=>({id:String(r.id), obj:r.data}));
+      const cloudIds=new Set(cloudRows.map(r=>r.id));
+      const localOnly=COLLECTIONS[name].read().filter(r=>!cloudIds.has(String(r.id)));
+      if(cloudRows.length || localOnly.length) COLLECTIONS[name].write([...cloudRows, ...localOnly]);
+      // snapshot = đúng trạng thái cloud -> flush đầu sẽ đẩy localOnly lên (di cư dữ liệu cũ)
+      const s={}; cloudRows.forEach(r=>{ s[r.id]=JSON.stringify(r.obj); }); lastSnapshot[name]=s;
+    });
+    _lsSaveRaw();
+    Object.keys(COLLECTIONS).forEach(name=>{ try{ COLLECTIONS[name].render(); }catch(e){} });
+    cloudReady=true; setSyncStatus('ok');
+    return true;
+  }catch(e){
+    console.error('cloudPullAll',e); setSyncStatus('err'); return false;
+  }
+}
+
+// ----- ĐẨY LÊN: so sánh snapshot, chỉ gửi bản ghi mới/đổi/xoá -----
+let _flushTimer=null, _flushing=false;
+function scheduleFlush(){ if(!sb||!cloudReady) return; clearTimeout(_flushTimer); _flushTimer=setTimeout(flushToCloud, 1500); }
+async function flushToCloud(){
+  if(!sb || !cloudReady || _flushing) return;
+  const payload=[];
+  for(const name of Object.keys(COLLECTIONS)){
+    const cur=_snapshotOf(name); const prev=lastSnapshot[name]||{};
+    for(const id in cur){ if(cur[id]!==prev[id]) payload.push({collection:name, id, data:JSON.parse(cur[id]), deleted:false, updated_at:new Date().toISOString()}); }
+    for(const id in prev){ if(!(id in cur)) payload.push({collection:name, id, data:{}, deleted:true, updated_at:new Date().toISOString()}); }
+  }
+  if(!payload.length) return;
+  _flushing=true; setSyncStatus('sync');
+  try{
+    // gửi theo lô để tránh payload quá lớn
+    for(let i=0;i<payload.length;i+=200){
+      const chunk=payload.slice(i,i+200);
+      const {error}=await sb.from('records').upsert(chunk, {onConflict:'collection,id'});
+      if(error) throw error;
+      chunk.forEach(u=>{ lastSnapshot[u.collection]=lastSnapshot[u.collection]||{}; if(u.deleted) delete lastSnapshot[u.collection][u.id]; else lastSnapshot[u.collection][u.id]=JSON.stringify(u.data); });
+    }
+    setSyncStatus('ok');
+  }catch(e){
+    console.error('flushToCloud',e); setSyncStatus('err'); // giữ snapshot cũ -> lần sau thử lại
+  }finally{ _flushing=false; }
+}
+
+// ----- REALTIME: áp thay đổi từ máy khác vào bộ nhớ, cập nhật snapshot để không đẩy dội lại -----
+let _renderQ=new Set(), _renderTimer=null;
+function _scheduleRender(name){ _renderQ.add(name); clearTimeout(_renderTimer); _renderTimer=setTimeout(()=>{ const q=[..._renderQ]; _renderQ.clear(); q.forEach(n=>{ try{ COLLECTIONS[n].render(); }catch(e){} }); try{ updateDashboardKPI(); }catch(e){} }, 300); }
+function startRealtime(){
+  if(!sb) return;
+  sb.channel('records-sync')
+    .on('postgres_changes', {event:'*', schema:'public', table:'records'}, payload=>{
+      const row = payload.new || payload.old; if(!row) return;
+      const name=row.collection; const c=COLLECTIONS[name]; if(!c) return;
+      const id=String(row.id);
+      const rows=c.read();
+      const idx=rows.findIndex(r=>String(r.id)===id);
+      const isDelete = payload.eventType==='DELETE' || (payload.new && payload.new.deleted);
+      // Bảo vệ chỉnh sửa local chưa kịp đẩy lên: nếu bản ghi này đang có thay đổi
+      // cục bộ chưa flush thì bỏ qua bản realtime (flush sẽ đẩy bản local lên).
+      const snap=(lastSnapshot[name]||{})[id];
+      const curLocal = idx>=0 ? JSON.stringify(rows[idx].obj) : undefined;
+      if(curLocal!==undefined && curLocal!==snap) return;
+      if(isDelete){
+        if(idx>=0){ rows.splice(idx,1); c.write(rows); }
+        if(lastSnapshot[name]) delete lastSnapshot[name][id];
+      }else{
+        const obj=payload.new.data;
+        if(idx>=0) rows[idx]={id,obj}; else rows.push({id,obj});
+        c.write(rows);
+        lastSnapshot[name]=lastSnapshot[name]||{}; lastSnapshot[name][id]=JSON.stringify(obj);
+      }
+      _lsSaveRaw();
+      _scheduleRender(name);
+    })
+    .subscribe(status=>{ if(status==='CHANNEL_ERROR'||status==='TIMED_OUT') setSyncStatus('err'); });
+}
+
+// ----- Khởi động đồng bộ (gọi 1 lần sau đăng nhập) -----
+let _cloudInit=false;
+async function initCloud(){
+  if(!sb){ setSyncStatus('off'); return; }
+  if(_cloudInit) return; _cloudInit=true;
+  await cloudPullAll();
+  startRealtime();
+  // Xương sống: quét diff định kỳ để bắt mọi thay đổi (kể cả chỗ không gọi lsSave)
+  setInterval(()=>{ if(sb&&cloudReady) flushToCloud(); }, 4000);
+  // Kéo lại khi mạng có lại
+  window.addEventListener('online', ()=>{ cloudPullAll(); });
+}
+if(!CLOUD_ENABLED){ window.addEventListener('DOMContentLoaded',()=>setSyncStatus('off')); }
 </script>
 </body>
 </html>
