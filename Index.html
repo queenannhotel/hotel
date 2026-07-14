@@ -2417,11 +2417,13 @@ const ROLE_META = {
   giamdoc:   {label:'Giám đốc',       color:'#B7860A', bg:'#FFF8E7'},
   ketoan:    {label:'Kế toán trưởng', color:'#2E7D5B', bg:'#EAF5F0'},
   'truong-bp':{label:'Trưởng bộ phận',color:'#3A5FA0', bg:'#EEF3FB'},
+  hr:        {label:'Nhân sự (HR)',   color:'#5B4A9B', bg:'#F0EEF8'},
 };
 const ROLE_PERM_DESC = {
   giamdoc: 'Toàn bộ hệ thống. Phân quyền tab cho từng tài khoản.',
   ketoan: 'Thu chi (lọc TM), Công nợ, Đề xuất (duyệt KT), Danh mục, Báo cáo, NCC.',
   'truong-bp': 'Chỉ tạo và xem đề xuất mua hàng của bộ phận mình.',
+  hr: 'Chỉ quản lý Nhân sự & Lương.',
 };
 
 // tabs: mảng page id được phép thấy (null = mặc định theo role)
@@ -2436,6 +2438,7 @@ const DEFAULT_TABS = {
   giamdoc:    ['dashboard','thu-chi','tab-thu','tab-chi','cong-no','nhan-su','kho','kho-kt','kho-bep','kho-nha-hang','kho-hk','kho-ky-thuat','kho-van-phong','kho-le-tan','kho-xuat','kho-nhap','kho-huy','buong-phong','de-xuat','nha-cung-cap','danh-muc','bao-cao','quan-ly-tk','cai-dat'],
   ketoan:     ['thu-chi','tab-thu','tab-chi','cong-no','nhan-su','kho','kho-kt','kho-xuat','kho-nhap','de-xuat','nha-cung-cap','danh-muc','bao-cao'],
   'truong-bp':['de-xuat','kho','buong-phong'],
+  hr:         ['nhan-su'],
 };
 
 let currentUser = null;
@@ -2492,6 +2495,13 @@ function enterApp(session){
   // Push các đề xuất đã duyệt (DX-044, DX-041) vào CHI ngay khi login
   DX_DATA.filter(d=>d.status==='da-duyet').forEach(dx=>{ if(dx.don_gia_ht) pushDxToChi(dx); });
   updateNsKpi();
+  // Nếu trang đang mở không thuộc quyền của user (vd HR không được xem Dashboard tài chính)
+  // thì tự chuyển tới tab đầu tiên mà user được phép.
+  const activeNav=document.querySelector('#main-nav .nav-item.active');
+  if(!activeNav || activeNav.classList.contains('hidden-nav')){
+    const firstVisible=[...document.querySelectorAll('#main-nav .nav-item')].find(n=>!n.classList.contains('hidden-nav'));
+    if(firstVisible) firstVisible.click();
+  }
   // Bật đồng bộ đám mây: kéo dữ liệu mới nhất về + lắng nghe realtime từ máy khác
   initCloud();
 }
