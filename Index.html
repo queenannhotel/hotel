@@ -668,22 +668,12 @@ textarea{resize:vertical;min-height:68px;}
   <div class="login-box">
     <div class="login-logo">👑 Queen Ann Hotel</div>
     <div class="login-sub">Hệ Thống Quản Lý Kế Toán</div>
-    <label class="login-label">Tài khoản</label>
-    <input class="login-input" id="login-user" placeholder="Nhập tên đăng nhập..." onkeydown="if(event.key==='Enter')doLogin()">
+    <label class="login-label">Email</label>
+    <input class="login-input" id="login-user" type="email" autocomplete="username" placeholder="Nhập email..." onkeydown="if(event.key==='Enter')doLogin()">
     <label class="login-label">Mật khẩu</label>
-    <input class="login-input" id="login-pass" type="password" placeholder="Nhập mật khẩu..." onkeydown="if(event.key==='Enter')doLogin()">
+    <input class="login-input" id="login-pass" type="password" autocomplete="current-password" placeholder="Nhập mật khẩu..." onkeydown="if(event.key==='Enter')doLogin()">
     <div class="login-err" id="login-err"></div>
     <button class="login-btn" onclick="doLogin()">🔐 Đăng nhập</button>
-    <div class="login-accounts">
-      <div class="login-accounts-title">Tài khoản demo — nhấn để điền nhanh:</div>
-      <div>
-        <span class="acc-pill" onclick="fillLogin('giamdoc','123456')"><span class="role-dot" style="background:#C9A84C;"></span>Giám đốc</span>
-        <span class="acc-pill" onclick="fillLogin('ketoan','123456')"><span class="role-dot" style="background:#2E7D5B;"></span>Kế toán trưởng</span>
-        <span class="acc-pill" onclick="fillLogin('buongphong','123456')"><span class="role-dot" style="background:#4A6FA5;"></span>Buồng phòng</span>
-        <span class="acc-pill" onclick="fillLogin('bep','123456')"><span class="role-dot" style="background:#9B8EC4;"></span>Trưởng bếp</span>
-        <span class="acc-pill" onclick="fillLogin('letan','123456')"><span class="role-dot" style="background:#B7860A;"></span>Lễ tân</span>
-      </div>
-    </div>
   </div>
 </div>
 
@@ -2436,13 +2426,10 @@ const ROLE_PERM_DESC = {
 
 // tabs: mảng page id được phép thấy (null = mặc định theo role)
 // tc_filter: lọc Thu Chi ('TM' = chỉ TM, '' = tất cả)
-let USERS = [
-  {id:'u1', username:'giamdoc',    password:'123456', fullname:'Nguyễn Minh Tuấn', role:'giamdoc',    bophan:'', active:true, tabs:null, tc_filter:''},
-  {id:'u2', username:'ketoan',     password:'123456', fullname:'Trần Thị Kế Toán', role:'ketoan',     bophan:'', active:true, tabs:null, tc_filter:'TM'},
-  {id:'u3', username:'buongphong', password:'123456', fullname:'Nguyễn Thị Hoa',   role:'truong-bp',  bophan:'buong-phong', active:true, tabs:null, tc_filter:''},
-  {id:'u4', username:'bep',        password:'123456', fullname:'Nguyễn Văn Minh (Bếp trưởng)', role:'truong-bp', bophan:'bep', active:true, tabs:null, tc_filter:''},
-  {id:'u5', username:'letan',      password:'123456', fullname:'Phạm Thị Lan',     role:'truong-bp',  bophan:'le-tan', active:true, tabs:null, tc_filter:''},
-];
+// Tài khoản & mật khẩu KHÔNG còn nằm trong mã nguồn nữa.
+// Đăng nhập được xác thực qua Supabase Auth; vai trò/bộ phận/quyền tab lưu trong
+// app_metadata của mỗi user (chỉ admin sửa được). Quản lý tài khoản tại
+// Supabase Dashboard → Authentication → Users.
 
 // Mặc định tab theo role (nếu user không custom)
 const DEFAULT_TABS = {
@@ -2453,26 +2440,48 @@ const DEFAULT_TABS = {
 
 let currentUser = null;
 
-function fillLogin(u,p){
-  document.getElementById('login-user').value=u;
-  document.getElementById('login-pass').value=p;
-  document.getElementById('login-err').textContent='';
+// Dựng currentUser từ phiên Supabase (vai trò/bộ phận/quyền lấy từ app_metadata — JWT)
+function currentUserFromSession(session){
+  const u=session&&session.user; if(!u) return null;
+  const m=u.app_metadata||{};
+  return {
+    id:u.id, email:u.email, username:u.email,
+    role:m.role||'truong-bp',
+    bophan:m.bophan||'',
+    fullname:m.fullname||u.email,
+    tabs:m.tabs||null,
+    tc_filter:m.tc_filter||'',
+    active:true,
+  };
 }
 
-function doLogin(){
-  const u=document.getElementById('login-user').value.trim();
+async function doLogin(){
+  const email=document.getElementById('login-user').value.trim();
   const p=document.getElementById('login-pass').value;
-  const found=USERS.find(x=>x.username===u&&x.password===p&&x.active);
-  if(!found){ document.getElementById('login-err').textContent='❌ Tài khoản hoặc mật khẩu không đúng!'; return; }
-  currentUser=found;
+  const errEl=document.getElementById('login-err');
+  if(!sb){ errEl.textContent='⚠️ Chưa cấu hình Supabase — không thể đăng nhập.'; return; }
+  if(!email||!p){ errEl.textContent='❌ Vui lòng nhập email và mật khẩu!'; return; }
+  errEl.style.color=''; errEl.textContent='⏳ Đang đăng nhập...';
+  try{
+    const {data,error}=await sb.auth.signInWithPassword({email,password:p});
+    if(error||!data||!data.session){ errEl.textContent='❌ Email hoặc mật khẩu không đúng!'; return; }
+    errEl.textContent='';
+    enterApp(data.session);
+  }catch(e){ errEl.textContent='❌ Lỗi đăng nhập: '+(e.message||e); }
+}
+
+// Vào app sau khi đã có phiên hợp lệ (dùng chung cho đăng nhập & khôi phục phiên)
+function enterApp(session){
+  currentUser=currentUserFromSession(session);
+  if(!currentUser) return;
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='flex';
   applyPermissions();
-  // Chỉ hiện nút Xóa data cho Giám đốc
+  // Chỉ hiện nút Xóa data / Nhập Sheet cũ cho Giám đốc
   const btnClear=document.getElementById('btn-clear-data');
-  if(btnClear) btnClear.style.display=found.role==='giamdoc'?'flex':'none';
+  if(btnClear) btnClear.style.display=currentUser.role==='giamdoc'?'flex':'none';
   const btnImp=document.getElementById('btn-import-old');
-  if(btnImp) btnImp.style.display=found.role==='giamdoc'?'flex':'none';
+  if(btnImp) btnImp.style.display=currentUser.role==='giamdoc'?'flex':'none';
   renderUsersTable();
   renderCatalog();
   renderDxTable();
@@ -2487,13 +2496,10 @@ function doLogin(){
   initCloud();
 }
 
-function doLogout(){
-  currentUser=null;
-  document.getElementById('login-screen').style.display='flex';
-  document.getElementById('app').style.display='none';
-  document.getElementById('login-user').value='';
-  document.getElementById('login-pass').value='';
-  document.getElementById('login-err').textContent='';
+async function doLogout(){
+  try{ if(sb) await sb.auth.signOut(); }catch(e){}
+  // Tải lại trang để reset sạch trạng thái (onAuthStateChange cũng sẽ reload)
+  location.reload();
 }
 
 function applyPermissions(){
@@ -2577,41 +2583,24 @@ function applyPermissions(){
 
 // ==================== USER TABLE ====================
 function renderUsersTable(){
-  const BP_LABELS={'buong-phong':'Buồng phòng','nha-hang':'Nhà hàng','bep':'Bếp','sale':'Sale','ky-thuat':'Kỹ thuật','le-tan':'Lễ tân','hr':'HR'};
-  const ALL_TABS = [
-    {id:'dashboard',    label:'Dashboard'},
-    {id:'thu-chi',      label:'Quản lý Thu Chi'},
-    {id:'tab-thu',      label:'Ghi Thu'},
-    {id:'tab-chi',      label:'Ghi Chi'},
-    {id:'cong-no',      label:'Công Nợ'},
-    {id:'de-xuat',      label:'Đề xuất Mua hàng'},
-    {id:'nha-cung-cap', label:'Nhà Cung Cấp'},
-    {id:'danh-muc',     label:'Danh Mục Hàng Hoá'},
-    {id:'bao-cao',      label:'Báo Cáo'},
-  ];
-  document.getElementById('users-tbody').innerHTML=USERS.map(u=>{
-    const meta=ROLE_META[u.role]||{};
-    const bpHan=u.role==='giamdoc'?'Không giới hạn':u.role==='ketoan'?'50,000,000đ':'10,000,000đ';
-    const allowedTabs = u.tabs || DEFAULT_TABS[u.role] || [];
-    const tabBadges = AU_ALL_TABS.filter(t=>allowedTabs.includes(t.id)).map(t=>{
-      const isKho = t.id.startsWith('kho');
-      return `<span class="badge ${isKho?'badge-blue':'badge-navy'}" style="font-size:10px;margin:1px;">${t.label}</span>`;
-    }).join('');
-    const tcFilter = u.tc_filter ? `<span class="badge badge-yellow" style="font-size:10px;margin-left:4px;">Thu Chi: ${u.tc_filter}</span>` : '';
-    return `<tr>
-      <td><strong>${u.username}</strong></td>
-      <td>${u.fullname}</td>
-      <td><span class="badge" style="background:${meta.bg||'#eee'};color:${meta.color||'#333'};">${meta.label||u.role}</span></td>
-      <td>${u.bophan?BP_LABELS[u.bophan]||u.bophan:'—'}</td>
-      <td style="font-size:12px;">${bpHan}</td>
-      <td style="max-width:280px;">${tabBadges||'—'}${tcFilter}</td>
-      <td><span class="badge ${u.active?'badge-green':'badge-red'}">${u.active?'Hoạt động':'Tạm khóa'}</span></td>
-      <td>
-        <button class="btn btn-primary btn-sm" onclick="editUser('${u.id}')" style="gap:5px;">✏ Sửa</button>
-        ${u.id!=='u1'?`<button class="btn btn-${u.active?'danger':'success'} btn-sm" onclick="toggleUser('${u.id}')">${u.active?'Khóa':'Mở'}</button>`:''}
-      </td>
-    </tr>`;
-  }).join('');
+  // Tài khoản nay do Supabase Auth quản lý (không còn lưu trong app). Hiển thị thông
+  // tin tài khoản đang đăng nhập + hướng dẫn quản lý an toàn trong Supabase Dashboard.
+  const tb=document.getElementById('users-tbody'); if(!tb) return;
+  const meta=(currentUser&&ROLE_META[currentUser.role])||{};
+  const me=currentUser?`<div style="margin-bottom:6px;"><strong>${currentUser.fullname}</strong>
+      <span class="badge" style="background:${meta.bg||'#eee'};color:${meta.color||'#333'};margin-left:6px;">${meta.label||currentUser.role}</span></div>
+      <div style="font-size:12px;color:var(--text-muted);">Email: ${currentUser.email}${currentUser.bophan?' · Bộ phận: '+currentUser.bophan:''}</div>`:'';
+  tb.innerHTML=`<tr><td colspan="8" style="padding:20px;">
+    <div style="background:var(--gold-pale);border:1px solid rgba(201,168,76,.4);border-radius:10px;padding:16px 18px;">
+      <div style="font-weight:600;color:var(--navy);margin-bottom:8px;">🔐 Tài khoản được bảo mật qua Supabase Auth</div>
+      ${me}
+      <div style="font-size:12.5px;color:var(--text-muted);margin-top:10px;line-height:1.6;">
+        Để <strong>thêm nhân viên, đổi mật khẩu, khóa/mở tài khoản</strong>, vào
+        <strong>Supabase → Authentication → Users</strong>. Sau khi tạo user, gán vai trò bằng
+        câu lệnh SQL cập nhật <code>app_metadata</code> (xem hướng dẫn đã cung cấp).
+        Cách này đảm bảo mật khẩu không nằm trong mã nguồn web và quyền được thực thi ở máy chủ.
+      </div>
+    </div></td></tr>`;
 }
 
 let editingUserId=null;
@@ -2697,69 +2686,14 @@ function updateBophanVisibility(){
 }
 
 
-function openAddUserModal(){
-  editingUserId=null; // Đảm bảo là thêm mới
-  document.getElementById('au-title').textContent='👤 Thêm Tài Khoản Mới';
-  ['au-username','au-fullname','au-password'].forEach(i=>{const e=document.getElementById(i);if(e)e.value='';});
-  document.getElementById('au-role').value='ketoan';
-  document.getElementById('au-password').placeholder='Tối thiểu 6 ký tự';
-  const tcEl=document.getElementById('au-tc-filter');if(tcEl)tcEl.value='';
-  renderAuTabCheckboxes(DEFAULT_TABS['ketoan']||[]);
-  updateBophanVisibility();
-  document.getElementById('modal-add-user').classList.add('open');
+// Quản lý tài khoản chuyển sang Supabase Dashboard (để bảo mật — không nhúng khoá admin vào web)
+function _accountMgmtNotice(){
+  showToast('🔐 Quản lý tài khoản nay thực hiện trong Supabase → Authentication → Users. Xem tab "Quản Lý Tài Khoản" để biết chi tiết.',4500,'info');
 }
-
-function editUser(id){
-  const u=USERS.find(x=>x.id===id); if(!u) return;
-  editingUserId=id; // Set trước để openModal không reset form
-  document.getElementById('au-title').textContent='✏️ Sửa tài khoản: '+u.fullname;
-  document.getElementById('au-username').value=u.username;
-  document.getElementById('au-fullname').value=u.fullname;
-  document.getElementById('au-password').value='';
-  document.getElementById('au-password').placeholder='Để trống = giữ mật khẩu cũ';
-  document.getElementById('au-role').value=u.role;
-  document.getElementById('au-bophan').value=u.bophan||'buong-phong';
-  document.getElementById('au-tc-filter').value=u.tc_filter||'';
-  renderAuTabCheckboxes(u.tabs||DEFAULT_TABS[u.role]||[]);
-  updateBophanVisibility();
-  // Mở modal trực tiếp không qua openModal để tránh reset
-  document.getElementById('modal-add-user').classList.add('open');
-}
-
-function saveUser(){
-  const username=document.getElementById('au-username').value.trim();
-  const fullname=document.getElementById('au-fullname').value.trim();
-  const password=document.getElementById('au-password').value;
-  if(!username||!fullname){ showToast('Vui lòng điền tài khoản và họ tên!',2500,'error'); return; }
-  const role=document.getElementById('au-role').value;
-  const bophan=role==='truong-bp'?document.getElementById('au-bophan').value:'';
-  const tc_filter=document.getElementById('au-tc-filter')?.value||'';
-  // Đọc tabs được chọn (chỉ khi GĐ và widget hiện)
-  let tabs=null;
-  const tabWrap=document.getElementById('au-tab-perm-wrap');
-  if(tabWrap&&tabWrap.style.display!=='none'){
-    tabs=[...document.querySelectorAll('#au-tab-checkboxes input:checked')].map(cb=>cb.value);
-    if(!tabs.length) tabs=DEFAULT_TABS[role]||[];
-  }
-  if(editingUserId){
-    const idx=USERS.findIndex(x=>x.id===editingUserId);
-    if(idx>-1){
-      USERS[idx]={...USERS[idx],username,fullname,role,bophan,tc_filter,tabs};
-      if(password.length>=6) USERS[idx].password=password;
-    }
-  } else {
-    if(!password||password.length<6){ showToast('Mật khẩu tối thiểu 6 ký tự!',2500,'error'); return; }
-    if(USERS.find(x=>x.username===username)){ showToast('Tài khoản đã tồn tại!',2500,'error'); return; }
-    USERS.push({id:'u'+Date.now(),username,password,fullname,role,bophan,active:true,tc_filter,tabs});
-  }
-  editingUserId=null;
-  closeModal('modal-add-user');
-  renderUsersTable();
-}
-function toggleUser(id){
-  const u=USERS.find(x=>x.id===id); if(u) u.active=!u.active;
-  renderUsersTable();
-}
+function openAddUserModal(){ _accountMgmtNotice(); }
+function editUser(){ _accountMgmtNotice(); }
+function saveUser(){ _accountMgmtNotice(); }
+function toggleUser(){ _accountMgmtNotice(); }
 
 // ==================== DATA - CATALOG ====================
 const NCC_LIST=[];
@@ -5583,6 +5517,20 @@ async function initCloud(){
   window.addEventListener('online', ()=>{ cloudPullAll(); });
 }
 if(!CLOUD_ENABLED){ window.addEventListener('DOMContentLoaded',()=>setSyncStatus('off')); }
+
+// ----- Xác thực: khôi phục phiên khi mở lại app + xử lý đăng xuất/hết phiên -----
+if(sb){
+  // Nếu còn phiên hợp lệ (đã đăng nhập trước đó) thì vào thẳng app
+  sb.auth.getSession().then(({data})=>{
+    if(data && data.session) enterApp(data.session);
+  }).catch(e=>console.warn('getSession',e));
+  // Hết phiên hoặc đăng xuất ở nơi khác -> tải lại về màn đăng nhập
+  sb.auth.onAuthStateChange((event,session)=>{
+    if(event==='SIGNED_OUT' || (event==='TOKEN_REFRESHED' && !session)){
+      if(document.getElementById('app').style.display!=='none') location.reload();
+    }
+  });
+}
 </script>
 </body>
 </html>
