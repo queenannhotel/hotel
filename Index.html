@@ -23,6 +23,8 @@ const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6
 //    (Nếu để trống, app vẫn chạy bình thường bằng dữ liệu local, chỉ không đồng bộ đa máy.)
 const SUPABASE_URL      = 'https://hlwixtocadqyodecezer.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_EhmK2BPqqcXP3tN9rxV7cQ_NXQ1pvsj';
+// Web Push (thông báo đẩy đa thiết bị). Khoá công khai VAPID — cặp với khoá bí mật đặt ở Edge Function.
+const VAPID_PUBLIC_KEY  = 'BH14kTCMnOAwrOp0KoG9mb1lLfW9KbCOgBBfGWBpm5vZeTTo3st_hD-u5MJdaue-sK0IChKNVQ3Xc8MIiZuxSPM';
 
 // ===== LOCAL STORAGE =====
 async function clearLocalData(){
@@ -2525,6 +2527,8 @@ async function enterApp(session){
   }
   // Bật đồng bộ đám mây: kéo dữ liệu mới nhất về + lắng nghe realtime từ máy khác
   initCloud();
+  // Đăng ký nhận thông báo đẩy (Web Push) cho thiết bị này
+  subscribeToPush();
 }
 
 async function doLogout(){
@@ -4470,7 +4474,11 @@ function renderYeuCau(){
     </div>`;
   }).join(''):`<div style="text-align:center;padding:40px;color:var(--text-muted);">Không có yêu cầu nào phù hợp</div>`;
 }
-function ycSetStatus(id,s){const yc=YC_DATA.find(x=>x.id===id);if(yc)yc.status=s;renderYeuCau();renderYeuCauStats();}
+function ycSetStatus(id,s){
+  const yc=YC_DATA.find(x=>x.id===id);if(!yc)return;
+  yc.status=s;renderYeuCau();renderYeuCauStats();syncNow();
+  if(s==='hoan-thanh') sendPush('✅ Yêu Cầu Đã Xong', `P.${yc.phong} — ${yc.loaiLabel}`, 'yeu-cau', '/hotel/Index.html');
+}
 function ycDelete(id){if(confirm('Xoá yêu cầu này?')){YC_DATA=YC_DATA.filter(x=>x.id!==id);renderYeuCau();renderYeuCauStats();syncNow();}}
 function switchYcTab(tab, el){
   document.querySelectorAll('#bp-panel-yeu-cau .bp-tab').forEach(t=>t.classList.remove('active'));
@@ -5348,7 +5356,8 @@ function confirmApprove(id, level){
   const nextStatus={'truong-bp':'cho-duyet-ketoan','ketoan':'cho-duyet-gd','gd':'da-duyet'};
   dx.status=nextStatus[level]||'da-duyet';
   if(dx.status==='da-duyet') pushDxToChi(dx);
-  renderDxTable(); renderDashDx();
+  renderDxTable(); renderDashDx(); syncNow();
+  if(dx.status==='da-duyet') sendPush('✅ Đề Xuất Đã Duyệt', `${dx.ten||''} đã được duyệt`, 'de-xuat', '/hotel/Index.html');
   showToast('✅ Đã duyệt đề xuất',2000,'success');
 }
 function exportExcel(section){ exportCSV(section); }
@@ -5433,21 +5442,49 @@ async function sendLocalNotif(title, body, tag='queen-ann'){
   }
 }
 
+// ===== WEB PUSH (đẩy thông báo tới MỌI thiết bị, kể cả khi app đã đóng) =====
+function urlBase64ToUint8Array(base64String){
+  const padding='='.repeat((4 - base64String.length % 4) % 4);
+  const base64=(base64String + padding).replace(/-/g,'+').replace(/_/g,'/');
+  const raw=atob(base64); const arr=new Uint8Array(raw.length);
+  for(let i=0;i<raw.length;i++) arr[i]=raw.charCodeAt(i);
+  return arr;
+}
+async function currentPushEndpoint(){
+  try{ const reg=await navigator.serviceWorker.ready; const s=await reg.pushManager.getSubscription(); return s?s.endpoint:null; }catch(e){ return null; }
+}
+// Đăng ký nhận push cho thiết bị này + lưu subscription lên Supabase (gọi sau đăng nhập)
+async function subscribeToPush(){
+  try{
+    if(!sb || !('serviceWorker' in navigator) || !('PushManager' in window)) return;
+    if(!VAPID_PUBLIC_KEY) return;
+    const granted=await requestNotifPermission(); if(!granted) return;
+    const reg=await navigator.serviceWorker.ready;
+    let sub=await reg.pushManager.getSubscription();
+    if(!sub){
+      sub=await reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:urlBase64ToUint8Array(VAPID_PUBLIC_KEY)});
+    }
+    await sb.from('push_subscriptions').upsert(
+      {endpoint:sub.endpoint, email:currentUser?.email||'', subscription:sub.toJSON(), updated_at:new Date().toISOString()},
+      {onConflict:'endpoint'});
+  }catch(e){ console.warn('subscribeToPush',e); }
+}
+// Gửi push tới tất cả thiết bị (trừ máy đang gửi) qua Edge Function 'send-push'
+async function sendPush(title, body, tag='queen-ann', url='/hotel/Index.html'){
+  try{
+    if(!sb) return;
+    const excludeEndpoint=await currentPushEndpoint();
+    await sb.functions.invoke('send-push',{body:{title, body, tag, url, excludeEndpoint}});
+  }catch(e){ console.warn('sendPush',e); }
+}
+
 // Gọi notification khi có đề xuất mới chờ duyệt
 function notifyDeXuatMoi(tenHang, bophan){
-  sendLocalNotif(
-    '🛒 Đề Xuất Mua Hàng Mới',
-    `${bophan} vừa tạo đề xuất: ${tenHang}`,
-    'de-xuat'
-  );
+  sendPush('🛒 Đề Xuất Mua Hàng Mới', `${bophan} vừa tạo đề xuất: ${tenHang}`, 'de-xuat', '/hotel/Index.html');
 }
 // Gọi notification khi có yêu cầu khách mới
 function notifyYeuCauMoi(phong, loai, gio){
-  sendLocalNotif(
-    `📞 Khách Yêu Cầu — P.${phong}`,
-    `${loai} lúc ${gio}`,
-    'yeu-cau'
-  );
+  sendPush(`📞 Khách Yêu Cầu — P.${phong}`, `${loai} lúc ${gio}`, 'yeu-cau', '/hotel/Index.html');
 }
 
 // Khởi động PWA
