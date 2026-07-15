@@ -2938,10 +2938,7 @@ function updateChiStatus(id, newStatus) {
 
 // ==================== CÔNG NỢ PHẢI TRẢ (auto từ Chi) ====================
 // CN_PHAI_TRA_STATIC: công nợ cố định (không từ chi)
-const CN_PHAI_TRA_STATIC = [
-  {ncc:'Điện Sài Gòn', noidung:'Tiền điện T6', sotien:15400000, han:'12/07/2026', tinhtrang:'Quá hạn'},
-  {ncc:'Vệ sinh Xanh', noidung:'Dịch vụ T6',   sotien:4800000,  han:'20/07/2026', tinhtrang:'Còn hạn'},
-];
+const CN_PHAI_TRA_STATIC = [];
 function renderCongNoPtr() {
   const fromChi = CHI_DATA.filter(r=>r.pttt==='Công nợ');
   const rows = [
@@ -3110,19 +3107,10 @@ function saveChi() {
 let NS_LUONG = [];
 
 // NS_BHXH: BHXH từng nhân viên theo tháng
-let NS_BHXH = [
-  {id:'BH001', ten:'Nguyễn Thị Hoa',   bophan:'Buồng phòng', luong:6000000,  thang:'2026-07'},
-  {id:'BH002', ten:'Phạm Thị Lan',     bophan:'Lễ tân',      luong:5500000,  thang:'2026-07'},
-  {id:'BH003', ten:'Nguyễn Văn Minh',  bophan:'Bếp',         luong:7000000,  thang:'2026-07'},
-  {id:'BH004', ten:'Trần Thị Kế Toán', bophan:'Hành chính',  luong:9000000,  thang:'2026-07'},
-  {id:'BH005', ten:'Lê Văn Sale',      bophan:'Sale',        luong:6500000,  thang:'2026-07'},
-];
+let NS_BHXH = [];
 
 // NS_TNCN: thuế TNCN từng nhân viên theo tháng
-let NS_TNCN = [
-  {id:'TC001', ten:'Trần Thị Kế Toán', bophan:'Hành chính', thunhap:18000000, npt:1, thang:'2026-07', ghichu:''},
-  {id:'TC002', ten:'Lê Văn Sale',      bophan:'Sale',       thunhap:22000000, npt:0, thang:'2026-07', ghichu:'Hoa hồng tháng cao'},
-];
+let NS_TNCN = [];
 
 const NS_LOAI_LABELS = {luong:'💵 Lương', thuong:'🎁 Thưởng', 'phu-cap':'🏷 Phụ cấp', khac:'📌 Khác'};
 const NS_LOAI_BADGE  = {luong:'badge-green', thuong:'badge-yellow', 'phu-cap':'badge-blue', khac:'badge-navy'};
