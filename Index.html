@@ -25,11 +25,24 @@ const SUPABASE_URL      = 'https://hlwixtocadqyodecezer.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_EhmK2BPqqcXP3tN9rxV7cQ_NXQ1pvsj';
 
 // ===== LOCAL STORAGE =====
-function clearLocalData(){
+async function clearLocalData(){
   if(currentUser?.role !== 'giamdoc'){
     showToast('⛔ Chỉ Giám đốc mới có quyền xóa dữ liệu!', 2500, 'error');
     return;
   }
+  if(!confirm('Xoá TOÀN BỘ dữ liệu trên MỌI thiết bị? Hành động này KHÔNG thể hoàn tác.')) return;
+  // Xoá trên cloud trước (xoá mềm toàn bộ) — nếu không, tải lại sẽ kéo dữ liệu về nguyên
+  if(sb){
+    showToast('🗑 Đang xoá dữ liệu đám mây...', 3000, 'info');
+    try{
+      const {error}=await sb.from('records').update({deleted:true, updated_at:new Date().toISOString()}).neq('collection','');
+      if(error) throw error;
+    }catch(e){
+      showToast('❌ Không xoá được dữ liệu đám mây: '+(e.message||e), 4000, 'error');
+      return;
+    }
+  }
+  lastSnapshot={};
   localStorage.removeItem(LS_KEY);
   THU_DATA=[];CHI_DATA=[];DX_DATA=[];NCC_DATA=[];KHO_DATA=[];
   YC_DATA=[];HV_LINEN=[];NS_LUONG=[];NS_BHXH=[];NS_TNCN=[];catalogItems=[];
@@ -3162,7 +3175,7 @@ function renderNsLuong(){
   updateNsKpi();
 }
 
-function deleteNsLuong(id){ NS_LUONG=NS_LUONG.filter(r=>r.id!==id); renderNsLuong(); }
+function deleteNsLuong(id){ NS_LUONG=NS_LUONG.filter(r=>r.id!==id); renderNsLuong(); syncNow(); }
 
 function saveNsLuong(){
   const thang = document.getElementById('nsl-thang').value;
@@ -3218,7 +3231,7 @@ function renderNsBhxh(){
   updateNsKpi();
 }
 
-function deleteNsBhxh(id){ NS_BHXH=NS_BHXH.filter(r=>r.id!==id); renderNsBhxh(); lsSave(); }
+function deleteNsBhxh(id){ NS_BHXH=NS_BHXH.filter(r=>r.id!==id); renderNsBhxh(); syncNow(); }
 
 function saveNsBhxh(){
   const ten   = document.getElementById('nsbh-ten').value.trim();
@@ -3301,7 +3314,7 @@ function renderNsTncn(){
   updateNsKpi();
 }
 
-function deleteNsTncn(id){ NS_TNCN=NS_TNCN.filter(r=>r.id!==id); renderNsTncn(); lsSave(); }
+function deleteNsTncn(id){ NS_TNCN=NS_TNCN.filter(r=>r.id!==id); renderNsTncn(); syncNow(); }
 
 function saveNsTncn(){
   const ten     = document.getElementById('nstncn-ten').value.trim();
@@ -3967,6 +3980,7 @@ function rwDeleteCol(ci){
   delete HV_REWASH_DATA[col.id];
   HV_REWASH_COLS.splice(ci,1);
   renderHvRewash();
+  syncNow();
 }
 
 function rwSetDate(ci,val){
@@ -4155,7 +4169,7 @@ function renderSetupXe(){
       <td style="text-align:center;">${ttCell}</td>
       <td style="text-align:center;font-weight:700;font-size:14px;color:${diff>0?'var(--green)':diff<0?'var(--red)':'var(--text-muted)'};">${diff>0?'+'+diff:diff<0?diff:'✓'}</td>
       <td style="font-size:11px;color:var(--text-muted);">${sx.ghichu||'—'}</td>
-      <td><button class="btn btn-danger btn-sm" onclick="SX_DATA=SX_DATA.filter(x=>x.id!=='${sx.id}');renderSetupXe()">🗑</button></td>
+      <td><button class="btn btn-danger btn-sm" onclick="SX_DATA=SX_DATA.filter(x=>x.id!=='${sx.id}');renderSetupXe();syncNow()">🗑</button></td>
     </tr>`;
   }).join('')||`<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-muted);">Chưa có hàng setup</td></tr>`;
 }
@@ -4456,7 +4470,7 @@ function renderYeuCau(){
   }).join(''):`<div style="text-align:center;padding:40px;color:var(--text-muted);">Không có yêu cầu nào phù hợp</div>`;
 }
 function ycSetStatus(id,s){const yc=YC_DATA.find(x=>x.id===id);if(yc)yc.status=s;renderYeuCau();renderYeuCauStats();}
-function ycDelete(id){if(confirm('Xoá yêu cầu này?')){YC_DATA=YC_DATA.filter(x=>x.id!==id);renderYeuCau();renderYeuCauStats();}}
+function ycDelete(id){if(confirm('Xoá yêu cầu này?')){YC_DATA=YC_DATA.filter(x=>x.id!==id);renderYeuCau();renderYeuCauStats();syncNow();}}
 function switchYcTab(tab, el){
   document.querySelectorAll('#bp-panel-yeu-cau .bp-tab').forEach(t=>t.classList.remove('active'));
   el.classList.add('active');
@@ -5289,6 +5303,7 @@ function deleteNcc(id){
   if(!confirm('Xóa NCC này?')) return;
   NCC_DATA=NCC_DATA.filter(x=>x.id!==id);
   renderNccTable();
+  syncNow();
   showToast('Đã xóa NCC',2000,'success');
 }
 function editItem(id){
@@ -5506,11 +5521,14 @@ async function cloudPullAll(){
     const grouped={}; (data||[]).forEach(row=>{ (grouped[row.collection]=grouped[row.collection]||[]).push(row); });
     lastSnapshot={};
     Object.keys(COLLECTIONS).forEach(name=>{
-      const cloudRows=(grouped[name]||[]).filter(r=>!r.deleted).map(r=>({id:String(r.id), obj:r.data}));
-      const cloudIds=new Set(cloudRows.map(r=>r.id));
-      const localOnly=COLLECTIONS[name].read().filter(r=>!cloudIds.has(String(r.id)));
-      if(cloudRows.length || localOnly.length) COLLECTIONS[name].write([...cloudRows, ...localOnly]);
-      // snapshot = đúng trạng thái cloud -> flush đầu sẽ đẩy localOnly lên (di cư dữ liệu cũ)
+      const grp=grouped[name]||[];
+      const cloudRows=grp.filter(r=>!r.deleted).map(r=>({id:String(r.id), obj:r.data}));
+      // TẤT CẢ id cloud biết tới (kể cả dòng đã xoá mềm) -> KHÔNG thêm lại (resurrect) dòng cloud đã xoá.
+      const allCloudIds=new Set(grp.map(r=>String(r.id)));
+      const localOnly=COLLECTIONS[name].read().filter(r=>!allCloudIds.has(String(r.id)));
+      // Luôn ghi lại kết quả merge (kể cả rỗng) -> dòng đã xoá trên cloud bị loại hẳn, không "sống lại".
+      COLLECTIONS[name].write([...cloudRows, ...localOnly]);
+      // snapshot = đúng trạng thái cloud (chưa xoá) -> flush đầu sẽ đẩy localOnly lên (di cư dữ liệu cũ)
       const s={}; cloudRows.forEach(r=>{ s[r.id]=JSON.stringify(r.obj); }); lastSnapshot[name]=s;
     });
     _lsSaveRaw();
@@ -5525,6 +5543,8 @@ async function cloudPullAll(){
 // ----- ĐẨY LÊN: so sánh snapshot, chỉ gửi bản ghi mới/đổi/xoá -----
 let _flushTimer=null, _flushing=false;
 function scheduleFlush(){ if(!sb||!cloudReady) return; clearTimeout(_flushTimer); _flushTimer=setTimeout(flushToCloud, 1500); }
+// Lưu cục bộ + đẩy cloud NGAY (dùng sau khi xoá để soft-delete lên cloud tức thì, khỏi chờ 4s)
+function syncNow(){ _lsSaveRaw(); if(sb&&cloudReady) flushToCloud(); }
 // Ma trận GHI theo vai trò — PHẢI khớp đúng với RLS trên Supabase (bảng records).
 // Vai trò không có trong danh sách -> không được ghi collection đó (client bỏ qua, khỏi gửi request cầm chắc lỗi).
 const WRITE_MATRIX = {
