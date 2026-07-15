@@ -32,7 +32,7 @@ function clearLocalData(){
   }
   localStorage.removeItem(LS_KEY);
   THU_DATA=[];CHI_DATA=[];DX_DATA=[];NCC_DATA=[];KHO_DATA=[];
-  YC_DATA=[];HV_LINEN=[];NS_LUONG=[];catalogItems=[];
+  YC_DATA=[];HV_LINEN=[];NS_LUONG=[];NS_BHXH=[];NS_TNCN=[];catalogItems=[];
   WS_DATA_BY_DATE={};ROOM_STATUS_BY_DATE={};AM_DATA_BY_DATE={};
   HV_REWASH_DATA={};HV_REWASH_COLS=[];
   showToast('✅ Đã xóa toàn bộ dữ liệu — trang sẽ tải lại',2000,'success');
@@ -52,6 +52,7 @@ function _lsSaveRaw(){
       hvLinen:HV_LINEN,hvRewash:HV_REWASH_DATA,hvCols:HV_REWASH_COLS,
       wsData:WS_DATA_BY_DATE,roomStatus:ROOM_STATUS_BY_DATE,
       amData:AM_DATA_BY_DATE,mbData:MB_DATE_DATA,nsLuong:NS_LUONG,sxData:SX_DATA,
+      nsBhxh:NS_BHXH,nsTncn:NS_TNCN,
     };
     localStorage.setItem(LS_KEY,JSON.stringify(data));
     return true;
@@ -76,6 +77,8 @@ function lsLoad(){
     if(d.mbData)         MB_DATE_DATA=d.mbData;
     if(d.nsLuong?.length) NS_LUONG=d.nsLuong;
     if(d.sxData?.length)  SX_DATA=d.sxData;
+    if(d.nsBhxh)          NS_BHXH=d.nsBhxh;
+    if(d.nsTncn)          NS_TNCN=d.nsTncn;
     return true;
   }catch(e){return false;}
 }
@@ -3215,7 +3218,7 @@ function renderNsBhxh(){
   updateNsKpi();
 }
 
-function deleteNsBhxh(id){ NS_BHXH=NS_BHXH.filter(r=>r.id!==id); renderNsBhxh(); }
+function deleteNsBhxh(id){ NS_BHXH=NS_BHXH.filter(r=>r.id!==id); renderNsBhxh(); lsSave(); }
 
 function saveNsBhxh(){
   const ten   = document.getElementById('nsbh-ten').value.trim();
@@ -3228,6 +3231,7 @@ function saveNsBhxh(){
   });
   closeModal('modal-ns-bhxh');
   renderNsBhxh();
+  lsSave();
 }
 
 // ===== THUẾ TNCN =====
@@ -3297,7 +3301,7 @@ function renderNsTncn(){
   updateNsKpi();
 }
 
-function deleteNsTncn(id){ NS_TNCN=NS_TNCN.filter(r=>r.id!==id); renderNsTncn(); }
+function deleteNsTncn(id){ NS_TNCN=NS_TNCN.filter(r=>r.id!==id); renderNsTncn(); lsSave(); }
 
 function saveNsTncn(){
   const ten     = document.getElementById('nstncn-ten').value.trim();
@@ -3314,6 +3318,7 @@ function saveNsTncn(){
   });
   closeModal('modal-ns-tncn');
   renderNsTncn();
+  lsSave();
 }
 
 // ===== KPI TỔNG NHÂN SỰ =====
@@ -5474,6 +5479,8 @@ const COLLECTIONS = {
   kho:       { read:()=>_byIdDump(KHO_DATA),  write:r=>{KHO_DATA=r.map(x=>x.obj);},  render:()=>{try{renderKhoTab();}catch(e){}} },
   yc:        { read:()=>_byIdDump(YC_DATA),   write:r=>{YC_DATA=r.map(x=>x.obj);},   render:()=>{try{renderYeuCau();}catch(e){}} },
   nsLuong:   { read:()=>_byIdDump(NS_LUONG),  write:r=>{NS_LUONG=r.map(x=>x.obj);},  render:()=>{try{renderNsLuong();}catch(e){} try{updateNsKpi();}catch(e){}} },
+  bhxh:      { read:()=>_byIdDump(NS_BHXH),   write:r=>{NS_BHXH=r.map(x=>x.obj);},   render:()=>{try{renderNsBhxh();}catch(e){} try{updateNsKpi();}catch(e){}} },
+  tncn:      { read:()=>_byIdDump(NS_TNCN),   write:r=>{NS_TNCN=r.map(x=>x.obj);},   render:()=>{try{renderNsTncn();}catch(e){} try{updateNsKpi();}catch(e){}} },
   sx:        { read:()=>_byIdDump(SX_DATA),   write:r=>{SX_DATA=r.map(x=>x.obj);},   render:()=>{try{renderSetupXe();}catch(e){}} },
   catalog:   { read:()=>_byIdDump(catalogItems), write:r=>{catalogItems=r.map(x=>x.obj);}, render:()=>{try{renderCatalog();}catch(e){}} },
   hvLinen:   { read:()=>(HV_LINEN||[]).map(x=>({id:`${x.loai}__${x.ngay}`, obj:x})), write:r=>{HV_LINEN=r.map(x=>x.obj);}, render:()=>{try{renderHangVai();}catch(e){}} },
@@ -5523,7 +5530,7 @@ function scheduleFlush(){ if(!sb||!cloudReady) return; clearTimeout(_flushTimer)
 const WRITE_MATRIX = {
   thu:['giamdoc','ketoan'], chi:['giamdoc','ketoan'],
   ncc:['giamdoc','ketoan'], catalog:['giamdoc','ketoan'],
-  nsLuong:['giamdoc','hr'],
+  nsLuong:['giamdoc','hr'], bhxh:['giamdoc','hr'], tncn:['giamdoc','hr'],
   dx:['giamdoc','ketoan','truong-bp','hr'], kho:['giamdoc','ketoan','truong-bp','hr'], yc:['giamdoc','ketoan','truong-bp','hr'],
   wsData:['giamdoc','truong-bp'], roomStatus:['giamdoc','truong-bp'], amData:['giamdoc','truong-bp'],
   mbData:['giamdoc','truong-bp'], hvLinen:['giamdoc','truong-bp'], hvRewash:['giamdoc','truong-bp'],
