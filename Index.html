@@ -1430,8 +1430,8 @@ textarea{resize:vertical;min-height:68px;}
         </div></div>
         <div class="card"><div class="card-header"><div class="card-title">💸 Chi Phí</div></div><div class="card-body">
           <div style="margin-bottom:8px;"><div class="stat-row"><span class="stat-label">Nhân sự (Lương + Thưởng + BHXH)</span><span class="stat-value amount-neg" id="bc-chi-nhansu">—</span></div><div class="progress-bar"><div class="progress-fill" id="bc-bar-nhansu" style="width:0%;background:var(--red);"></div></div></div>
-          <div style="margin-bottom:8px;"><div class="stat-row"><span class="stat-label">Vận hành</span><span class="stat-value amount-neg">0đ</span></div><div class="progress-bar"><div class="progress-fill" style="width:22%;background:#e87a5d;"></div></div></div>
-          <div><div class="stat-row"><span class="stat-label">Vật tư & Hàng hoá</span><span class="stat-value amount-neg">0đ</span></div><div class="progress-bar"><div class="progress-fill" style="width:17%;background:#e87a5d;"></div></div></div>
+          <div style="margin-bottom:8px;"><div class="stat-row"><span class="stat-label">Vận hành</span><span class="stat-value amount-neg" id="bc-chi-vanhanh">—</span></div><div class="progress-bar"><div class="progress-fill" id="bc-bar-vanhanh" style="width:0%;background:#e87a5d;"></div></div></div>
+          <div><div class="stat-row"><span class="stat-label">Vật tư & Hàng hoá</span><span class="stat-value amount-neg" id="bc-chi-vattu">—</span></div><div class="progress-bar"><div class="progress-fill" id="bc-bar-vattu" style="width:0%;background:#e87a5d;"></div></div></div>
         </div></div>
       </div>
     </div>
@@ -4335,6 +4335,7 @@ renderCatalog();
 }
 
 function renderDxTable(){
+  try{ syncMobNotif(); }catch(e){}   // cập nhật badge số đề xuất chờ duyệt (không phụ thuộc bộ lọc/early-return)
   const fStatus=document.getElementById('dx-f-status')?.value||'';
   const fBp=document.getElementById('dx-f-bp')?.value||'';
   const fMonth=document.getElementById('dx-f-month')?.value||'';
@@ -4717,9 +4718,8 @@ function updateDashboardKPI(){
 }
 
 function renderBaoCao(){
-  // Tính tổng theo từng danh mục từ THU_DATA thực tế
+  // ===== Doanh thu theo danh mục (từ THU_DATA thực tế) =====
   const tongThu = THU_DATA.reduce((s,r)=>s+r.sotien,0);
-  if(!tongThu) return;
   const nhomMap = {
     'Doanh thu phòng': {id:'phong',  color:'var(--gold)'},
     'Buffet':          {id:'buffet', color:'#4A6FA5'},
@@ -4728,7 +4728,6 @@ function renderBaoCao(){
     'Decor':           {id:'decor',  color:'#E8904A'},
     'Khác':            {id:'khac',   color:'#aaa'},
   };
-  // Nhóm các danh mục tùy chỉnh vào Khác nếu không khớp
   const totals = {};
   THU_DATA.forEach(r=>{
     const key = nhomMap[r.danhmuc] ? r.danhmuc : 'Khác';
@@ -4739,15 +4738,24 @@ function renderBaoCao(){
     const pct = tongThu>0?Math.round(val/tongThu*100):0;
     const el=document.getElementById('bc-dt-'+cfg.id);
     const bar=document.getElementById('bc-bar-'+cfg.id);
-    if(el) el.textContent=fmt(val);
+    if(el) el.textContent = val>0?fmt(val):'—';
     if(bar){ bar.style.width=pct+'%'; bar.style.background=cfg.color; }
   });
-  // Cập nhật tổng hợp
-  const tongChi = CHI_DATA.filter(r=>r.tinh_trang==='hoan-thanh').reduce((s,r)=>s+r.tong,0);
-  const bcThu=document.querySelector('#page-bao-cao .amount-pos strong');
-  const bcChi=document.querySelector('#page-bao-cao .amount-neg strong');
-  const bcLN=document.querySelector('#page-bao-cao strong[style*="yellow"]');
-  // Update via ids if available (fallback to static)
+  // ===== Chi phí: Nhân sự + Vận hành + Vật tư & Hàng hoá (từ dữ liệu thực) =====
+  const nhanSu = (typeof calcNsTotal==='function' ? (calcNsTotal('').tong||0) : 0);
+  const chiHT  = CHI_DATA.filter(r=>r.tinh_trang==='hoan-thanh');
+  const vatTu  = chiHT.filter(r=>r.dx_id).reduce((s,r)=>s+(r.tong||0),0);   // chi từ đề xuất mua hàng
+  const vanHanh= chiHT.reduce((s,r)=>s+(r.tong||0),0) - vatTu;             // chi vận hành còn lại
+  const baseChi= nhanSu + vanHanh + vatTu;
+  const setChi=(idv,idb,val)=>{
+    const e=document.getElementById(idv), b=document.getElementById(idb);
+    const p=baseChi>0?Math.round(val/baseChi*100):0;
+    if(e) e.textContent = val>0?fmt(val):'—';
+    if(b) b.style.width = p+'%';
+  };
+  setChi('bc-chi-nhansu','bc-bar-nhansu',nhanSu);
+  setChi('bc-chi-vanhanh','bc-bar-vanhanh',vanHanh);
+  setChi('bc-chi-vattu','bc-bar-vattu',vatTu);
 }
 
 // ==================== IMAGE PICKER ====================
@@ -5369,10 +5377,12 @@ function closeMobileSidebar(){
 }
 function setMobActive(){ /* deprecated — giữ để tránh lỗi nếu còn gọi */ }
 function syncMobNotif(){
-  const pending=DX_DATA.filter(d=>d.status.startsWith('cho-duyet')).length;
-  // Cập nhật notification badge trong sidebar
-  const dot=document.getElementById('notif-dx');
-  if(dot){ dot.textContent=pending; dot.style.display=pending?'inline':'none'; }
+  const pending=DX_DATA.filter(d=>d.status&&d.status.startsWith('cho-duyet')).length;
+  // Cập nhật badge số đề xuất chờ duyệt (ẩn khi =0) — cả sidebar và tiêu đề trang
+  ['notif-dx','notif-dx2'].forEach(id=>{
+    const dot=document.getElementById(id);
+    if(dot){ dot.textContent=pending; dot.style.display=pending?'inline':'none'; }
+  });
 }
 function checkMobileLayout(){
   // Hiện nút ☰ khi < 1181px (mobile + iPad)
