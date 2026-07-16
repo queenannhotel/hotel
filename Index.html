@@ -961,7 +961,7 @@ textarea{resize:vertical;min-height:68px;}
       <div class="card">
         <div class="table-wrap xwide">
         <table>
-          <thead><tr><th>Mã ĐX</th><th>Tên hàng</th><th>Bộ phận</th><th>Người đề xuất</th><th>Số lượng</th><th>Giá thấp nhất năm</th><th>Đơn giá hiện tại</th><th>Tổng giá trị</th><th>Ngày tạo</th><th>Luồng duyệt</th><th>Trạng thái</th><th>Hành động</th></tr></thead>
+          <thead><tr><th>Mã ĐX</th><th>Danh sách mặt hàng</th><th>Bộ phận</th><th>Người đề xuất</th><th>Tổng SL</th><th>Tổng giá trị</th><th>Ưu tiên</th><th>Ngày tạo</th><th>Trạng thái</th><th>Hành động</th></tr></thead>
           <tbody id="dx-tbody"></tbody>
         </table>
         </div>
@@ -2080,55 +2080,19 @@ textarea{resize:vertical;min-height:68px;}
       </div>
       <div class="form-group"><label>Mức độ ưu tiên</label><select id="dx-priority"><option>Thường</option><option>Khẩn cấp</option><option>Rất khẩn cấp</option></select></div>
     </div>
-    <div class="form-row full">
-      <div class="form-group">
-        <label>Tên hàng / Dịch vụ <span style="color:var(--red);">*</span></label>
-        <div class="select-wrap">
-          <input type="text" id="dx-hang-input" placeholder="← Chọn bộ phận trước..." autocomplete="off"
-            oninput="filterItemDropdown()" onfocus="openItemDropdown()" onblur="setTimeout(closeItemDropdown,180)">
-          <div class="dropdown-list" id="dx-hang-dropdown"></div>
-        </div>
-        <div class="item-chip" id="dx-item-chip" style="display:none;">
-          <div><div class="ic-name" id="dx-chip-name"></div><div class="ic-meta" id="dx-chip-meta"></div></div>
-          <button class="item-chip-clear" onclick="clearSelectedItem()">✕ Xoá</button>
-        </div>
-      </div>
+    <!-- Danh sách mặt hàng (nhiều dòng / 1 đề xuất) -->
+    <datalist id="dx-catalog-list"></datalist>
+    <datalist id="dx-ncc-list"></datalist>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin:6px 0 8px;">
+      <label style="margin:0;">Danh sách mặt hàng <span style="color:var(--red);">*</span> <span style="font-size:10px;color:var(--text-muted);text-transform:none;font-weight:400;">— gõ tên khớp danh mục để gợi ý giá</span></label>
+      <button class="btn btn-ghost btn-sm" onclick="dxAddRow()" type="button">＋ Thêm hàng</button>
     </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label>Số lượng <span style="color:var(--red);">*</span></label>
-        <div style="display:flex;gap:7px;">
-          <input type="number" id="dx-soluong" placeholder="0" style="flex:1;" min="1" oninput="calcDxTotal()">
-          <input type="text" id="dx-dvt-display" style="width:70px;" readonly placeholder="đvt">
-        </div>
-      </div>
-      <div class="form-group">
-        <label>Đơn giá dự kiến (đ/<span id="dx-dvt-label">đvt</span>)</label>
-        <input type="number" id="dx-dongia" placeholder="Tự điền khi chọn hàng" oninput="calcDxTotal()">
-      </div>
-    </div>
-    <!-- Giá lịch sử tự động -->
-    <div id="dx-price-box" style="display:none;background:var(--green-bg);border:1px solid #b6dfd1;border-radius:10px;padding:13px 15px;margin-bottom:12px;">
-      <div style="font-size:10.5px;text-transform:uppercase;letter-spacing:1px;color:var(--green);font-weight:600;margin-bottom:10px;">📊 Giá lịch sử — tự động từ danh mục</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
-        <div><div style="font-size:10.5px;color:var(--text-muted);margin-bottom:3px;">Giá thấp nhất năm</div><div id="dx-min-price" style="font-size:15px;font-weight:700;color:var(--green);">—</div></div>
-        <div><div style="font-size:10.5px;color:var(--text-muted);margin-bottom:3px;">Giá trung bình năm</div><div id="dx-avg-price" style="font-size:15px;font-weight:700;color:var(--navy);">—</div></div>
-        <div><div style="font-size:10.5px;color:var(--text-muted);margin-bottom:3px;">Lần mua gần nhất</div><div id="dx-last-price" style="font-size:15px;font-weight:700;color:var(--navy);">—</div><div id="dx-last-date" style="font-size:10px;color:var(--text-muted);"></div></div>
-      </div>
-      <div id="dx-price-note" style="font-size:12px;margin-top:10px;padding:7px 10px;border-radius:6px;display:none;"></div>
-    </div>
+    <div id="dx-items"></div>
     <!-- Tổng -->
-    <div id="dx-total-wrap" style="display:none;background:var(--gold-pale);border:1px solid rgba(201,168,76,.35);border-radius:8px;padding:10px 15px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;">
+    <div id="dx-total-wrap" style="display:none;background:var(--gold-pale);border:1px solid rgba(201,168,76,.35);border-radius:8px;padding:10px 15px;margin:6px 0 12px;justify-content:space-between;align-items:center;">
       <span style="font-size:13px;color:var(--text-muted);">Tổng giá trị ước tính</span>
       <span id="dx-total-val" style="font-size:18px;font-weight:700;color:var(--yellow);">—</span>
     </div>
-    <!-- NCC chips -->
-    <div class="form-group" style="margin-bottom:14px;">
-      <label>Nhà cung cấp <span style="font-size:10px;color:var(--text-muted);text-transform:none;font-weight:400;">— gợi ý theo mặt hàng</span></label>
-      <div id="dx-ncc-area" style="margin-top:6px;"><div style="padding:11px;background:var(--cream);border-radius:8px;border:1px dashed var(--border);font-size:12px;color:var(--text-muted);">← Chọn mặt hàng để xem NCC gợi ý</div></div>
-    </div>
-    <div class="form-row full"><div class="form-group"><label>Lý do / Mục đích</label><textarea id="dx-lydo" placeholder="Giải thích lý do cần mua..."></textarea></div></div>
-    <div class="form-row full"><div class="form-group"><label>Đính kèm báo giá</label><input type="file" accept=".pdf,.jpg,.png,.xlsx"></div></div>
     <div style="background:var(--gold-pale);border-radius:8px;padding:9px 13px;font-size:12px;color:var(--yellow);margin:10px 0;border:1px solid rgba(201,168,76,.3);">
       ℹ️ Luồng duyệt: <strong>Trưởng bộ phận → Kế toán trưởng → Giám đốc</strong>
     </div>
@@ -2598,10 +2562,11 @@ async function enterApp(session){
   syncThuChiSummary();
   renderCongNoPtr();
   renderNccTable();
-  // Push các đề xuất đã duyệt vào CHI — chỉ vai trò được ghi 'chi' (kế toán/giám đốc),
-  // tránh vai trò khác vô tình tạo bản ghi chi bị RLS chặn -> kẹt đồng bộ.
+  // Hoàn tất các đề xuất đã duyệt (cộng Kho KT + tạo Chi) — chỉ vai trò được ghi 'chi'
+  // (kế toán/giám đốc), tránh vai trò khác vô tình tạo bản ghi bị RLS chặn -> kẹt đồng bộ.
+  // Cờ dx._done chống tạo trùng khi đăng nhập lại.
   if(currentUser.role==='ketoan'||currentUser.role==='giamdoc'){
-    DX_DATA.filter(d=>d.status==='da-duyet').forEach(dx=>{ if(dx.don_gia_ht) pushDxToChi(dx); });
+    DX_DATA.filter(d=>d.status==='da-duyet' && !d._done).forEach(dx=> finalizeDxApproved(dx));
   }
   updateNsKpi();
   // Nếu trang đang mở không thuộc quyền của user (vd HR không được xem Dashboard tài chính)
@@ -3129,34 +3094,53 @@ function syncThuChiSummary() {
 function renderThuChi(){ syncThuChiSummary(); }
 
 // ==================== NHẢY ĐỀ XUẤT ĐÃ DUYỆT → CHI ====================
+// Tạo 1 bản ghi CHI cho từng mặt hàng của đề xuất đã duyệt (chống trùng theo dx_id + chỉ số dòng).
 function pushDxToChi(dx) {
-  // Tìm NCC liên kết từ catalogItems
-  const catItem = catalogItems.find(it=>it.code===dx.code);
-  let tenNcc = '—';
-  if(catItem && catItem.nccIds.length) {
-    const n = NCC_LIST.find(x=>x.id===catItem.nccIds[0]);
-    if(n) tenNcc = n.name;
-  }
-  // Kiểm tra đã tồn tại chưa
-  if(CHI_DATA.find(c=>c.dx_id===dx.id)) return;
-  CHI_DATA.unshift({
-    id:'C'+Date.now(),
-    ngay: new Date().toLocaleDateString('vi-VN'),
-    ten_hang: dx.ten,
-    bophan: dx.bophan_label,
-    sl: parseFloat(dx.sl)||1,
-    dvt: dx.dvt,
-    don_gia: dx.don_gia_ht||0,
-    tong: dx.tong,
-    ten_ncc: tenNcc,
-    hoa_don: 'KO VAT',
-    pttt: 'CK',
-    so_phieu_chi: '',
-    so_tk: '',
-    tinh_trang: 'dang-len-don',
-    nguon: 'de-xuat',
-    dx_id: dx.id,
+  if(!dx) return;
+  const bpLabel = (typeof BP_LABELS!=='undefined' && BP_LABELS[dx.bophan]) || dx.bophan_label || dx.bophan || '';
+  const ngay = new Date().toLocaleDateString('vi-VN');
+  dxItems(dx).forEach((it, idx)=>{
+    const chiId = `${dx.id}-${idx}`;
+    if(CHI_DATA.find(c=>c.dx_item_id===chiId)) return;      // đã tạo rồi
+    // NCC: ưu tiên tên NCC ghi trên dòng đề xuất, fallback từ danh mục
+    let tenNcc = it.ncc || '';
+    if(!tenNcc){
+      const catItem = (typeof catalogItems!=='undefined'?catalogItems:[]).find(c=>(c.name||'').trim().toLowerCase()===(it.ten||'').trim().toLowerCase());
+      if(catItem && (catItem.nccIds||[]).length){ tenNcc = nccName(catItem.nccIds[0]) || ''; }
+    }
+    const sl = parseFloat(it.sl)||1;
+    const don_gia = parseFloat(it.dongia)||0;
+    CHI_DATA.unshift({
+      id:'C'+Date.now()+idx,
+      ngay,
+      ten_hang: it.ten,
+      bophan: bpLabel,
+      sl,
+      dvt: it.dvt||'',
+      don_gia,
+      tong: sl*don_gia,
+      ten_ncc: tenNcc||'—',
+      hoa_don: 'KO VAT',
+      pttt: 'CK',
+      so_phieu_chi: '',
+      so_tk: '',
+      tinh_trang: 'dang-len-don',
+      nguon: 'de-xuat',
+      dx_id: dx.id,
+      dx_item_id: chiId,
+    });
   });
+}
+
+// Khi đề xuất chuyển sang 'da-duyet': cộng kho KT + tạo bản ghi Chi (1 lần duy nhất).
+function finalizeDxApproved(dx){
+  if(!dx || dx.status!=='da-duyet' || dx._done) return;
+  dxItems(dx).forEach(it=> pushDxToKho(it, dx));   // cộng số lượng vào Kho tổng (Kho KT)
+  pushDxToChi(dx);                                  // tạo bản ghi Chi cho từng mặt hàng
+  dx._done = true;
+  try{ renderKhoTab(); }catch(e){}
+  try{ renderChiTab(); }catch(e){}
+  try{ syncThuChiSummary(); }catch(e){}
 }
 
 // ==================== MODAL GHI THU (cập nhật PTTT) ====================
@@ -4425,6 +4409,77 @@ closeModal('modal-add-item');
 renderCatalog();
 }
 
+// ===== ĐỀ XUẤT MUA HÀNG — mô hình nhiều mặt hàng/1 phiếu =====
+// Trả về mảng items; tương thích ngược với đề xuất cũ (1 mặt hàng lưu trực tiếp trên d).
+function dxItems(d){
+  if(d && Array.isArray(d.items) && d.items.length) return d.items;
+  return [{ten:d?.ten||'',ncc:d?.ncc||'',sl:parseFloat(d?.sl)||0,dvt:d?.dvt||'',dongia:parseFloat(d?.dongia)||0,lydo:d?.lydo||''}];
+}
+function dxTotal(d){ return dxItems(d).reduce((s,it)=>s+(parseFloat(it.sl)||0)*(parseFloat(it.dongia)||0),0); }
+// Giá thấp nhất năm cho 1 tên hàng (khớp danh mục hàng hoá)
+function dxItemMinPrice(ten){
+  const it=(typeof catalogItems!=='undefined'?catalogItems:[]).find(x=>(x.name||'').trim().toLowerCase()===(ten||'').trim().toLowerCase());
+  return it?(calcPrices(it).min||0):0;
+}
+// ----- Form: các dòng hàng động -----
+function dxRowHtml(){
+  return `<div class="dx-item-row" style="display:grid;grid-template-columns:1.7fr 1.3fr .6fr .6fr .9fr 1.3fr 34px;gap:8px;align-items:end;margin-bottom:8px;padding:10px;background:var(--cream);border:1px solid var(--border);border-radius:8px;">
+    <div class="form-group" style="margin:0;"><label style="font-size:10px;">Tên hàng <span style="color:var(--red);">*</span></label><input class="dxr-ten" list="dx-catalog-list" oninput="dxRowChanged(this)" placeholder="Tên mặt hàng"></div>
+    <div class="form-group" style="margin:0;"><label style="font-size:10px;">Nhà cung cấp</label><input class="dxr-ncc" list="dx-ncc-list" placeholder="Tên NCC"></div>
+    <div class="form-group" style="margin:0;"><label style="font-size:10px;">SL <span style="color:var(--red);">*</span></label><input type="number" class="dxr-sl" min="1" value="1" oninput="dxUpdateTotal()"></div>
+    <div class="form-group" style="margin:0;"><label style="font-size:10px;">ĐVT</label><input type="text" class="dxr-dvt" placeholder="đvt"></div>
+    <div class="form-group" style="margin:0;"><label style="font-size:10px;">Đơn giá dự kiến</label><input type="number" class="dxr-dongia" min="0" placeholder="0" oninput="dxUpdateTotal()"></div>
+    <div class="form-group" style="margin:0;"><label style="font-size:10px;">Lý do / Mục đích</label><input type="text" class="dxr-lydo" placeholder="Lý do"></div>
+    <button class="btn btn-ghost btn-sm" type="button" onclick="dxRemoveRow(this)" title="Xoá dòng" style="height:38px;padding:0;">🗑</button>
+    <div class="dxr-hint" style="grid-column:1 / -1;font-size:11px;color:var(--green);display:none;"></div>
+  </div>`;
+}
+function dxAddRow(){ const box=document.getElementById('dx-items'); if(box) box.insertAdjacentHTML('beforeend',dxRowHtml()); }
+function dxRemoveRow(btn){
+  const box=document.getElementById('dx-items'); const row=btn.closest('.dx-item-row'); if(!box||!row) return;
+  if(box.querySelectorAll('.dx-item-row').length<=1){ showToast('Cần ít nhất 1 mặt hàng',2000,'info'); return; }
+  row.remove(); dxUpdateTotal();
+}
+function dxRowChanged(inp){
+  const row=inp.closest('.dx-item-row'); if(!row) return;
+  const it=(typeof catalogItems!=='undefined'?catalogItems:[]).find(x=>(x.name||'').trim().toLowerCase()===(inp.value||'').trim().toLowerCase());
+  const hint=row.querySelector('.dxr-hint');
+  if(it){
+    const p=calcPrices(it);
+    const dvt=row.querySelector('.dxr-dvt'); if(dvt&&!dvt.value) dvt.value=it.dvt||'';
+    const dg=row.querySelector('.dxr-dongia'); if(dg&&!dg.value&&p.last) dg.value=p.last;
+    const nccEl=row.querySelector('.dxr-ncc');
+    if(nccEl&&!nccEl.value){ const nm=(it.nccIds||[]).map(id=>nccName(id)).filter(Boolean)[0]; if(nm) nccEl.value=nm; }
+    if(hint){ hint.style.display=''; hint.innerHTML=`📊 Giá thấp nhất năm: <strong>${fmt(p.min)}</strong> · TB năm: ${fmt(p.avg)} · gần nhất: ${fmt(p.last)}`; }
+  } else if(hint){ hint.style.display='none'; }
+  dxUpdateTotal();
+}
+function dxUpdateTotal(){
+  let tong=0;
+  document.querySelectorAll('#dx-items .dx-item-row').forEach(r=>{
+    tong+=(parseFloat(r.querySelector('.dxr-sl')?.value)||0)*(parseFloat(r.querySelector('.dxr-dongia')?.value)||0);
+  });
+  const val=document.getElementById('dx-total-val'), wrap=document.getElementById('dx-total-wrap');
+  if(val) val.textContent=tong?fmt(tong):'—';
+  if(wrap) wrap.style.display=tong?'flex':'none';
+}
+function dxFillDatalists(){
+  const cl=document.getElementById('dx-catalog-list');
+  if(cl) cl.innerHTML=(typeof catalogItems!=='undefined'?catalogItems:[]).map(it=>`<option value="${esc(it.name)}">${esc(it.code||'')} · ${esc(it.dvt||'')}</option>`).join('');
+  const nl=document.getElementById('dx-ncc-list');
+  if(nl) nl.innerHTML=(NCC_DATA||[]).map(n=>`<option value="${esc(n.ten)}"></option>`).join('');
+}
+// ----- Quyền duyệt -----
+function dxApproveLevel(status){ return {'cho-duyet-truong-bp':'truong-bp','cho-duyet-ketoan':'ketoan','cho-duyet-gd':'gd'}[status]||null; }
+function canApproveDx(d){
+  const lvl=dxApproveLevel(d.status); if(!lvl) return false;
+  const role=currentUser?.role;
+  if(role==='giamdoc') return true;                                   // Giám đốc duyệt được mọi cấp
+  if(lvl==='truong-bp') return role==='truong-bp' && d.bophan===currentUser?.bophan;
+  if(lvl==='ketoan')    return role==='ketoan';
+  return false;                                                        // cấp 'gd' chỉ giám đốc
+}
+
 function renderDxTable(){
   try{ syncMobNotif(); }catch(e){}   // cập nhật badge số đề xuất chờ duyệt (không phụ thuộc bộ lọc/early-return)
   const fStatus=document.getElementById('dx-f-status')?.value||'';
@@ -4441,58 +4496,77 @@ function renderDxTable(){
     return true;
   });
 
-  const fmt=v=>v?v.toLocaleString('vi-VN')+'đ':'—';
-  const STATUS_LABEL={'cho-duyet-truong-bp':'Chờ TP duyệt','cho-duyet-ketoan':'Chờ KT duyệt','cho-duyet-gd':'Chờ GĐ duyệt','da-duyet':'Đã duyệt','tu-choi':'Từ chối'};
-  const STATUS_COLOR={'cho-duyet-truong-bp':'badge-yellow','cho-duyet-ketoan':'badge-yellow','cho-duyet-gd':'badge-yellow','da-duyet':'badge-green','tu-choi':'badge-red'};
   const BP_LABEL={'buong-phong':'Buồng phòng','nha-hang':'Nhà hàng','bep':'Bếp','le-tan':'Lễ tân','ky-thuat':'Kỹ thuật','sale':'Sale','hr':'HR','van-phong':'VP'};
+  const PRI_COLOR={'Thường':'badge-navy','Khẩn cấp':'badge-yellow','Rất khẩn cấp':'badge-red'};
 
   const tbody=document.getElementById('dx-tbody');
   if(!tbody) return;
   if(!items.length){
-    tbody.innerHTML=`<tr><td colspan="11" style="text-align:center;padding:24px;color:var(--text-muted);">Không có đề xuất nào</td></tr>`;
-    return;
+    tbody.innerHTML=`<tr><td colspan="10" style="text-align:center;padding:24px;color:var(--text-muted);">Không có đề xuất nào</td></tr>`;
+    renderDashDx(); return;
   }
   tbody.innerHTML=items.map(d=>{
-    const sl=STATUS_LABEL[d.status]||d.status;
-    const sc=STATUS_COLOR[d.status]||'';
-    const tong=d.dongia&&d.sl?parseFloat(d.dongia)*parseFloat(d.sl):0;
+    const its=dxItems(d);
+    const totSl=its.reduce((s,it)=>s+(parseFloat(it.sl)||0),0);
+    const tong=dxTotal(d);
+    const pri=d.priority||'Thường';
+    const itemList=its.map(it=>{
+      const min=dxItemMinPrice(it.ten);
+      return `<div style="padding:2px 0;"><span style="font-weight:600;">${esc(it.ten)||'—'}</span> ×${esc(it.sl)||0} ${esc(it.dvt)||''}${it.ncc?` · <span style="color:var(--text-muted);">${esc(it.ncc)}</span>`:''}${min?` <span style="color:var(--green);font-size:11px;">— giá TN năm: ${fmt(min)}</span>`:''}</div>`;
+    }).join('');
+    const canApr=canApproveDx(d);
+    const lvl=dxApproveLevel(d.status);
+    const action=canApr
+      ? `<div style="display:flex;gap:5px;"><button class="btn btn-success btn-sm" onclick="confirmApprove('${d.id}','${lvl}')">✓ Duyệt</button><button class="btn btn-danger btn-sm" onclick="rejectDx('${d.id}')">✗</button></div>`
+      : (d.status==='da-duyet'?'<span style="color:var(--green);font-size:11px;">✓ Đã duyệt</span>':(d.status==='tu-choi'?'<span style="color:var(--red);font-size:11px;">Từ chối</span>':'<span style="color:var(--text-muted);font-size:11px;">Chờ cấp trên</span>'));
     return`<tr>
       <td style="font-size:11px;color:var(--text-muted);">${esc(d.id)||'—'}</td>
-      <td style="font-weight:600;">${esc(d.ten)||'—'}</td>
+      <td style="min-width:230px;">${itemList||'—'}</td>
       <td><span class="badge badge-navy" style="font-size:10px;">${esc(BP_LABEL[d.bophan]||d.bophan)||'—'}</span></td>
       <td>${esc(d.nguoi||currentUser?.fullname)||'—'}</td>
-      <td style="text-align:center;">${esc(d.sl)||'—'} ${esc(d.dvt)||''}</td>
-      <td style="text-align:right;">—</td>
-      <td style="text-align:right;">${d.dongia?fmt(d.dongia):'—'}</td>
+      <td style="text-align:center;">${totSl||'—'}</td>
       <td style="text-align:right;font-weight:600;">${tong?fmt(tong):'—'}</td>
+      <td><span class="badge ${PRI_COLOR[pri]||'badge-navy'}" style="font-size:10px;">${esc(pri)}</span></td>
       <td>${esc(d.ngay)||'—'}</td>
-      <td>${esc(d.lydo)||'—'}</td>
-      <td><span class="badge ${sc}" style="font-size:10px;white-space:nowrap;">${sl}</span></td>
+      <td>${statusBadge(d.status)}</td>
+      <td>${action}</td>
     </tr>`;
   }).join('');
   renderDashDx();
 }
 
 function submitDx(){
-  const ten=document.getElementById('ai-name')?.value.trim();
-  const sl=document.getElementById('ai-sl')?.value||1;
-  const dvt=document.getElementById('ai-dvt')?.value.trim()||'';
-  const bophan=document.getElementById('ai-bophan')?.value||'';
-  const lydo=document.getElementById('ai-lydo')?.value.trim()||'';
-  const dongia=parseFloat(document.getElementById('ai-dongia')?.value)||0;
-  if(!ten){showToast('Vui lòng nhập tên mặt hàng!',2000,'error');return;}
+  const bophan=document.getElementById('dx-bophan')?.value||'';
+  const priority=document.getElementById('dx-priority')?.value||'Thường';
+  if(!bophan){ showToast('Vui lòng chọn bộ phận!',2000,'error'); return; }
+  const items=[];
+  document.querySelectorAll('#dx-items .dx-item-row').forEach(r=>{
+    const ten=(r.querySelector('.dxr-ten')?.value||'').trim();
+    const sl=parseFloat(r.querySelector('.dxr-sl')?.value)||0;
+    if(!ten||sl<=0) return;
+    items.push({
+      ten,
+      ncc:(r.querySelector('.dxr-ncc')?.value||'').trim(),
+      sl,
+      dvt:(r.querySelector('.dxr-dvt')?.value||'').trim(),
+      dongia:parseFloat(r.querySelector('.dxr-dongia')?.value)||0,
+      lydo:(r.querySelector('.dxr-lydo')?.value||'').trim(),
+    });
+  });
+  if(!items.length){ showToast('Vui lòng nhập ít nhất 1 mặt hàng (tên + số lượng)!',2800,'error'); return; }
   const newDx={
-    id:'DX'+Date.now(),ten,sl,dvt,dongia,bophan,lydo,
-    status:'cho-duyet-truong-bp',
+    id:'DX'+Date.now(), bophan, priority,
+    nguoi:currentUser?.fullname||'',
     ngay:new Date().toLocaleDateString('vi-VN'),
-    flow:[false,false,false],ncc:'',ghichu:''
+    status:'cho-duyet-truong-bp', flow:[false,false,false],
+    ghichu:'', items,
   };
   DX_DATA.unshift(newDx);
   closeModal('modal-de-xuat');
   renderDxTable();
-  // Notification cho người duyệt
-  notifyDeXuatMoi(ten, BP_LABELS[bophan]||bophan);
-  showToast('✅ Đã gửi đề xuất: '+ten,2500,'success');
+  syncNow();
+  notifyDeXuatMoi(items.map(i=>i.ten).join(', '), BP_LABELS[bophan]||bophan);
+  showToast('✅ Đã gửi đề xuất '+items.length+' mặt hàng',2500,'success');
 }
 
 function saveYeuCau(){
@@ -5203,13 +5277,15 @@ function saveKhoHuy(){
   closeModal('modal-kho-huy');renderKhoTab();
 }
 
-function pushDxToKho(dx){
-  if(!dx?.ten)return;
+// Cộng số lượng 1 mặt hàng đã duyệt vào KHO KT (kho tổng/kế toán) qua lịch sử nhập.
+function pushDxToKho(item, dx){
+  if(!item?.ten) return;
   const ngay=new Date().toLocaleDateString('vi-VN');
-  const sl=parseFloat(dx.sl)||1;
-  let ktItem=KHO_DATA.find(it=>it.ten===dx.ten&&it.bophan==='kt');
-  if(ktItem){ktItem.lichSu.push({ngay,loai:'nhap',sl,tu:'',den:'kt',lydo:`Nhập từ MH (ĐX: ${dx.id})`,nguoi:'Kế toán'});}
-  else{KHO_DATA.push({id:'KH'+Date.now(),ma:'KTO-'+Date.now().toString().slice(-4),ten:dx.ten,dvt:dx.dvt||'Cái',bophan:'kt',vitri:'VP',ton_dau:0,img:'📦',ghichu:`Tạo từ ĐX ${dx.id}`,lichSu:[{ngay,loai:'nhap',sl,tu:'',den:'kt',lydo:`Nhập từ MH (ĐX: ${dx.id})`,nguoi:'Kế toán'}]});}
+  const sl=parseFloat(item.sl)||1;
+  const lydo=`Nhập từ MH (ĐX: ${dx?.id||''})`;
+  let ktItem=KHO_DATA.find(it=>it.ten===item.ten&&it.bophan==='kt');
+  if(ktItem){ ktItem.lichSu.push({ngay,loai:'nhap',sl,tu:'',den:'kt',lydo,nguoi:'Kế toán'}); }
+  else{ KHO_DATA.push({id:'KH'+Date.now()+Math.floor(Math.random()*1000),ma:'KTO-'+(Date.now().toString().slice(-4))+Math.floor(Math.random()*90+10),ten:item.ten,dvt:item.dvt||'Cái',bophan:'kt',vitri:'VP',ton_dau:0,img:'📦',ghichu:`Tạo từ ĐX ${dx?.id||''}`,lichSu:[{ngay,loai:'nhap',sl,tu:'',den:'kt',lydo,nguoi:'Kế toán'}]}); }
 }
 
 function importKhoExcel(input){
@@ -5285,12 +5361,16 @@ function renderDashDx() {
     tbody.innerHTML=`<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text-muted);">Không có đề xuất nào chờ duyệt</td></tr>`;
     return;
   }
-  tbody.innerHTML=items.slice(0,5).map(d=>`<tr>
-    <td style="font-weight:500;">${d.ten}</td>
-    <td><span class="badge badge-navy" style="font-size:10px;">${d.bophan_label}</span></td>
-    <td style="font-weight:600;">${fmt(d.tong)}</td>
+  const BP_LABEL={'buong-phong':'Buồng phòng','nha-hang':'Nhà hàng','bep':'Bếp','le-tan':'Lễ tân','ky-thuat':'Kỹ thuật','sale':'Sale','hr':'HR','van-phong':'VP'};
+  tbody.innerHTML=items.slice(0,5).map(d=>{
+    const its=dxItems(d);
+    const label=its.length>1?`${esc(its[0].ten)} +${its.length-1} mặt hàng`:esc(its[0]?.ten||'—');
+    return `<tr>
+    <td style="font-weight:500;">${label}</td>
+    <td><span class="badge badge-navy" style="font-size:10px;">${esc(BP_LABEL[d.bophan]||d.bophan_label||d.bophan||'')}</span></td>
+    <td style="font-weight:600;">${fmt(dxTotal(d))}</td>
     <td>${statusBadge(d.status)}</td>
-  </tr>`).join('');
+  </tr>`;}).join('');
 }
 function calcChiModal(){
   const don_gia=parseFloat(document.getElementById('chi-dongia').value)||0;
@@ -5325,10 +5405,14 @@ function openNccModal(id=null){
 }
 
 function openDeXuatModal(){
-  ['ai-name','ai-sl','ai-dvt','ai-lydo','ai-ghichu'].forEach(id=>{
-    const el=document.getElementById(id); if(el) el.value='';
-  });
-  const dongia=document.getElementById('ai-dongia'); if(dongia) dongia.value='';
+  const bp=document.getElementById('dx-bophan');
+  if(bp) bp.value=(currentUser?.role==='truong-bp')?(currentUser.bophan||''):'';
+  const pr=document.getElementById('dx-priority'); if(pr) pr.value='Thường';
+  dxFillDatalists();
+  const box=document.getElementById('dx-items'); if(box) box.innerHTML='';
+  dxAddRow();
+  const wrap=document.getElementById('dx-total-wrap'); if(wrap) wrap.style.display='none';
+  const val=document.getElementById('dx-total-val'); if(val) val.textContent='—';
   openModal('modal-de-xuat');
 }
 function openDxModal(){ openDeXuatModal(); }
@@ -5413,18 +5497,46 @@ function deleteNcc(id){
 function editItem(id){
   const it=catalogItems.find(x=>x.id===id);
   if(!it) return;
-  editingCatalogId=id;
+  editingItemId=id; editingCatalogId=id;
+  const title=document.getElementById('ai-modal-title'); if(title) title.textContent='✏️ Sửa Mặt Hàng';
   document.getElementById('ai-name').value=it.name||'';
   document.getElementById('ai-code').value=it.code||'';
   document.getElementById('ai-dvt').value=it.dvt||'';
-  document.getElementById('ai-bophan').value=it.bophan||'buong-phong';
-  document.getElementById('ai-ghichu').value=it.note||'';
-  openModal('modal-de-xuat-add-item');
+  fillCatSelect('ai-bophan','bophan',{});
+  const bp=document.getElementById('ai-bophan'); if(bp) bp.value=it.bophan||'buong-phong';
+  const note=document.getElementById('ai-note'); if(note) note.value=it.note||'';
+  // Reset ô nhập lần mua mới (chỉ nhập khi có lần mua mới)
+  ['ai-last','ai-purchase-note'].forEach(x=>{const el=document.getElementById(x);if(el)el.value='';});
+  const prev=document.getElementById('ai-price-preview'); if(prev) prev.style.display='none';
+  renderAiNccList(it.nccIds||[]);
+  // Lịch sử mua (read-only)
+  const histWrap=document.getElementById('ai-history-wrap'), histList=document.getElementById('ai-history-list');
+  if(histWrap&&histList){
+    const h=(it.purchaseHistory||[]);
+    if(h.length){
+      histWrap.style.display='';
+      histList.innerHTML=h.slice().reverse().map(r=>`<div class="purchase-row"><span>${esc(r.date)}</span><span style="font-weight:600;color:var(--navy);">${fmt(r.price)}</span>${r.note?`<span style="color:var(--text-muted);font-size:10px;">${esc(r.note)}</span>`:''}</div>`).join('');
+    } else histWrap.style.display='none';
+  }
+  openModal('modal-add-item');
 }
+// Nạp checkbox NCC (từ NCC_DATA) vào form Danh mục hàng hóa
+function renderAiNccList(selectedIds=[]){
+  const box=document.getElementById('ai-ncc-list'); if(!box) return;
+  box.innerHTML=(NCC_DATA||[]).map(n=>`<label class="acc-pill" style="cursor:pointer;">
+    <input type="checkbox" value="${n.id}" ${selectedIds.includes(n.id)?'checked':''} style="margin-right:5px;">${esc(n.ten)}</label>`).join('')
+    || '<span style="font-size:12px;color:var(--text-muted);">Chưa có NCC nào — thêm ở tab Nhà Cung Cấp.</span>';
+}
+function nccName(id){ const n=(NCC_DATA||[]).find(x=>x.id===id)||(typeof NCC_LIST!=='undefined'?NCC_LIST:[]).find(x=>x.id===id); return n?(n.ten||n.name):''; }
 function openAddItemModal(){
-  editingCatalogId=null;
-  ['ai-name','ai-code','ai-dvt','ai-ghichu'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
-  openModal('modal-de-xuat-add-item');
+  editingItemId=null; editingCatalogId=null;
+  document.getElementById('ai-modal-title').textContent='📦 Thêm Mặt Hàng';
+  ['ai-name','ai-code','ai-ghichu','ai-note','ai-last','ai-purchase-note'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  const prev=document.getElementById('ai-price-preview'); if(prev) prev.style.display='none';
+  const hist=document.getElementById('ai-history-wrap'); if(hist) hist.style.display='none';
+  fillCatSelect('ai-bophan','bophan',{});
+  renderAiNccList([]);
+  openModal('modal-add-item');
 }
 function switchCatalogTab(tab,el){
   catalogFilter=tab;
@@ -5449,12 +5561,21 @@ function addThuBophan(){ showToast('Tính năng đang phát triển',2000,'info'
 function addThuDanhmuc(){ showToast('Tính năng đang phát triển',2000,'info'); }
 function confirmApprove(id, level){
   const dx=DX_DATA.find(x=>x.id===id); if(!dx) return;
+  // Nếu không truyền level (vd gọi từ nút cũ), suy ra từ trạng thái hiện tại.
+  level = level || dxApproveLevel(dx.status);
   const nextStatus={'truong-bp':'cho-duyet-ketoan','ketoan':'cho-duyet-gd','gd':'da-duyet'};
   dx.status=nextStatus[level]||'da-duyet';
-  if(dx.status==='da-duyet') pushDxToChi(dx);
+  if(dx.status==='da-duyet') finalizeDxApproved(dx);   // cộng Kho KT + tạo Chi (1 lần)
   renderDxTable(); renderDashDx(); syncNow();
-  if(dx.status==='da-duyet') sendPush('✅ Đề Xuất Đã Duyệt', `${dx.ten||''} đã được duyệt`, 'de-xuat', '/hotel/Index.html');
+  const tenList=dxItems(dx).map(i=>i.ten).join(', ');
+  if(dx.status==='da-duyet') sendPush('✅ Đề Xuất Đã Duyệt', `${tenList} đã được duyệt`, 'de-xuat', '/hotel/Index.html');
   showToast('✅ Đã duyệt đề xuất',2000,'success');
+}
+function rejectDx(id){
+  const dx=DX_DATA.find(x=>x.id===id); if(!dx) return;
+  dx.status='tu-choi';
+  renderDxTable(); renderDashDx(); syncNow();
+  showToast('Đã từ chối đề xuất',2000,'info');
 }
 function exportExcel(section){ exportCSV(section); }
 
