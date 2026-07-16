@@ -489,6 +489,8 @@ textarea{resize:vertical;min-height:68px;}
 .mb-date-cell{font-size:11px;font-weight:500;}
 .mb-date-warn{background:#FFF3CD;color:#856404;}
 .mb-date-urgent{background:#F8D7DA;color:var(--red);}
+.mb-room-chip{display:inline-block;padding:5px 9px;margin:2px;border:1.5px solid var(--border);border-radius:7px;font-size:12px;cursor:pointer;background:#fff;user-select:none;}
+.mb-room-chip.sel{background:var(--gold);border-color:var(--gold);color:#fff;font-weight:600;}
 /* Amenity table */
 .amenity-table td,.amenity-table th{padding:5px 8px;border:1px solid var(--border);font-size:11px;text-align:center;}
 .amenity-table td:first-child,.amenity-table th:first-child{
@@ -1244,7 +1246,7 @@ textarea{resize:vertical;min-height:68px;}
           <div class="bp-tab active" onclick="setMbView('date',this)" style="font-size:11px;padding:5px 12px;">📅 Theo dõi date</div>
           <div class="bp-tab"        onclick="setMbView('stock',this)" style="font-size:11px;padding:5px 12px;">📦 Xuất/Nhập</div>
           <input type="month" id="mb-thang" value="2026-07" onchange="renderMinibar()" style="font-size:12px;padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;">
-          <button class="btn btn-gold btn-sm" onclick="openModal('modal-mb-update')">✏ Cập nhật date</button>
+          <button class="btn btn-gold btn-sm" onclick="openMbUpdate()">✏ Cập nhật date</button>
         </div>
         <div id="mb-view-date">
           <div class="card" style="overflow-x:auto;padding:0;">
@@ -1915,23 +1917,35 @@ textarea{resize:vertical;min-height:68px;}
   <div class="modal">
     <div class="modal-header"><span class="modal-title">📅 Cập Nhật Date Minibar</span><button class="close-btn" onclick="closeModal('modal-mb-update')">✕</button></div>
     <div class="form-row">
-      <div class="form-group"><label>Số phòng</label>
-        <select id="mb-phong" style="width:100%;"></select>
-      </div>
       <div class="form-group"><label>Mặt hàng</label>
         <select id="mb-mon">
+          <option value="__ALL__">🧺 Tất cả mặt hàng</option>
           <option>Coca Cola</option><option>Sprite</option><option>Fanta</option>
           <option>Bia Tiger</option><option>Suối Dasani 500ml</option>
           <option>Nước yến</option><option>Snack</option><option>Mì ly</option><option>Chocopie</option>
         </select>
       </div>
+      <div class="form-group"><label>Ngày hết hạn (HSD) <span style="color:var(--red)">*</span></label>
+        <input type="date" id="mb-hsd">
+      </div>
     </div>
-    <div class="form-group" style="margin-bottom:12px;"><label>Ngày hết hạn (HSD) <span style="color:var(--red)">*</span></label>
-      <input type="date" id="mb-hsd">
+    <div class="form-group" style="margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <label style="margin:0;">Chọn phòng (bấm chọn nhiều) <span style="color:var(--red)">*</span></label>
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-ghost btn-sm" type="button" onclick="mbSelectAllRooms(true)">Chọn tất cả</button>
+          <button class="btn btn-ghost btn-sm" type="button" onclick="mbSelectAllRooms(false)">Bỏ chọn</button>
+        </div>
+      </div>
+      <div id="mb-room-picker" style="max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px;"></div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:5px;"><strong id="mb-sel-count">0</strong> phòng đang chọn · bấm "Tầng x" để chọn cả tầng</div>
     </div>
-    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
-      <button class="btn btn-ghost" onclick="closeModal('modal-mb-update')">Huỷ</button>
-      <button class="btn btn-gold" onclick="saveMbDate()">💾 Lưu</button>
+    <div style="display:flex;justify-content:space-between;gap:10px;margin-top:14px;">
+      <button class="btn btn-danger" type="button" onclick="deleteMbDate()">🗑 Xoá date phòng đã chọn</button>
+      <div style="display:flex;gap:10px;">
+        <button class="btn btn-ghost" onclick="closeModal('modal-mb-update')">Huỷ</button>
+        <button class="btn btn-gold" onclick="saveMbDate()">💾 Lưu</button>
+      </div>
     </div>
   </div>
 </div>
@@ -2143,9 +2157,12 @@ textarea{resize:vertical;min-height:68px;}
       <div id="ai-history-list"></div>
     </div>
     <div class="form-row full"><div class="form-group"><label>Ghi chú / Quy cách</label><textarea id="ai-note" placeholder="Mô tả, tiêu chuẩn chất lượng..." style="min-height:56px;"></textarea></div></div>
-    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
-      <button class="btn btn-ghost" onclick="closeModal('modal-add-item')">Huỷ</button>
-      <button class="btn btn-gold" onclick="saveItem()">💾 Lưu & Tính giá tự động</button>
+    <div style="display:flex;justify-content:space-between;gap:10px;margin-top:14px;">
+      <button class="btn btn-danger" id="ai-delete-btn" style="display:none;" onclick="deleteItem(editingItemId)">🗑 Xoá mặt hàng</button>
+      <div style="display:flex;gap:10px;margin-left:auto;">
+        <button class="btn btn-ghost" onclick="closeModal('modal-add-item')">Huỷ</button>
+        <button class="btn btn-gold" onclick="saveItem()">💾 Lưu & Tính giá tự động</button>
+      </div>
     </div>
   </div>
 </div>
@@ -2247,7 +2264,7 @@ let NCC_DATA = Array.isArray(window.NCC_DATA) ? window.NCC_DATA : [];   // Nhà 
 // ncc/thu: mảng chuỗi; bophan: mảng {v,l} (value lưu trong dữ liệu, l là nhãn hiển thị)
 let CATS = {
   ncc: ['Thực phẩm','Đồ uống','Rau củ quả','Thịt - Hải sản','Amenity','CCDC','Hóa chất','Vật tư tiêu hao','Đồ vải','Thiết bị','Kỹ thuật','Trang trí','Văn phòng phẩm','Dịch vụ','Khác'],
-  thu: ['Tiền phòng','F&B','Spa','Minibar','Giặt là','Cho thuê hội trường','Đưa đón','Dịch vụ khác','Thu khác'],
+  thu: ['Doanh thu phòng','Buffet','Cơm trưa','Minibar','Decor','Khác'],
   bophan: [
     {v:'buong-phong',l:'Buồng phòng'},{v:'nha-hang',l:'Nhà hàng'},{v:'bep',l:'Bếp'},
     {v:'le-tan',l:'Lễ tân'},{v:'ky-thuat',l:'Kỹ thuật'},{v:'sale',l:'Sale'},
@@ -2548,6 +2565,7 @@ async function enterApp(session){
   if(currentUser.role==='ketoan'||currentUser.role==='giamdoc'){
     DX_DATA.filter(d=>d.status==='da-duyet' && !d._done).forEach(dx=> finalizeDxApproved(dx));
   }
+  try{ syncChiNccDefaults(); }catch(e){}   // căn Hoá đơn/PTTT các bản Chi cũ theo NCC
   updateNsKpi();
   // Nếu trang đang mở không thuộc quyền của user (vd HR không được xem Dashboard tài chính)
   // thì tự chuyển tới tab đầu tiên mà user được phép.
@@ -2949,6 +2967,7 @@ function renderThuTab() {
 
 // ==================== RENDER CHI TAB ====================
 function renderChiTab() {
+  try{ syncChiNccDefaults(); }catch(e){}   // căn Hoá đơn/PTTT theo NCC (trừ bản đã sửa tay)
   const fStatus = document.getElementById('chi-f-status')?.value||'';
   const fBp     = document.getElementById('chi-f-bp')?.value||'';
   const fPttt   = document.getElementById('chi-f-pttt')?.value||'';
@@ -3012,8 +3031,23 @@ function renderChiTab() {
 function updateChiField(id, field, val) {
   const r=CHI_DATA.find(x=>x.id===id); if(!r) return;
   r[field]=val;
+  // Kế toán chỉnh tay Hoá đơn/PTTT → đánh dấu để không bị auto-sync theo NCC ghi đè.
+  if(field==='hoa_don'||field==='pttt') r._chi_manual=true;
   // Nếu đổi PTTT sang Công nợ → cập nhật công nợ phải trả
   if(field==='pttt') { renderCongNoPtr(); syncThuChiSummary(); }
+  syncNow();
+}
+// Đồng bộ Hoá đơn/PTTT của các bản ghi Chi (từ đề xuất) theo mặc định NCC — trừ bản đã sửa tay.
+function syncChiNccDefaults(){
+  let changed=false;
+  CHI_DATA.forEach(r=>{
+    if(r.nguon!=='de-xuat' || r._chi_manual) return;
+    const nccRec=(NCC_DATA||[]).find(n=>(n.ten||'').trim().toLowerCase()===(r.ten_ncc||'').trim().toLowerCase());
+    if(!nccRec) return;
+    const d=nccChiDefaults(nccRec);
+    if(r.hoa_don!==d.hoa_don || r.pttt!==d.pttt){ r.hoa_don=d.hoa_don; r.pttt=d.pttt; changed=true; }
+  });
+  return changed;
 }
 
 function updateChiStatus(id, newStatus) {
@@ -3798,11 +3832,49 @@ function renderMbStock(){
   rows.sort((a,b)=>b.ngay.localeCompare(a.ngay));
   document.getElementById('mb-stock-body').innerHTML=rows.slice(0,20).map(h=>`<tr><td>${h.ngay}</td><td><span class="badge badge-navy" style="font-size:10px;">${h.loai}</span></td><td>${h.ten}</td><td style="font-weight:600;">${h.sl}</td><td>${h.lydo||'—'}</td></tr>`).join('')||`<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-muted);">Chưa có dữ liệu</td></tr>`;
 }
+// ---- Minibar: minimap chọn nhiều phòng ----
+function mbFloorOf(r){ return r.slice(0, r.length-2); }   // '201'→'2', '1001'→'10', '1101'→'11'
+function renderMbRoomPicker(){
+  const box=document.getElementById('mb-room-picker'); if(!box) return;
+  const floors={};
+  ALL_ROOMS.forEach(r=>{ const f=mbFloorOf(r); (floors[f]=floors[f]||[]).push(r); });
+  box.innerHTML=Object.keys(floors).map(f=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">
+    <button class="btn btn-ghost btn-sm" type="button" onclick="mbToggleFloor('${f}')" style="min-width:64px;font-size:11px;">Tầng ${f}</button>
+    <div style="flex:1;">${floors[f].map(r=>`<span class="mb-room-chip" data-room="${r}" onclick="mbToggleRoom(this)">${r}</span>`).join('')}</div>
+  </div>`).join('');
+  mbUpdateSelCount();
+}
+function mbToggleRoom(el){ el.classList.toggle('sel'); mbUpdateSelCount(); }
+function mbToggleFloor(f){
+  const chips=[...document.querySelectorAll('#mb-room-picker .mb-room-chip')].filter(c=>mbFloorOf(c.dataset.room)===f);
+  const allSel=chips.length&&chips.every(c=>c.classList.contains('sel'));
+  chips.forEach(c=>c.classList.toggle('sel',!allSel));
+  mbUpdateSelCount();
+}
+function mbSelectAllRooms(sel){ document.querySelectorAll('#mb-room-picker .mb-room-chip').forEach(c=>c.classList.toggle('sel',!!sel)); mbUpdateSelCount(); }
+function mbSelectedRooms(){ return [...document.querySelectorAll('#mb-room-picker .mb-room-chip.sel')].map(c=>c.dataset.room); }
+function mbUpdateSelCount(){ const el=document.getElementById('mb-sel-count'); if(el) el.textContent=mbSelectedRooms().length; }
+function mbTargetItems(){ const mon=document.getElementById('mb-mon')?.value; return mon==='__ALL__'?MB_ITEMS.slice():[mon]; }
+function openMbUpdate(){ renderMbRoomPicker(); const h=document.getElementById('mb-hsd'); if(h) h.value=''; const m=document.getElementById('mb-mon'); if(m) m.value='__ALL__'; openModal('modal-mb-update'); }
 function saveMbDate(){
-  const phong=document.getElementById('mb-phong').value;const mon=document.getElementById('mb-mon').value;const hsd=document.getElementById('mb-hsd').value;
-  if(!hsd){showToast('Vui lòng chọn HSD!',2500,'error');return;}
-  if(!MB_DATE_DATA[phong])MB_DATE_DATA[phong]={};
-  MB_DATE_DATA[phong][mon]=hsd;closeModal('modal-mb-update');renderMbDate();
+  const rooms=mbSelectedRooms();
+  const hsd=document.getElementById('mb-hsd').value;
+  if(!rooms.length){ showToast('Chọn ít nhất 1 phòng!',2500,'error'); return; }
+  if(!hsd){ showToast('Vui lòng chọn HSD!',2500,'error'); return; }
+  const items=mbTargetItems();
+  rooms.forEach(p=>{ if(!MB_DATE_DATA[p])MB_DATE_DATA[p]={}; items.forEach(m=>MB_DATE_DATA[p][m]=hsd); });
+  closeModal('modal-mb-update'); renderMbDate(); syncNow();
+  showToast(`✅ Cập nhật date ${rooms.length} phòng (${items.length} mặt hàng)`,2500,'success');
+}
+function deleteMbDate(){
+  const rooms=mbSelectedRooms();
+  if(!rooms.length){ showToast('Chọn ít nhất 1 phòng!',2500,'error'); return; }
+  const items=mbTargetItems();
+  const label=items.length===MB_ITEMS.length?'tất cả mặt hàng':items[0];
+  if(!confirm(`Xoá date ${label} của ${rooms.length} phòng đã chọn?`)) return;
+  rooms.forEach(p=>{ if(MB_DATE_DATA[p]) items.forEach(m=>{ MB_DATE_DATA[p][m]=''; }); });
+  closeModal('modal-mb-update'); renderMbDate(); syncNow();
+  showToast('Đã xoá date',2000,'info');
 }
 
 // ===== AMENITY DATA THEO NGÀY =====
@@ -4451,7 +4523,7 @@ document.getElementById('catalog-tbody').innerHTML=items.map(it=>{
     <td>${fmt(p.avg)}<div style="font-size:9px;color:var(--text-muted);">t\u1ef1 t\u00ednh</div></td>
     <td><div style="font-weight:600;">${fmt(p.last)}</div><div style="font-size:10px;color:var(--text-muted);">${p.lastDate}</div></td>
     <td style="min-width:160px;">${histRows}</td>
-    <td><button class="btn btn-ghost btn-sm" onclick="editItem('${it.id}')">\u270f S\u1eeda</button></td>
+    <td><div style="display:flex;gap:4px;"><button class="btn btn-ghost btn-sm" onclick="editItem('${it.id}')">\u270f S\u1eeda</button><button class="btn btn-danger btn-sm" onclick="deleteItem('${it.id}')" title="Xo\u00e1 m\u1eb7t h\u00e0ng">\ud83d\uddd1</button></div></td>
   </tr>`;
 }).join('')||`<tr><td colspan="10" style="text-align:center;padding:30px;color:var(--text-muted);">Kh\u00f4ng t\u00ecm th\u1ea5y m\u1eb7t h\u00e0ng n\u00e0o</td></tr>`;
 }
@@ -5130,8 +5202,8 @@ function updateDashboardKPI(){
 }
 
 function renderBaoCao(){
-  // ===== Doanh thu theo danh mục (từ THU_DATA thực tế) =====
-  const tongThu = THU_DATA.reduce((s,r)=>s+r.sotien,0);
+  // ===== Doanh thu theo danh mục (từ THU_DATA thực tế) — CHỈ tính VND (bỏ ngoại tệ) =====
+  const tongThu = THU_DATA.reduce((s,r)=>s+thuVnd(r),0);
   const nhomMap = {
     'Doanh thu phòng': {id:'phong',  color:'var(--gold)'},
     'Buffet':          {id:'buffet', color:'#4A6FA5'},
@@ -5143,7 +5215,7 @@ function renderBaoCao(){
   const totals = {};
   THU_DATA.forEach(r=>{
     const key = nhomMap[r.danhmuc] ? r.danhmuc : 'Khác';
-    totals[key] = (totals[key]||0) + r.sotien;
+    totals[key] = (totals[key]||0) + thuVnd(r);
   });
   Object.entries(nhomMap).forEach(([name, cfg])=>{
     const val = totals[name]||0;
@@ -5818,7 +5890,18 @@ function editItem(id){
     sups=(it.nccIds||[]).map(nid=>({nccId:nid, dvt:it.dvt||'', gia:0, hasVat:false, vatPct:0, history:(it.purchaseHistory||[])}));
   }
   aiRenderSuppliers(sups);
+  const del=document.getElementById('ai-delete-btn'); if(del) del.style.display='inline-flex';
   openModal('modal-add-item');
+}
+function deleteItem(id){
+  const it=catalogItems.find(x=>x.id===id); if(!it) return;
+  if(!confirm(`Xoá mặt hàng "${it.name}"? Hành động này không thể hoàn tác.`)) return;
+  const idx=catalogItems.findIndex(x=>x.id===id);
+  if(idx>-1) catalogItems.splice(idx,1);
+  closeModal('modal-add-item');
+  renderCatalog();
+  syncNow();
+  showToast('Đã xoá mặt hàng',2000,'info');
 }
 // Nạp checkbox NCC (từ NCC_DATA) vào form Danh mục hàng hóa
 function renderAiNccList(selectedIds=[]){
@@ -5835,6 +5918,7 @@ function openAddItemModal(){
   const hist=document.getElementById('ai-history-wrap'); if(hist) hist.style.display='none';
   fillCatSelect('ai-bophan','bophan',{});
   aiRenderSuppliers([]);
+  const del=document.getElementById('ai-delete-btn'); if(del) del.style.display='none';
   openModal('modal-add-item');
 }
 function switchCatalogTab(tab,el){
