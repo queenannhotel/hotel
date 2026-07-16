@@ -977,7 +977,7 @@ textarea{resize:vertical;min-height:68px;}
       <div class="card">
         <div class="table-wrap xwide">
         <table>
-          <thead><tr><th>Mã ĐX</th><th>Danh sách mặt hàng</th><th>Bộ phận</th><th>Người đề xuất</th><th>Tổng SL</th><th>Tổng giá trị</th><th>Ưu tiên</th><th>Ngày tạo</th><th>Trạng thái</th><th>Hành động</th></tr></thead>
+          <thead><tr><th>Mã ĐX</th><th>Danh sách mặt hàng</th><th>Bộ phận</th><th>Người đề xuất</th><th>Tổng SL</th><th>Tổng giá trị</th><th>Ưu tiên</th><th>Ngày tạo</th><th>Luồng duyệt</th><th>Trạng thái</th><th>Hành động</th></tr></thead>
           <tbody id="dx-tbody"></tbody>
         </table>
         </div>
@@ -2098,7 +2098,7 @@ textarea{resize:vertical;min-height:68px;}
 <div class="modal-overlay" id="modal-de-xuat">
   <div class="modal modal-lg">
     <div class="modal-header">
-      <span class="modal-title">🛒 Tạo Đề Xuất Mua Hàng</span>
+      <span class="modal-title" id="dx-modal-title">🛒 Tạo Đề Xuất Mua Hàng</span>
       <button class="close-btn" onclick="closeModal('modal-de-xuat')">✕</button>
     </div>
     <div class="form-row">
@@ -2133,8 +2133,17 @@ textarea{resize:vertical;min-height:68px;}
     </div>
     <div style="display:flex;justify-content:flex-end;gap:10px;">
       <button class="btn btn-ghost" onclick="closeModal('modal-de-xuat')">Huỷ</button>
-      <button class="btn btn-gold" onclick="submitDx()">📤 Gửi đề xuất</button>
+      <button class="btn btn-gold" id="dx-submit-btn" onclick="submitDx()">📤 Gửi đề xuất</button>
     </div>
+  </div>
+</div>
+
+<!-- MODAL CHI TIẾT ĐỀ XUẤT -->
+<div class="modal-overlay" id="modal-dx-detail">
+  <div class="modal modal-lg">
+    <div class="modal-header"><span class="modal-title" id="dxd-title">📄 Chi Tiết Đề Xuất</span><button class="close-btn" onclick="closeModal('modal-dx-detail')">✕</button></div>
+    <div id="dxd-body"></div>
+    <div style="display:flex;justify-content:flex-end;margin-top:14px;"><button class="btn btn-ghost" onclick="closeModal('modal-dx-detail')">Đóng</button></div>
   </div>
 </div>
 
@@ -4689,12 +4698,54 @@ function dxItems(d){
   return [{ten:d?.ten||'',ncc:d?.ncc||'',sl:parseFloat(d?.sl)||0,dvt:d?.dvt||'',dongia:parseFloat(d?.dongia)||0,lydo:d?.lydo||''}];
 }
 function dxTotal(d){ return dxItems(d).reduce((s,it)=>s+(parseFloat(it.sl)||0)*(parseFloat(it.dongia)||0),0); }
+// Tìm mặt hàng danh mục ứng với 1 dòng đề xuất (ưu tiên itemId, fallback theo tên).
+function dxCatItem(it){
+  const cat=(typeof catalogItems!=='undefined'?catalogItems:[]);
+  return (it&&it.itemId&&cat.find(x=>x.id===it.itemId)) || cat.find(x=>(x.name||'').trim().toLowerCase()===((it&&it.ten)||'').trim().toLowerCase()) || null;
+}
 // Giá thấp nhất năm cho 1 mặt hàng: ưu tiên khớp theo itemId (chính xác khi trùng tên), fallback theo tên.
 function dxItemMinPrice(ten, itemId){
   const cat=(typeof catalogItems!=='undefined'?catalogItems:[]);
   let it=itemId?cat.find(x=>x.id===itemId):null;
   if(!it) it=cat.find(x=>(x.name||'').trim().toLowerCase()===(ten||'').trim().toLowerCase());
   return it?(calcPrices(it).min||0):0;
+}
+// Giá hiện tại: ưu tiên giá của NCC đã chọn (suppliers), fallback lần mua gần nhất (calcPrices.last).
+function dxItemCurPrice(it){
+  const cat=dxCatItem(it); if(!cat) return 0;
+  if(it.ncc && Array.isArray(cat.suppliers)){
+    const sup=cat.suppliers.find(s=>(nccName(s.nccId)||'').trim().toLowerCase()===(it.ncc||'').trim().toLowerCase());
+    if(sup && (parseFloat(sup.gia)||0)>0) return parseFloat(sup.gia);
+  }
+  return calcPrices(cat).last||0;
+}
+// Stepper luồng duyệt BP → KT → GĐ theo trạng thái.
+function dxFlowHtml(status){
+  let st;
+  if(status==='cho-duyet-truong-bp') st=['cur','wait','wait'];
+  else if(status==='cho-duyet-ketoan') st=['done','cur','wait'];
+  else if(status==='cho-duyet-gd') st=['done','done','cur'];
+  else if(status==='da-duyet') st=['done','done','done'];
+  else if(status==='tu-choi') st=['rej','rej','rej'];
+  else st=['wait','wait','wait'];
+  const labels=['BP','KT','GĐ'];
+  const node=(s,l)=>{
+    const bg=s==='done'?'var(--green)':s==='cur'?'#E8A33D':s==='rej'?'var(--red)':'#d3d9e3';
+    const icon=s==='done'?'✓':s==='cur'?'!':s==='rej'?'✗':'';
+    return `<span style="display:inline-flex;align-items:center;gap:3px;"><span style="width:19px;height:19px;border-radius:50%;background:${bg};color:#fff;font-size:11px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;">${icon}</span><span style="font-size:10px;color:var(--text-muted);">${l}</span></span>`;
+  };
+  const conn=on=>`<span style="width:14px;height:2px;background:${on?'var(--green)':'#d3d9e3'};display:inline-block;"></span>`;
+  return `<div style="display:flex;align-items:center;gap:2px;">${node(st[0],labels[0])}${conn(st[0]==='done')}${node(st[1],labels[1])}${conn(st[1]==='done')}${node(st[2],labels[2])}</div>`;
+}
+function canEditDx(d){
+  if(!d || !(d.status||'').startsWith('cho-duyet')) return false;
+  const role=currentUser?.role;
+  return role==='giamdoc' || d.nguoi===currentUser?.fullname || (role==='truong-bp'&&d.bophan===currentUser?.bophan);
+}
+function canDeleteDx(d){
+  const role=currentUser?.role;
+  if(role==='giamdoc') return true;
+  return (d.status||'').startsWith('cho-duyet') && (d.nguoi===currentUser?.fullname || (role==='truong-bp'&&d.bophan===currentUser?.bophan));
 }
 // ----- Form: các dòng hàng động -----
 function dxRowHtml(){
@@ -4845,7 +4896,7 @@ function renderDxTable(){
   const tbody=document.getElementById('dx-tbody');
   if(!tbody) return;
   if(!items.length){
-    tbody.innerHTML=`<tr><td colspan="10" style="text-align:center;padding:24px;color:var(--text-muted);">Không có đề xuất nào</td></tr>`;
+    tbody.innerHTML=`<tr><td colspan="11" style="text-align:center;padding:24px;color:var(--text-muted);">Không có đề xuất nào</td></tr>`;
     renderDashDx(); return;
   }
   tbody.innerHTML=items.map(d=>{
@@ -4855,13 +4906,21 @@ function renderDxTable(){
     const pri=d.priority||'Thường';
     const itemList=its.map(it=>{
       const min=dxItemMinPrice(it.ten, it.itemId);
-      return `<div style="padding:2px 0;"><span style="font-weight:600;">${esc(it.ten)||'—'}</span> ×${esc(it.sl)||0} ${esc(it.dvt)||''}${it.ncc?` · <span style="color:var(--text-muted);">${esc(it.ncc)}</span>`:''}${min?` <span style="color:var(--green);font-size:11px;">— giá TN năm: ${fmt(min)}</span>`:''}</div>`;
+      const cur=dxItemCurPrice(it);
+      const priceTags=[min?`<span style="color:var(--green);">giá TN năm: ${fmt(min)}</span>`:'', cur?`<span style="color:var(--navy);">giá HT: ${fmt(cur)}</span>`:''].filter(Boolean).join(' · ');
+      return `<div style="padding:2px 0;"><span style="font-weight:600;">${esc(it.ten)||'—'}</span> ×${esc(it.sl)||0} ${esc(it.dvt)||''}${it.ncc?` · <span style="color:var(--text-muted);">${esc(it.ncc)}</span>`:''}${priceTags?`<div style="font-size:11px;">${priceTags}</div>`:''}</div>`;
     }).join('');
     const canApr=canApproveDx(d);
     const lvl=dxApproveLevel(d.status);
-    const action=canApr
-      ? `<div style="display:flex;gap:5px;"><button class="btn btn-success btn-sm" onclick="confirmApprove('${d.id}','${lvl}')">✓ Duyệt</button><button class="btn btn-danger btn-sm" onclick="rejectDx('${d.id}')">✗</button></div>`
-      : (d.status==='da-duyet'?'<span style="color:var(--green);font-size:11px;">✓ Đã duyệt</span>':(d.status==='tu-choi'?'<span style="color:var(--red);font-size:11px;">Từ chối</span>':'<span style="color:var(--text-muted);font-size:11px;">Chờ cấp trên</span>'));
+    const btns=[];
+    if(canApr){
+      btns.push(`<button class="btn btn-success btn-sm" onclick="confirmApprove('${d.id}','${lvl}')" title="Duyệt">✓</button>`);
+      btns.push(`<button class="btn btn-danger btn-sm" onclick="rejectDx('${d.id}')" title="Từ chối">✗</button>`);
+    }
+    btns.push(`<button class="btn btn-ghost btn-sm" onclick="openDxDetail('${d.id}')" title="Xem chi tiết">📄</button>`);
+    if(canEditDx(d)) btns.push(`<button class="btn btn-ghost btn-sm" onclick="editDx('${d.id}')" title="Chỉnh sửa">✏</button>`);
+    if(canDeleteDx(d)) btns.push(`<button class="btn btn-danger btn-sm" onclick="deleteDx('${d.id}')" title="Xoá">🗑</button>`);
+    const action=`<div style="display:flex;gap:4px;flex-wrap:wrap;">${btns.join('')}</div>`;
     return`<tr>
       <td style="font-size:11px;color:var(--text-muted);">${esc(d.id)||'—'}</td>
       <td style="min-width:230px;">${itemList||'—'}</td>
@@ -4871,6 +4930,7 @@ function renderDxTable(){
       <td style="text-align:right;font-weight:600;">${tong?fmt(tong):'—'}</td>
       <td><span class="badge ${PRI_COLOR[pri]||'badge-navy'}" style="font-size:10px;">${esc(pri)}</span></td>
       <td>${esc(d.ngay)||'—'}</td>
+      <td>${dxFlowHtml(d.status)}</td>
       <td>${statusBadge(d.status)}</td>
       <td>${action}</td>
     </tr>`;
@@ -4898,6 +4958,17 @@ function submitDx(){
     });
   });
   if(!items.length){ showToast('Vui lòng nhập ít nhất 1 mặt hàng (tên + số lượng)!',2800,'error'); return; }
+  if(editingDxId){
+    // Cập nhật phiếu đang sửa — giữ nguyên trạng thái/luồng/người/ngày.
+    const dx=DX_DATA.find(x=>x.id===editingDxId);
+    if(dx){ dx.bophan=bophan; dx.priority=priority; dx.items=items; }
+    editingDxId=null;
+    closeModal('modal-de-xuat');
+    renderDxTable();
+    syncNow();
+    showToast('✅ Đã cập nhật đề xuất',2500,'success');
+    return;
+  }
   const newDx={
     id:'DX'+Date.now(), bophan, priority,
     nguoi:currentUser?.fullname||'',
@@ -4911,6 +4982,78 @@ function submitDx(){
   syncNow();
   notifyDeXuatMoi(items.map(i=>i.ten).join(', '), BP_LABELS[bophan]||bophan);
   showToast('✅ Đã gửi đề xuất '+items.length+' mặt hàng',2500,'success');
+}
+let editingDxId=null;
+// Mở lại form đề xuất để sửa 1 phiếu (chỉ khi còn chờ duyệt).
+function editDx(id){
+  const d=DX_DATA.find(x=>x.id===id); if(!d) return;
+  if(!canEditDx(d)){ showToast('Chỉ sửa được đề xuất đang chờ duyệt (của bạn/bộ phận).',2800,'error'); return; }
+  editingDxId=id;
+  const bp=document.getElementById('dx-bophan'); if(bp) bp.value=d.bophan||'';
+  const pr=document.getElementById('dx-priority'); if(pr) pr.value=d.priority||'Thường';
+  const box=document.getElementById('dx-items'); if(box) box.innerHTML='';
+  dxFillDatalists&&dxFillDatalists();
+  dxItems(d).forEach(it=>{
+    dxAddRow();
+    const row=document.querySelector('#dx-items .dx-item-row:last-child'); if(!row) return;
+    row.dataset.itemId=it.itemId||'';
+    const set=(sel,v)=>{ const el=row.querySelector(sel); if(el) el.value=v; };
+    set('.dxr-ten',it.ten||''); set('.dxr-ncc',it.ncc||''); set('.dxr-sl',it.sl||1);
+    set('.dxr-dvt',it.dvt||''); set('.dxr-dongia',it.dongia||''); set('.dxr-lydo',it.lydo||'');
+  });
+  dxUpdateTotal&&dxUpdateTotal();
+  const title=document.getElementById('dx-modal-title'); if(title) title.textContent='✏️ Sửa Đề Xuất Mua Hàng';
+  const sbtn=document.getElementById('dx-submit-btn'); if(sbtn) sbtn.textContent='💾 Cập nhật';
+  openModal('modal-de-xuat');
+}
+function deleteDx(id){
+  const d=DX_DATA.find(x=>x.id===id); if(!d) return;
+  if(!canDeleteDx(d)){ showToast('Không có quyền xoá đề xuất này.',2500,'error'); return; }
+  const warn = d.status==='da-duyet' ? '\n\n⚠️ Phiếu đã duyệt — Kho & Ghi Chi đã tạo sẽ KHÔNG tự hoàn lại.' : '';
+  if(!confirm(`Xoá đề xuất ${d.id}?${warn}`)) return;
+  const idx=DX_DATA.findIndex(x=>x.id===id);
+  if(idx>-1) DX_DATA.splice(idx,1);
+  renderDxTable(); syncNow();
+  showToast('Đã xoá đề xuất',2000,'info');
+}
+// Modal chi tiết 1 phiếu đề xuất (đủ thông tin + lịch sử mua từng mặt hàng).
+function openDxDetail(id){
+  const d=DX_DATA.find(x=>x.id===id); if(!d) return;
+  const BP_LABEL={'buong-phong':'Buồng phòng','nha-hang':'Nhà hàng','bep':'Bếp','le-tan':'Lễ tân','ky-thuat':'Kỹ thuật','sale':'Sale','hr':'HR','van-phong':'VP'};
+  document.getElementById('dxd-title').textContent=`📄 Chi Tiết Đề Xuất ${d.id}`;
+  const its=dxItems(d);
+  const header=`<div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin-bottom:12px;font-size:13px;">
+    <div><span style="color:var(--text-muted);">Bộ phận:</span> <strong>${esc(BP_LABEL[d.bophan]||d.bophan)||'—'}</strong></div>
+    <div><span style="color:var(--text-muted);">Người đề xuất:</span> <strong>${esc(d.nguoi)||'—'}</strong></div>
+    <div><span style="color:var(--text-muted);">Ngày:</span> <strong>${esc(d.ngay)||'—'}</strong></div>
+    <div><span style="color:var(--text-muted);">Ưu tiên:</span> <strong>${esc(d.priority||'Thường')}</strong></div>
+    <div>${statusBadge(d.status)}</div>
+  </div>
+  <div style="margin-bottom:14px;">${dxFlowHtml(d.status)}</div>`;
+  const rows=its.map(it=>{
+    const min=dxItemMinPrice(it.ten,it.itemId), cur=dxItemCurPrice(it);
+    const sl=parseFloat(it.sl)||0, dg=parseFloat(it.dongia)||0;
+    const cat=dxCatItem(it);
+    const hist=(cat?itemPriceHistory(cat):[]).slice().reverse();
+    const histHtml = hist.length
+      ? hist.map(h=>`<div class="purchase-row"><span>${esc(h.date)||'—'}</span><span style="font-weight:600;color:var(--navy);">${fmt(h.price)}</span>${h.note?`<span style="color:var(--text-muted);font-size:10px;">${esc(h.note)}</span>`:''}</div>`).join('')
+      : '<span style="font-size:12px;color:var(--text-muted);">Chưa có lịch sử mua</span>';
+    return `<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px;">
+      <div style="font-weight:600;margin-bottom:6px;">${esc(it.ten)||'—'} <span style="color:var(--text-muted);font-weight:400;font-size:12px;">×${sl} ${esc(it.dvt)||''}${it.ncc?' · '+esc(it.ncc):''}</span></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:6px;font-size:12px;margin-bottom:8px;">
+        <div><span style="color:var(--text-muted);">Đơn giá đề xuất:</span> <strong>${fmt(dg)}</strong></div>
+        <div><span style="color:var(--text-muted);">Thành tiền:</span> <strong>${fmt(sl*dg)}</strong></div>
+        <div><span style="color:var(--text-muted);">Giá TN năm:</span> <strong style="color:var(--green);">${fmt(min)}</strong></div>
+        <div><span style="color:var(--text-muted);">Giá hiện tại:</span> <strong style="color:var(--navy);">${fmt(cur)}</strong></div>
+      </div>
+      ${it.lydo?`<div style="font-size:12px;margin-bottom:8px;"><span style="color:var(--text-muted);">Lý do:</span> ${esc(it.lydo)}</div>`:''}
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:4px;">📋 Lịch sử mua</div>
+      ${histHtml}
+    </div>`;
+  }).join('');
+  const total=dxTotal(d);
+  document.getElementById('dxd-body').innerHTML=header+rows+`<div style="text-align:right;font-size:14px;margin-top:6px;">Tổng giá trị: <strong style="color:var(--yellow);">${fmt(total)}</strong></div>`;
+  openModal('modal-dx-detail');
 }
 
 function saveYeuCau(){
@@ -5841,6 +5984,9 @@ function openNccModal(id=null){
 }
 
 function openDeXuatModal(){
+  editingDxId=null;
+  const title=document.getElementById('dx-modal-title'); if(title) title.textContent='🛒 Tạo Đề Xuất Mua Hàng';
+  const sbtn=document.getElementById('dx-submit-btn'); if(sbtn) sbtn.textContent='📤 Gửi đề xuất';
   const bp=document.getElementById('dx-bophan');
   if(bp) bp.value=(currentUser?.role==='truong-bp')?(currentUser.bophan||''):'';
   const pr=document.getElementById('dx-priority'); if(pr) pr.value='Thường';
