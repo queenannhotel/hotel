@@ -67,7 +67,7 @@ function _lsSaveRaw(){
       hvLinen:HV_LINEN,hvRewash:HV_REWASH_DATA,hvCols:HV_REWASH_COLS,
       wsData:WS_DATA_BY_DATE,roomStatus:ROOM_STATUS_BY_DATE,
       amData:AM_DATA_BY_DATE,mbData:MB_DATE_DATA,nsLuong:NS_LUONG,sxData:SX_DATA,
-      nsBhxh:NS_BHXH,nsTncn:NS_TNCN,
+      nsBhxh:NS_BHXH,nsTncn:NS_TNCN,nccCat:NCC_CATEGORIES,
     };
     localStorage.setItem(LS_KEY,JSON.stringify(data));
     return true;
@@ -94,6 +94,7 @@ function lsLoad(){
     if(d.sxData?.length)  SX_DATA=d.sxData;
     if(d.nsBhxh)          NS_BHXH=d.nsBhxh;
     if(d.nsTncn)          NS_TNCN=d.nsTncn;
+    if(d.nccCat?.length)  NCC_CATEGORIES=d.nccCat;
     return true;
   }catch(e){return false;}
 }
@@ -2292,6 +2293,18 @@ textarea{resize:vertical;min-height:68px;}
 // Global state containers that were used but never declared:
 let DX_DATA  = Array.isArray(window.DX_DATA)  ? window.DX_DATA  : [];   // Đề xuất mua hàng
 let NCC_DATA = Array.isArray(window.NCC_DATA) ? window.NCC_DATA : [];   // Nhà cung cấp
+// Danh mục nhà cung cấp (mặc định + do người dùng thêm; lưu local, danh mục đã dùng tự xuất hiện qua NCC_DATA)
+let NCC_CATEGORIES = ['Thực phẩm','Đồ uống','Rau củ quả','Thịt - Hải sản','Gia vị','Vật tư tiêu hao','Hoá chất - Vệ sinh','Đồ vải','Thiết bị - Máy móc','Văn phòng phẩm','Dịch vụ','Khác'];
+// Nhãn loại hoá đơn NCC (trước đây thiếu -> renderNccTable lỗi khi có dòng)
+const HD_LABELS = {'co-vat':'Có VAT','ko-vat':'Không VAT','sau-tt':'Sau khi TT','truoc-tt':'Trước khi TT','hd-lien':'HĐ liền','hd-gom':'HĐ gom','hd-cuoi-thang':'HĐ cuối tháng'};
+// Nạp danh sách danh mục vào dropdown #ncc-danhmuc (gộp mặc định + danh mục đã dùng trong NCC_DATA)
+function populateNccDanhmuc(selected){
+  const sel=document.getElementById('ncc-danhmuc'); if(!sel) return;
+  const used=[...new Set((NCC_DATA||[]).map(n=>n.danhmuc).filter(Boolean))];
+  const all=[...new Set([...NCC_CATEGORIES, ...used])];
+  sel.innerHTML='<option value="">— Chọn —</option>'+all.map(c=>`<option value="${c}">${c}</option>`).join('');
+  sel.value=selected||'';
+}
 let editingItemId = null;                                               // Danh mục: đang sửa mặt hàng?
 
 // Global number formatter (was only defined *locally* inside 2 functions,
@@ -4273,6 +4286,7 @@ function saveNcc() {
   editingNccId=null;
   closeModal('modal-ncc');
   renderNccTable();
+  syncNow();
 }
 
 function renderCatalog(){
@@ -5218,7 +5232,7 @@ function openNccModal(id=null){
     const ncc=NCC_DATA.find(x=>x.id===id);
     if(!ncc) return;
     document.getElementById('ncc-ten').value=ncc.ten||'';
-    document.getElementById('ncc-danhmuc').value=ncc.danhmuc||'';
+    populateNccDanhmuc(ncc.danhmuc||'');
     document.getElementById('ncc-sdt').value=ncc.sdt||'';
     document.getElementById('ncc-email').value=ncc.email||'';
     document.getElementById('ncc-nguoi').value=ncc.nguoi||'';
@@ -5232,6 +5246,7 @@ function openNccModal(id=null){
     ['ncc-ten','ncc-sdt','ncc-email','ncc-nguoi','ncc-diachi','ncc-ghichu'].forEach(id=>{
       const el=document.getElementById(id); if(el) el.value='';
     });
+    populateNccDanhmuc('');
   }
   openModal('modal-ncc');
 }
@@ -5348,7 +5363,14 @@ function clearSelectedItem(){
   const el=document.getElementById('kx-item')||document.getElementById('kh-item');
   if(el) el.value='';
 }
-function addNccCategory(){ showToast('Tính năng đang phát triển',2000,'info'); }
+function addNccCategory(){
+  const name=(prompt('Tên danh mục nhà cung cấp mới:')||'').trim();
+  if(!name) return;
+  if(!NCC_CATEGORIES.includes(name)) NCC_CATEGORIES.push(name);
+  populateNccDanhmuc(name);   // nạp lại danh sách + chọn danh mục vừa thêm
+  lsSave();                   // lưu danh mục lại
+  showToast('✅ Đã thêm danh mục: '+name,2000,'success');
+}
 function addThuBophan(){ showToast('Tính năng đang phát triển',2000,'info'); }
 function addThuDanhmuc(){ showToast('Tính năng đang phát triển',2000,'info'); }
 function confirmApprove(id, level){
