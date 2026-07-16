@@ -2081,7 +2081,6 @@ textarea{resize:vertical;min-height:68px;}
       <div class="form-group"><label>Mức độ ưu tiên</label><select id="dx-priority"><option>Thường</option><option>Khẩn cấp</option><option>Rất khẩn cấp</option></select></div>
     </div>
     <!-- Danh sách mặt hàng (nhiều dòng / 1 đề xuất) -->
-    <datalist id="dx-catalog-list"></datalist>
     <div style="display:flex;justify-content:space-between;align-items:center;margin:6px 0 8px;">
       <label style="margin:0;">Danh sách mặt hàng <span style="color:var(--red);">*</span> <span style="font-size:10px;color:var(--text-muted);text-transform:none;font-weight:400;">— gõ tên khớp danh mục để gợi ý giá</span></label>
       <button class="btn btn-ghost btn-sm" onclick="dxAddRow()" type="button">＋ Thêm hàng</button>
@@ -4415,33 +4414,29 @@ function dxItems(d){
   return [{ten:d?.ten||'',ncc:d?.ncc||'',sl:parseFloat(d?.sl)||0,dvt:d?.dvt||'',dongia:parseFloat(d?.dongia)||0,lydo:d?.lydo||''}];
 }
 function dxTotal(d){ return dxItems(d).reduce((s,it)=>s+(parseFloat(it.sl)||0)*(parseFloat(it.dongia)||0),0); }
-// Giá thấp nhất năm cho 1 tên hàng (khớp danh mục hàng hoá)
-function dxItemMinPrice(ten){
-  const it=(typeof catalogItems!=='undefined'?catalogItems:[]).find(x=>(x.name||'').trim().toLowerCase()===(ten||'').trim().toLowerCase());
+// Giá thấp nhất năm cho 1 mặt hàng: ưu tiên khớp theo itemId (chính xác khi trùng tên), fallback theo tên.
+function dxItemMinPrice(ten, itemId){
+  const cat=(typeof catalogItems!=='undefined'?catalogItems:[]);
+  let it=itemId?cat.find(x=>x.id===itemId):null;
+  if(!it) it=cat.find(x=>(x.name||'').trim().toLowerCase()===(ten||'').trim().toLowerCase());
   return it?(calcPrices(it).min||0):0;
 }
 // ----- Form: các dòng hàng động -----
-let dxRowSeq=0;
-// Options datalist NCC (toàn bộ NCC) — dùng khi chưa khớp mặt hàng / mặt hàng chưa gán NCC.
-function dxAllNccOptions(){ return (NCC_DATA||[]).map(n=>`<option value="${esc(n.ten)}"></option>`).join(''); }
 function dxRowHtml(){
-  const uid=++dxRowSeq;
-  return `<div class="dx-item-row" style="display:grid;grid-template-columns:1.7fr 1.3fr .6fr .6fr .9fr 1.3fr 34px;gap:8px;align-items:end;margin-bottom:8px;padding:10px;background:var(--cream);border:1px solid var(--border);border-radius:8px;">
-    <div class="form-group" style="margin:0;"><label style="font-size:10px;">Tên hàng <span style="color:var(--red);">*</span></label><input class="dxr-ten" list="dx-catalog-list" oninput="dxRowChanged(this)" placeholder="Tên mặt hàng"></div>
-    <div class="form-group" style="margin:0;"><label style="font-size:10px;">Nhà cung cấp</label><input class="dxr-ncc" list="dx-ncc-list-${uid}" placeholder="Tên NCC"><datalist id="dx-ncc-list-${uid}">${dxAllNccOptions()}</datalist></div>
+  return `<div class="dx-item-row" data-item-id="" style="display:grid;grid-template-columns:1.7fr 1.3fr .6fr .6fr .9fr 1.3fr 34px;gap:8px;align-items:end;margin-bottom:8px;padding:10px;background:var(--cream);border:1px solid var(--border);border-radius:8px;">
+    <div class="form-group" style="margin:0;"><label style="font-size:10px;">Tên hàng <span style="color:var(--red);">*</span></label>
+      <div class="select-wrap"><input class="dxr-ten" autocomplete="off" placeholder="Gõ để tìm mặt hàng..." oninput="dxTenInput(this)" onfocus="dxTenInput(this)" onblur="setTimeout(()=>dxCloseDd(this),200)"><div class="dropdown-list dxr-ten-dd"></div></div>
+    </div>
+    <div class="form-group" style="margin:0;"><label style="font-size:10px;">Nhà cung cấp</label>
+      <div class="select-wrap"><input class="dxr-ncc" autocomplete="off" placeholder="Tên NCC" oninput="dxNccInput(this)" onfocus="dxNccInput(this,true)" onblur="setTimeout(()=>dxCloseDd(this),200)"><div class="dropdown-list dxr-ncc-dd"></div></div>
+    </div>
     <div class="form-group" style="margin:0;"><label style="font-size:10px;">SL <span style="color:var(--red);">*</span></label><input type="number" class="dxr-sl" min="1" value="1" oninput="dxUpdateTotal()"></div>
     <div class="form-group" style="margin:0;"><label style="font-size:10px;">ĐVT</label><input type="text" class="dxr-dvt" placeholder="đvt"></div>
     <div class="form-group" style="margin:0;"><label style="font-size:10px;">Đơn giá dự kiến</label><input type="number" class="dxr-dongia" min="0" placeholder="0" oninput="dxUpdateTotal()"></div>
     <div class="form-group" style="margin:0;"><label style="font-size:10px;">Lý do / Mục đích</label><input type="text" class="dxr-lydo" placeholder="Lý do"></div>
     <button class="btn btn-ghost btn-sm" type="button" onclick="dxRemoveRow(this)" title="Xoá dòng" style="height:38px;padding:0;">🗑</button>
-    <div class="dxr-ncc-chips" style="grid-column:1 / -1;font-size:11px;display:none;flex-wrap:wrap;gap:6px;align-items:center;"></div>
     <div class="dxr-hint" style="grid-column:1 / -1;font-size:11px;color:var(--green);display:none;"></div>
   </div>`;
-}
-// Bấm 1 chip NCC → điền vào ô Nhà cung cấp của cùng dòng.
-function dxPickNcc(el, name){
-  const row=el.closest('.dx-item-row'); if(!row) return;
-  const nccEl=row.querySelector('.dxr-ncc'); if(nccEl) nccEl.value=name;
 }
 function dxAddRow(){ const box=document.getElementById('dx-items'); if(box) box.insertAdjacentHTML('beforeend',dxRowHtml()); }
 function dxRemoveRow(btn){
@@ -4449,40 +4444,71 @@ function dxRemoveRow(btn){
   if(box.querySelectorAll('.dx-item-row').length<=1){ showToast('Cần ít nhất 1 mặt hàng',2000,'info'); return; }
   row.remove(); dxUpdateTotal();
 }
-function dxRowChanged(inp){
+// Đóng dropdown trong cùng ô (.select-wrap) của input.
+function dxCloseDd(inp){ const dd=inp.closest('.select-wrap')?.querySelector('.dropdown-list'); if(dd) dd.classList.remove('open'); }
+// Chọn 1 giá trị text (dùng cho dropdown NCC) → điền vào input của ô, đóng dropdown.
+function dxSetCell(el, val){ const wrap=el.closest('.select-wrap'); const inp=wrap?.querySelector('input'); if(inp) inp.value=val; const dd=wrap?.querySelector('.dropdown-list'); if(dd) dd.classList.remove('open'); }
+
+// ---- Dropdown Tên hàng ----
+function dxTenInput(inp){
   const row=inp.closest('.dx-item-row'); if(!row) return;
-  const it=(typeof catalogItems!=='undefined'?catalogItems:[]).find(x=>(x.name||'').trim().toLowerCase()===(inp.value||'').trim().toLowerCase());
-  const hint=row.querySelector('.dxr-hint');
-  const chips=row.querySelector('.dxr-ncc-chips');
-  const nccList=row.querySelector('.dxr-ncc')?.list;   // datalist riêng của dòng
-  if(it){
-    const p=calcPrices(it);
-    const dvt=row.querySelector('.dxr-dvt'); if(dvt&&!dvt.value) dvt.value=it.dvt||'';
-    const dg=row.querySelector('.dxr-dongia'); if(dg&&!dg.value&&p.last) dg.value=p.last;
-    // Danh sách NCC có bán mặt hàng này (từ liên kết trong Danh mục)
-    const nccNames=(it.nccIds||[]).map(id=>nccName(id)).filter(Boolean);
-    const nccEl=row.querySelector('.dxr-ncc');
-    if(nccNames.length){
-      // Lọc gợi ý datalist về đúng các NCC của mặt hàng
-      if(nccList) nccList.innerHTML=nccNames.map(n=>`<option value="${esc(n)}"></option>`).join('');
-      if(nccEl&&!nccEl.value) nccEl.value=nccNames[0];   // tự điền NCC đầu (giữ hành vi cũ)
-      if(chips){
-        chips.style.display='flex';
-        chips.innerHTML=`<span style="color:var(--text-muted);">🏷️ NCC có bán:</span>`+
-          nccNames.map(n=>`<span class="badge badge-blue" style="cursor:pointer;" onclick="dxPickNcc(this,'${esc(n).replace(/'/g,"\\'")}')">${esc(n)}</span>`).join('');
-      }
-    } else {
-      // Mặt hàng có trong danh mục nhưng chưa gán NCC → gợi ý toàn bộ NCC
-      if(nccList) nccList.innerHTML=dxAllNccOptions();
-      if(chips){ chips.style.display='flex'; chips.innerHTML=`<span style="color:var(--text-muted);">Chưa gán NCC cho mặt hàng này — thêm ở tab Danh mục hàng hoá.</span>`; }
-    }
-    if(hint){ hint.style.display=''; hint.innerHTML=`📊 Giá thấp nhất năm: <strong>${fmt(p.min)}</strong> · TB năm: ${fmt(p.avg)} · gần nhất: ${fmt(p.last)}`; }
-  } else {
-    if(nccList) nccList.innerHTML=dxAllNccOptions();   // không khớp → gợi ý toàn bộ NCC
-    if(chips){ chips.style.display='none'; chips.innerHTML=''; }
-    if(hint){ hint.style.display='none'; }
-  }
+  const dd=inp.closest('.select-wrap')?.querySelector('.dropdown-list'); if(!dd) return;
+  // Đang gõ lại → bỏ liên kết mặt hàng đã chọn (tìm món khác)
+  row.dataset.itemId='';
+  const q=(inp.value||'').trim().toLowerCase();
+  const BP_LABEL={'buong-phong':'Buồng phòng','nha-hang':'Nhà hàng','bep':'Bếp','le-tan':'Lễ tân','ky-thuat':'Kỹ thuật','sale':'Sale','hr':'HR','van-phong':'VP'};
+  const list=(typeof catalogItems!=='undefined'?catalogItems:[]).filter(it=>{
+    if(!q) return true;
+    return (it.name||'').toLowerCase().includes(q) || (it.code||'').toLowerCase().includes(q);
+  });
+  if(!list.length){ dd.innerHTML='<div class="dropdown-item" style="color:var(--text-muted);">Không có mặt hàng phù hợp — có thể gõ tên tự do</div>'; dd.classList.add('open'); return; }
+  dd.innerHTML=list.slice(0,60).map(it=>{
+    const nccCount=(it.nccIds||[]).map(id=>nccName(id)).filter(Boolean).length;
+    return `<div class="dropdown-item" onmousedown="dxSelectItem(this,'${esc(it.id)}')">
+      <span style="font-weight:600;">${esc(it.name)}</span>
+      <span style="color:var(--text-muted);font-size:11px;">${esc(it.code||'')} · ${esc(it.dvt||'')} · ${esc(BP_LABEL[it.bophan]||it.bophan||'')}${nccCount?` · ${nccCount} NCC`:''}</span>
+    </div>`;
+  }).join('');
+  dd.classList.add('open');
+}
+function dxSelectItem(el, id){
+  const row=el.closest('.dx-item-row'); if(!row) return;
+  const it=(typeof catalogItems!=='undefined'?catalogItems:[]).find(x=>x.id===id); if(!it) return;
+  row.dataset.itemId=id;
+  const p=calcPrices(it);
+  const tenEl=row.querySelector('.dxr-ten'); if(tenEl) tenEl.value=it.name||'';
+  const dvt=row.querySelector('.dxr-dvt'); if(dvt) dvt.value=it.dvt||'';
+  const dg=row.querySelector('.dxr-dongia'); if(dg&&!dg.value&&p.last) dg.value=p.last;
+  const hint=row.querySelector('.dxr-hint'); if(hint){ hint.style.display=''; hint.innerHTML=`📊 Giá thấp nhất năm: <strong>${fmt(p.min)}</strong> · TB năm: ${fmt(p.avg)} · gần nhất: ${fmt(p.last)}`; }
+  dxCloseDd(tenEl);
+  // Tự bung dropdown NCC của đúng mặt hàng vừa chọn
+  const nccEl=row.querySelector('.dxr-ncc'); if(nccEl){ nccEl.value=''; dxNccInput(nccEl,true); nccEl.focus(); }
   dxUpdateTotal();
+}
+
+// ---- Dropdown Nhà cung cấp (theo mặt hàng đã chọn) ----
+function dxNccInput(inp, showAll){
+  const row=inp.closest('.dx-item-row'); if(!row) return;
+  const dd=inp.closest('.select-wrap')?.querySelector('.dropdown-list'); if(!dd) return;
+  const id=row.dataset.itemId||'';
+  const it=id?(typeof catalogItems!=='undefined'?catalogItems:[]).find(x=>x.id===id):null;
+  let names, note='';
+  if(it){
+    names=(it.nccIds||[]).map(nid=>nccName(nid)).filter(Boolean);
+    if(!names.length){ names=(NCC_DATA||[]).map(n=>n.ten); note='Mặt hàng này chưa gán NCC — chọn tạm hoặc thêm ở Danh mục'; }
+  } else {
+    names=(NCC_DATA||[]).map(n=>n.ten);
+  }
+  const q=(inp.value||'').trim().toLowerCase();
+  const filtered=(showAll||!q)?names:names.filter(n=>(n||'').toLowerCase().includes(q));
+  let html='';
+  if(note) html+=`<div class="dropdown-item" style="color:var(--text-muted);cursor:default;">${esc(note)}</div>`;
+  if(filtered.length){
+    html+=filtered.slice(0,60).map(n=>`<div class="dropdown-item" onmousedown="dxSetCell(this,'${esc(n).replace(/'/g,"\\'")}')"><span>${esc(n)}</span></div>`).join('');
+  } else if(!note){
+    html+='<div class="dropdown-item" style="color:var(--text-muted);cursor:default;">Không có NCC phù hợp — có thể gõ tay</div>';
+  }
+  dd.innerHTML=html; dd.classList.add('open');
 }
 function dxUpdateTotal(){
   let tong=0;
@@ -4493,11 +4519,8 @@ function dxUpdateTotal(){
   if(val) val.textContent=tong?fmt(tong):'—';
   if(wrap) wrap.style.display=tong?'flex':'none';
 }
-function dxFillDatalists(){
-  // Datalist gợi ý tên hàng (NCC dùng datalist riêng theo từng dòng — xem dxRowHtml/dxRowChanged).
-  const cl=document.getElementById('dx-catalog-list');
-  if(cl) cl.innerHTML=(typeof catalogItems!=='undefined'?catalogItems:[]).map(it=>`<option value="${esc(it.name)}">${esc(it.code||'')} · ${esc(it.dvt||'')}</option>`).join('');
-}
+// (Đã thay <datalist> bằng dropdown tuỳ biến — xem dxTenInput/dxNccInput. Giữ hàm rỗng cho tương thích.)
+function dxFillDatalists(){}
 // ----- Quyền duyệt -----
 function dxApproveLevel(status){ return {'cho-duyet-truong-bp':'truong-bp','cho-duyet-ketoan':'ketoan','cho-duyet-gd':'gd'}[status]||null; }
 function canApproveDx(d){
@@ -4540,7 +4563,7 @@ function renderDxTable(){
     const tong=dxTotal(d);
     const pri=d.priority||'Thường';
     const itemList=its.map(it=>{
-      const min=dxItemMinPrice(it.ten);
+      const min=dxItemMinPrice(it.ten, it.itemId);
       return `<div style="padding:2px 0;"><span style="font-weight:600;">${esc(it.ten)||'—'}</span> ×${esc(it.sl)||0} ${esc(it.dvt)||''}${it.ncc?` · <span style="color:var(--text-muted);">${esc(it.ncc)}</span>`:''}${min?` <span style="color:var(--green);font-size:11px;">— giá TN năm: ${fmt(min)}</span>`:''}</div>`;
     }).join('');
     const canApr=canApproveDx(d);
@@ -4575,6 +4598,7 @@ function submitDx(){
     if(!ten||sl<=0) return;
     items.push({
       ten,
+      itemId:r.dataset.itemId||'',           // id mặt hàng danh mục (nếu chọn từ dropdown) — phân biệt trùng tên
       ncc:(r.querySelector('.dxr-ncc')?.value||'').trim(),
       sl,
       dvt:(r.querySelector('.dxr-dvt')?.value||'').trim(),
@@ -5312,7 +5336,9 @@ function pushDxToKho(item, dx){
   const ngay=new Date().toLocaleDateString('vi-VN');
   const sl=parseFloat(item.sl)||1;
   const lydo=`Nhập từ MH (ĐX: ${dx?.id||''})`;
-  let ktItem=KHO_DATA.find(it=>it.ten===item.ten&&it.bophan==='kt');
+  // Khớp theo tên + ĐVT để 2 mặt hàng trùng tên khác đơn vị không bị gộp chung 1 dòng kho.
+  const dvt=item.dvt||'Cái';
+  let ktItem=KHO_DATA.find(it=>it.ten===item.ten&&(it.dvt||'Cái')===dvt&&it.bophan==='kt');
   if(ktItem){ ktItem.lichSu.push({ngay,loai:'nhap',sl,tu:'',den:'kt',lydo,nguoi:'Kế toán'}); }
   else{ KHO_DATA.push({id:'KH'+Date.now()+Math.floor(Math.random()*1000),ma:'KTO-'+(Date.now().toString().slice(-4))+Math.floor(Math.random()*90+10),ten:item.ten,dvt:item.dvt||'Cái',bophan:'kt',vitri:'VP',ton_dau:0,img:'📦',ghichu:`Tạo từ ĐX ${dx?.id||''}`,lichSu:[{ngay,loai:'nhap',sl,tu:'',den:'kt',lydo,nguoi:'Kế toán'}]}); }
 }
@@ -5437,7 +5463,6 @@ function openDeXuatModal(){
   const bp=document.getElementById('dx-bophan');
   if(bp) bp.value=(currentUser?.role==='truong-bp')?(currentUser.bophan||''):'';
   const pr=document.getElementById('dx-priority'); if(pr) pr.value='Thường';
-  dxFillDatalists();
   const box=document.getElementById('dx-items'); if(box) box.innerHTML='';
   dxAddRow();
   const wrap=document.getElementById('dx-total-wrap'); if(wrap) wrap.style.display='none';
