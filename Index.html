@@ -67,7 +67,7 @@ function _lsSaveRaw(){
       hvLinen:HV_LINEN,hvRewash:HV_REWASH_DATA,hvCols:HV_REWASH_COLS,
       wsData:WS_DATA_BY_DATE,roomStatus:ROOM_STATUS_BY_DATE,
       amData:AM_DATA_BY_DATE,mbData:MB_DATE_DATA,nsLuong:NS_LUONG,sxData:SX_DATA,
-      nsBhxh:NS_BHXH,nsTncn:NS_TNCN,nccCat:NCC_CATEGORIES,
+      nsBhxh:NS_BHXH,nsTncn:NS_TNCN,cats:CATS,
     };
     localStorage.setItem(LS_KEY,JSON.stringify(data));
     return true;
@@ -94,7 +94,7 @@ function lsLoad(){
     if(d.sxData?.length)  SX_DATA=d.sxData;
     if(d.nsBhxh)          NS_BHXH=d.nsBhxh;
     if(d.nsTncn)          NS_TNCN=d.nsTncn;
-    if(d.nccCat?.length)  NCC_CATEGORIES=d.nccCat;
+    if(d.cats){ ['ncc','thu','bophan'].forEach(k=>{ if(Array.isArray(d.cats[k])) CATS[k]=d.cats[k]; }); rebuildBpLabels(); }
     return true;
   }catch(e){return false;}
 }
@@ -868,7 +868,8 @@ textarea{resize:vertical;min-height:68px;}
       <div class="card">
         <div class="card-body" style="padding:10px 16px;">
           <div class="filter-row">
-            <select id="thu-f-dm" onchange="renderThuTab()" style="font-size:12px;padding:6px 10px;"><option value="">Tất cả danh mục</option><option>Doanh thu phòng</option><option>F&B</option><option>Spa</option><option>Dịch vụ khác</option></select>
+            <select id="thu-f-dm" onchange="renderThuTab()" style="font-size:12px;padding:6px 10px;"><option value="">Tất cả danh mục</option></select>
+            <button id="btn-cat-thu" onclick="openCatManager('thu')" title="Quản lý danh mục Thu (Giám đốc)" style="display:none;align-items:center;padding:5px 9px;border-radius:8px;border:1.5px solid var(--border);background:#fff;cursor:pointer;font-size:12px;">⚙</button>
             <select id="thu-f-pttt" onchange="renderThuTab()" style="font-size:12px;padding:6px 10px;"><option value="">Tất cả PTTT</option><option value="TM">TM</option><option value="CK">CK</option><option value="Cà thẻ">Cà thẻ</option><option value="Công nợ">Công nợ</option></select>
             <input type="month" id="thu-f-thang" value="2026-07" onchange="renderThuTab()" style="width:130px;font-size:12px;padding:6px 10px;">
             <span id="thu-count" style="font-size:12px;color:var(--text-muted);margin-left:4px;"></span>
@@ -952,14 +953,8 @@ textarea{resize:vertical;min-height:68px;}
         </select>
         <select id="dx-f-bp" onchange="renderDxTable()">
           <option value="">Tất cả bộ phận</option>
-          <option value="buong-phong">Buồng phòng</option>
-          <option value="nha-hang">Nhà hàng</option>
-          <option value="bep">Bếp</option>
-          <option value="sale">Sale</option>
-          <option value="ky-thuat">Kỹ thuật</option>
-          <option value="le-tan">Lễ tân</option>
-          <option value="hr">HR</option>
         </select>
+        <button id="btn-cat-bophan" onclick="openCatManager('bophan')" title="Quản lý Bộ phận (Giám đốc)" style="display:none;align-items:center;padding:5px 9px;border-radius:8px;border:1.5px solid var(--border);background:#fff;cursor:pointer;font-size:12px;">⚙ Bộ phận</button>
         <input type="month" id="dx-f-month" value="2026-07" style="width:140px;" onchange="renderDxTable()">
         <span id="dx-result-count" style="font-size:12px;color:var(--text-muted);margin-left:4px;"></span>
       </div>
@@ -987,10 +982,8 @@ textarea{resize:vertical;min-height:68px;}
             <input type="text" id="ncc-search" placeholder="🔍 Tìm tên NCC..." style="width:220px;" oninput="renderNccTable()">
             <select id="ncc-f-dm" onchange="renderNccTable()" style="font-size:12px;padding:6px 10px;">
               <option value="">Tất cả danh mục</option>
-              <option>Thực phẩm</option><option>Amenity</option><option>CCDC</option>
-              <option>Kỹ thuật</option><option>Thiết bị</option><option>Hóa chất</option>
-              <option>Trang trí</option><option>Khác</option>
             </select>
+            <button id="btn-cat-ncc" onclick="openCatManager('ncc')" title="Quản lý danh mục NCC (Giám đốc)" style="display:none;align-items:center;padding:5px 9px;border-radius:8px;border:1.5px solid var(--border);background:#fff;cursor:pointer;font-size:12px;">⚙</button>
             <select id="ncc-f-vat" onchange="renderNccTable()" style="font-size:12px;padding:6px 10px;">
               <option value="">Lọc theo VAT</option>
               <option value="co-vat">Có VAT</option>
@@ -1571,6 +1564,19 @@ textarea{resize:vertical;min-height:68px;}
       <button class="btn btn-ghost" onclick="closeModal('modal-ncc')">Huỷ</button>
       <button class="btn btn-gold" onclick="saveNcc()">💾 Lưu NCC</button>
     </div>
+  </div>
+</div>
+
+<!-- MODAL QUẢN LÝ DANH MỤC (Giám đốc) -->
+<div class="modal-overlay" id="modal-cat">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-header"><span class="modal-title" id="cat-mgr-title">Quản lý danh mục</span><button class="close-btn" onclick="closeModal('modal-cat')">✕</button></div>
+    <div id="cat-mgr-list" style="max-height:340px;overflow-y:auto;margin-bottom:12px;"></div>
+    <div style="display:flex;gap:8px;">
+      <input id="cat-mgr-new" placeholder="Tên mục mới..." style="flex:1;" onkeydown="if(event.key==='Enter')catAdd()">
+      <button class="btn btn-gold btn-sm" onclick="catAdd()">+ Thêm</button>
+    </div>
+    <div style="font-size:11px;color:var(--text-muted);margin-top:8px;">Thay đổi được đồng bộ tới mọi máy.</div>
   </div>
 </div>
 
@@ -2293,18 +2299,90 @@ textarea{resize:vertical;min-height:68px;}
 // Global state containers that were used but never declared:
 let DX_DATA  = Array.isArray(window.DX_DATA)  ? window.DX_DATA  : [];   // Đề xuất mua hàng
 let NCC_DATA = Array.isArray(window.NCC_DATA) ? window.NCC_DATA : [];   // Nhà cung cấp
-// Danh mục nhà cung cấp (mặc định + do người dùng thêm; lưu local, danh mục đã dùng tự xuất hiện qua NCC_DATA)
-let NCC_CATEGORIES = ['Thực phẩm','Đồ uống','Rau củ quả','Thịt - Hải sản','Gia vị','Vật tư tiêu hao','Hoá chất - Vệ sinh','Đồ vải','Thiết bị - Máy móc','Văn phòng phẩm','Dịch vụ','Khác'];
+// ===== DANH MỤC TẬP TRUNG (Giám đốc thêm/xóa; đồng bộ mọi máy) =====
+// ncc/thu: mảng chuỗi; bophan: mảng {v,l} (value lưu trong dữ liệu, l là nhãn hiển thị)
+let CATS = {
+  ncc: ['Thực phẩm','Đồ uống','Rau củ quả','Thịt - Hải sản','Amenity','CCDC','Hóa chất','Vật tư tiêu hao','Đồ vải','Thiết bị','Kỹ thuật','Trang trí','Văn phòng phẩm','Dịch vụ','Khác'],
+  thu: ['Tiền phòng','F&B','Spa','Minibar','Giặt là','Cho thuê hội trường','Đưa đón','Dịch vụ khác','Thu khác'],
+  bophan: [
+    {v:'buong-phong',l:'Buồng phòng'},{v:'nha-hang',l:'Nhà hàng'},{v:'bep',l:'Bếp'},
+    {v:'le-tan',l:'Lễ tân'},{v:'ky-thuat',l:'Kỹ thuật'},{v:'sale',l:'Sale'},
+    {v:'hr',l:'HR'},{v:'van-phong',l:'Hành chính / VP'}
+  ],
+};
+// BP_LABELS suy ra từ CATS.bophan (trước đây CHƯA định nghĩa -> lỗi ẩn khi hiển thị)
+let BP_LABELS = {};
+function rebuildBpLabels(){ BP_LABELS={}; CATS.bophan.forEach(b=>{ BP_LABELS[b.v]=b.l; }); }
+rebuildBpLabels();
 // Nhãn loại hoá đơn NCC (trước đây thiếu -> renderNccTable lỗi khi có dòng)
 const HD_LABELS = {'co-vat':'Có VAT','ko-vat':'Không VAT','sau-tt':'Sau khi TT','truoc-tt':'Trước khi TT','hd-lien':'HĐ liền','hd-gom':'HĐ gom','hd-cuoi-thang':'HĐ cuối tháng'};
-// Nạp danh sách danh mục vào dropdown #ncc-danhmuc (gộp mặc định + danh mục đã dùng trong NCC_DATA)
-function populateNccDanhmuc(selected){
-  const sel=document.getElementById('ncc-danhmuc'); if(!sel) return;
-  const used=[...new Set((NCC_DATA||[]).map(n=>n.danhmuc).filter(Boolean))];
-  const all=[...new Set([...NCC_CATEGORIES, ...used])];
-  sel.innerHTML='<option value="">— Chọn —</option>'+all.map(c=>`<option value="${c}">${c}</option>`).join('');
-  sel.value=selected||'';
+
+// Gộp các giá trị đã dùng trong dữ liệu vào danh mục (không mất dữ liệu cũ)
+function catMergeUsed(){
+  [...new Set((NCC_DATA||[]).map(n=>n.danhmuc).filter(Boolean))].forEach(u=>{ if(!CATS.ncc.includes(u)) CATS.ncc.push(u); });
+  [...new Set((THU_DATA||[]).map(t=>t.danhmuc).filter(Boolean))].forEach(u=>{ if(!CATS.thu.includes(u)) CATS.thu.push(u); });
 }
+// Đổ options cho 1 <select> từ CATS[key]; opts:{selected, allLabel}
+function fillCatSelect(id, key, opts={}){
+  const sel=document.getElementById(id); if(!sel) return;
+  const cur = opts.selected!==undefined ? opts.selected : sel.value;
+  let html = opts.allLabel!==undefined ? `<option value="">${opts.allLabel}</option>` : '';
+  html += (CATS[key]||[]).map(it=>{
+    const v = typeof it==='string'? it : it.v;
+    const l = typeof it==='string'? it : it.l;
+    return `<option value="${v}">${l}</option>`;
+  }).join('');
+  sel.innerHTML=html;
+  sel.value = cur||'';
+}
+// Bản đồ select theo loại danh mục
+const CAT_SELECTS = {
+  ncc:    [['ncc-f-dm',{allLabel:'Tất cả danh mục'}], ['ncc-danhmuc',{allLabel:'— Chọn —'}]],
+  thu:    [['thu-f-dm',{allLabel:'Tất cả danh mục'}], ['thu-danhmuc',{}]],
+  bophan: [['dx-bophan',{}], ['ai-bophan',{}], ['chi-bophan',{}], ['thu-bophan',{}], ['dx-f-bp',{allLabel:'Tất cả bộ phận'}], ['chi-f-bp',{allLabel:'Tất cả bộ phận'}]],
+};
+function refreshCatSelects(key){
+  if(key==='ncc'||key==='thu') catMergeUsed();
+  if(key==='bophan') rebuildBpLabels();
+  (CAT_SELECTS[key]||[]).forEach(([id,o])=>fillCatSelect(id,key,o));
+}
+function refreshAllCatSelects(){ catMergeUsed(); ['ncc','thu','bophan'].forEach(refreshCatSelects); }
+// Giữ tương thích tên cũ
+function populateNccDanhmuc(selected){ catMergeUsed(); fillCatSelect('ncc-danhmuc','ncc',{selected, allLabel:'— Chọn —'}); }
+
+// ===== QUẢN LÝ DANH MỤC (chỉ Giám đốc) =====
+let _catMgrKey='ncc';
+function catLabelOf(key){ return {ncc:'Danh mục NCC', thu:'Danh mục Thu', bophan:'Bộ phận'}[key]||key; }
+function _slugify(s){ return (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/đ/g,'d').replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'')||('bp'+Date.now()); }
+function openCatManager(key){
+  if(currentUser?.role!=='giamdoc'){ showToast('⛔ Chỉ Giám đốc được sửa danh mục',2500,'error'); return; }
+  _catMgrKey=key;
+  const t=document.getElementById('cat-mgr-title'); if(t) t.textContent='Quản lý: '+catLabelOf(key);
+  renderCatManager();
+  openModal('modal-cat');
+}
+function renderCatManager(){
+  const box=document.getElementById('cat-mgr-list'); if(!box) return;
+  const list=CATS[_catMgrKey]||[];
+  box.innerHTML = list.map((it,i)=>{
+    const l = typeof it==='string'? it : it.l;
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;">
+      <span>${l}</span>
+      <button class="btn btn-danger btn-sm" onclick="catDelete(${i})">🗑</button></div>`;
+  }).join('') || '<div style="color:var(--text-muted);padding:8px;">Chưa có mục nào</div>';
+}
+function catAdd(){
+  const inp=document.getElementById('cat-mgr-new'); const name=(inp?.value||'').trim(); if(!name) return;
+  const key=_catMgrKey;
+  if(key==='bophan'){
+    const v=_slugify(name);
+    if(!CATS.bophan.some(b=>b.v===v||b.l===name)) CATS.bophan.push({v,l:name});
+  } else if(!CATS[key].includes(name)){ CATS[key].push(name); }
+  if(inp) inp.value='';
+  _catChanged();
+}
+function catDelete(i){ CATS[_catMgrKey].splice(i,1); _catChanged(); }
+function _catChanged(){ rebuildBpLabels(); refreshCatSelects(_catMgrKey); renderCatManager(); lsSave(); syncNow(); }
 let editingItemId = null;                                               // Danh mục: đang sửa mặt hàng?
 
 // Global number formatter (was only defined *locally* inside 2 functions,
@@ -2430,16 +2508,8 @@ function statusBadge(status){
 
 // ----- Ghi Thu: nạp dropdown Danh mục / Bộ phận -----
 function populateThuDropdowns(){
-  const dm=document.getElementById('thu-danhmuc');
-  const bp=document.getElementById('thu-bophan');
-  if(dm && !dm.options.length){
-    const cats=['Tiền phòng','Dịch vụ ăn uống','Minibar','Giặt là','Cho thuê hội trường','Đưa đón','Dịch vụ khác','Thu khác'];
-    dm.innerHTML=cats.map(c=>`<option value="${c}">${c}</option>`).join('');
-  }
-  if(bp && !bp.options.length){
-    const deps=[['le-tan','Lễ tân'],['buong-phong','Buồng phòng'],['nha-hang','Nhà hàng'],['bep','Bếp'],['sale','Sale'],['ky-thuat','Kỹ thuật'],['hr','HR'],['hcns','Hành chính']];
-    bp.innerHTML=deps.map(d=>`<option value="${d[0]}">${d[1]}</option>`).join('');
-  }
+  fillCatSelect('thu-danhmuc','thu',{});
+  fillCatSelect('thu-bophan','bophan',{});
 }
 // ==================== END HOTFIX ====================
 
@@ -2513,6 +2583,9 @@ async function enterApp(session){
   applyPermissions();               // áp quyền mặc định theo vai trò ngay
   await loadUserPerms();            // lấy quyền tab tuỳ chỉnh của Giám đốc (nếu có)
   applyPermissions();               // áp lại theo tab tuỳ chỉnh
+  refreshAllCatSelects();           // nạp danh mục vào mọi dropdown
+  // Nút ⚙ quản lý danh mục chỉ hiện cho Giám đốc
+  ['btn-cat-ncc','btn-cat-thu','btn-cat-bophan'].forEach(id=>{ const e=document.getElementById(id); if(e) e.style.display=currentUser.role==='giamdoc'?'inline-flex':'none'; });
   // Chỉ hiện nút Xóa data / Nhập Sheet cũ cho Giám đốc
   const btnClear=document.getElementById('btn-clear-data');
   if(btnClear) btnClear.style.display=currentUser.role==='giamdoc'?'flex':'none';
@@ -5366,9 +5439,10 @@ function clearSelectedItem(){
 function addNccCategory(){
   const name=(prompt('Tên danh mục nhà cung cấp mới:')||'').trim();
   if(!name) return;
-  if(!NCC_CATEGORIES.includes(name)) NCC_CATEGORIES.push(name);
-  populateNccDanhmuc(name);   // nạp lại danh sách + chọn danh mục vừa thêm
-  lsSave();                   // lưu danh mục lại
+  if(!CATS.ncc.includes(name)) CATS.ncc.push(name);
+  refreshCatSelects('ncc');   // nạp lại cả bộ lọc + form
+  const sel=document.getElementById('ncc-danhmuc'); if(sel) sel.value=name;
+  lsSave(); syncNow();
   showToast('✅ Đã thêm danh mục: '+name,2000,'success');
 }
 function addThuBophan(){ showToast('Tính năng đang phát triển',2000,'info'); }
@@ -5574,6 +5648,7 @@ const COLLECTIONS = {
   mbData:    { read:()=>_mapDump(MB_DATE_DATA),        write:r=>{const m={};r.forEach(x=>m[x.id]=x.obj);MB_DATE_DATA=m;},        render:()=>{try{renderMinibar();}catch(e){}} },
   hvRewash:  { read:()=>[{id:'_', obj:HV_REWASH_DATA}], write:r=>{const x=r.find(v=>v.id==='_'); HV_REWASH_DATA=x?x.obj:{};}, render:()=>{try{renderHangVai();}catch(e){}} },
   hvCols:    { read:()=>[{id:'_', obj:HV_REWASH_COLS}], write:r=>{const x=r.find(v=>v.id==='_'); HV_REWASH_COLS=x?x.obj:[];}, render:()=>{try{renderHangVai();}catch(e){}} },
+  cats:      { read:()=>[{id:'_', obj:CATS}], write:r=>{const x=r.find(v=>v.id==='_'); if(x&&x.obj){ CATS=x.obj; rebuildBpLabels(); }}, render:()=>{try{refreshAllCatSelects();}catch(e){}} },
 };
 
 // lastSnapshot phản ánh trạng thái ĐÃ ở trên cloud: {collection:{id:json}}
@@ -5619,7 +5694,7 @@ function syncNow(){ _lsSaveRaw(); if(sb&&cloudReady) flushToCloud(); }
 const WRITE_MATRIX = {
   thu:['giamdoc','ketoan'], chi:['giamdoc','ketoan'],
   ncc:['giamdoc','ketoan'], catalog:['giamdoc','ketoan'],
-  nsLuong:['giamdoc','hr'], bhxh:['giamdoc','hr'], tncn:['giamdoc','hr'],
+  nsLuong:['giamdoc','hr'], bhxh:['giamdoc','hr'], tncn:['giamdoc','hr'], cats:['giamdoc'],
   dx:['giamdoc','ketoan','truong-bp','hr'], kho:['giamdoc','ketoan','truong-bp','hr'], yc:['giamdoc','ketoan','truong-bp','hr'],
   wsData:['giamdoc','truong-bp'], roomStatus:['giamdoc','truong-bp'], amData:['giamdoc','truong-bp'],
   mbData:['giamdoc','truong-bp'], hvLinen:['giamdoc','truong-bp'], hvRewash:['giamdoc','truong-bp'],
