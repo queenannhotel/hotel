@@ -822,17 +822,33 @@ textarea{resize:vertical;min-height:68px;}
       <div class="section-header"><span class="section-title">💰 Quản Lý Thu Chi</span>
         <button class="btn btn-excel btn-sm" onclick="exportExcel('thu-chi')">📊 Xuất Excel</button>
       </div>
-      <div class="kpi-row" style="grid-template-columns:repeat(4,1fr);">
+      <!-- Chọn khoảng ngày báo cáo -->
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
+        <span style="font-size:12px;color:var(--text-muted);">📅 Từ ngày</span>
+        <input type="date" id="tc-from" onchange="renderThuChi()" style="font-size:12px;padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;">
+        <span style="font-size:12px;color:var(--text-muted);">đến</span>
+        <input type="date" id="tc-to" onchange="renderThuChi()" style="font-size:12px;padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;">
+        <button class="btn btn-ghost btn-sm" onclick="tcSetThisMonth()" title="Về tháng hiện tại">Tháng này</button>
+      </div>
+      <div class="kpi-row" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));">
         <div style="background:var(--green-bg);border-radius:12px;padding:14px 18px;border:1px solid #b6dfd1;">
-          <div id="tc-label-thu" style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Tổng Thu T7</div>
+          <div id="tc-label-thu" style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Tổng Thu</div>
           <div class="amount-pos" style="font-size:18px;font-weight:700;" id="tc-tong-thu">—</div>
         </div>
         <div style="background:var(--red-bg);border-radius:12px;padding:14px 18px;border:1px solid #f5c6c0;">
-          <div id="tc-label-chi" style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Tổng Chi T7</div>
+          <div id="tc-label-chi" style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Tổng Chi</div>
           <div class="amount-neg" style="font-size:18px;font-weight:700;" id="tc-tong-chi">—</div>
         </div>
+        <div style="background:var(--green-bg);border-radius:12px;padding:14px 18px;border:1px solid #b6dfd1;">
+          <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">💵 Thu Tiền Mặt</div>
+          <div class="amount-pos" style="font-size:18px;font-weight:700;" id="tc-thu-tm">—</div>
+        </div>
+        <div style="background:var(--red-bg);border-radius:12px;padding:14px 18px;border:1px solid #f5c6c0;">
+          <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">💵 Chi Tiền Mặt</div>
+          <div class="amount-neg" style="font-size:18px;font-weight:700;" id="tc-chi-tm">—</div>
+        </div>
         <div style="background:var(--gold-pale);border-radius:12px;padding:14px 18px;border:1px solid rgba(201,168,76,.3);">
-          <div id="tc-label-du" style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Số Dư</div>
+          <div id="tc-label-du" style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Số Dư Tiền Mặt</div>
           <div style="font-size:18px;font-weight:700;" id="tc-so-du">—</div>
         </div>
         <div style="background:#EEF3FB;border-radius:12px;padding:14px 18px;border:1px solid #c8d8f0;">
@@ -851,7 +867,6 @@ textarea{resize:vertical;min-height:68px;}
               <option value="Cà thẻ">Cà thẻ</option>
               <option value="Công nợ">Công nợ</option>
             </select>
-            <input type="month" id="tc-f-thang" value="2026-07" onchange="renderThuChi()" style="font-size:12px;padding:5px 9px;width:130px;">
           </div>
         </div>
         <div class="table-wrap wide"><table><thead><tr><th>STT</th><th>Ngày</th><th>Loại</th><th>Mô tả</th><th>Bộ phận</th><th>Phương thức TT</th><th>Thu (đ)</th><th>Chi (đ)</th><th>Người tạo</th></tr></thead>
@@ -922,9 +937,8 @@ textarea{resize:vertical;min-height:68px;}
       </div>
       <div class="grid-2">
         <div class="card"><div class="card-header"><div class="card-title">⬇ Phải Thu</div></div>
-          <table id="tbl-pt"><thead><tr><th>Khách hàng</th><th>Phòng</th><th>Số tiền</th><th>Hạn TT</th><th>Tình trạng</th></tr></thead><tbody>
-          <tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:16px;">Chưa có công nợ phải thu</td></tr>
-        </tbody></table></div>
+          <table id="tbl-pt"><thead><tr><th>Khách hàng</th><th>Mô tả</th><th>Số tiền</th><th>Ngày</th><th>Tình trạng</th></tr></thead>
+          <tbody id="tbl-pt-body"></tbody></table></div>
         <div class="card"><div class="card-header"><div class="card-title">⬆ Phải Trả (NCC)</div></div>
           <table><thead><tr><th>Nhà cung cấp</th><th>Nội dung</th><th>Số tiền</th><th>Hạn TT</th><th>Nguồn</th><th>Tình trạng</th></tr></thead>
           <tbody id="tbl-ptr-body"></tbody></table>
@@ -3077,56 +3091,91 @@ function renderCongNoPtr() {
       <td class="amount-neg" style="font-weight:600;">${fmt(r.tong)}</td>
       <td style="font-size:12px;">—</td>
       <td><span class="badge badge-navy" style="font-size:10px;">${r.bophan}</span></td>
-      <td><span class="badge badge-yellow">Chưa thanh toán</span></td>
+      <td>${cnStatusSelect(r.cn_status,`updateChiCnStatus('${r.id}',this.value)`)}</td>
     </tr>`),
   ];
   const tbody=document.getElementById('tbl-ptr-body');
   if(tbody) tbody.innerHTML=rows.join('')||`<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-muted);">Không có công nợ phải trả</td></tr>`;
+  renderCongNoPthu();
 }
+// Dropdown Tình trạng công nợ (Chưa thanh toán / Đã thanh toán)
+function cnStatusSelect(val, onchange){
+  const da = val==='da';
+  return `<select class="inline-select" onchange="${onchange}" style="border-color:${da?'var(--green)':'var(--border)'};font-size:11px;">
+    <option value="chua" ${da?'':'selected'}>Chưa thanh toán</option>
+    <option value="da" ${da?'selected':''}>Đã thanh toán</option>
+  </select>`;
+}
+// Phải Thu: từ các khoản Ghi Thu có PTTT = Công nợ (khách còn nợ).
+function renderCongNoPthu(){
+  const tbody=document.getElementById('tbl-pt-body'); if(!tbody) return;
+  const rows=(THU_DATA||[]).filter(r=>r.pttt==='Công nợ');
+  tbody.innerHTML=rows.length ? rows.map(r=>`<tr${r.cn_status==='da'?' style="opacity:.6;"':''}>
+    <td style="font-weight:500;">${esc(r.mota||r.danhmuc)||'—'}</td>
+    <td style="font-size:12px;">${esc(r.danhmuc)||'—'}${r.bophan?` · <span style="color:var(--text-muted);">${esc(r.bophan)}</span>`:''}</td>
+    <td class="amount-pos" style="font-weight:600;">${fmt(r.sotien)}</td>
+    <td style="font-size:12px;">${esc(r.ngay)||'—'}</td>
+    <td>${cnStatusSelect(r.cn_status,`updateThuCnStatus('${r.id}',this.value)`)}</td>
+  </tr>`).join('') : `<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:16px;">Chưa có công nợ phải thu</td></tr>`;
+}
+function updateThuCnStatus(id,val){ const r=(THU_DATA||[]).find(x=>x.id===id); if(!r) return; r.cn_status=val; renderCongNoPthu(); syncNow(); }
+function updateChiCnStatus(id,val){ const r=(CHI_DATA||[]).find(x=>x.id===id); if(!r) return; r.cn_status=val; renderCongNoPtr(); syncNow(); }
 
 // ==================== SYNC THU CHI TỔNG HỢP ====================
+// Đổi ngày 'd/m/yyyy' → 'yyyy-mm-dd' để so sánh chuỗi với input date.
+function vnToIso(ngay){ const p=(ngay||'').split('/'); if(p.length!==3) return ''; return `${p[2]}-${String(p[1]).padStart(2,'0')}-${String(p[0]).padStart(2,'0')}`; }
+// Đảm bảo có khoảng ngày: mặc định đầu tháng → cuối tháng hiện tại.
+function ensureTcRange(){
+  const f=document.getElementById('tc-from'), t=document.getElementById('tc-to');
+  if(f&&!f.value){ const d=new Date(); f.value=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`; }
+  if(t&&!t.value){ const d=new Date(); const last=new Date(d.getFullYear(),d.getMonth()+1,0); t.value=`${last.getFullYear()}-${String(last.getMonth()+1).padStart(2,'0')}-${String(last.getDate()).padStart(2,'0')}`; }
+}
+function tcSetThisMonth(){ const f=document.getElementById('tc-from'), t=document.getElementById('tc-to'); if(f)f.value=''; if(t)t.value=''; ensureTcRange(); renderThuChi(); }
 function syncThuChiSummary() {
+  ensureTcRange();
   const fLoai = document.getElementById('tc-f-loai')?.value||'';
   const fPttt = document.getElementById('tc-f-pttt')?.value||currentUser?.tc_filter||'';
+  const from  = document.getElementById('tc-from')?.value||'';
+  const to    = document.getElementById('tc-to')?.value||'';
+  const inRange=r=>{ const iso=vnToIso(r.ngay); return (!from||iso>=from)&&(!to||iso<=to); };
 
-  // Label nhãn PTTT cho KPI cards
   const ptttLabel = fPttt ? ` (${fPttt})` : '';
   const el=(id,val)=>{ const e=document.getElementById(id); if(e) e.textContent=val; };
   const elTxt=(id,val)=>{ const e=document.getElementById(id); if(e) e.textContent=val; };
 
-  // Tính tổng thu theo filter PTTT
-  const thuRows  = THU_DATA.filter(r=>!fPttt||r.pttt===fPttt);
-  const chiRows  = CHI_DATA.filter(r=>r.tinh_trang==='hoan-thanh'&&(!fPttt||r.pttt===fPttt));
-  const tongThu  = thuRows.reduce((s,r)=>s+r.sotien,0);
-  const tongChi  = chiRows.reduce((s,r)=>s+r.tong,0);
-  const soDu     = tongThu - tongChi;
+  // Lọc theo khoảng ngày (+ bộ lọc PTTT của filter row cho các ô tổng)
+  const thuRows  = THU_DATA.filter(r=>inRange(r) && (!fPttt||r.pttt===fPttt));
+  const chiRows  = CHI_DATA.filter(r=>r.tinh_trang==='hoan-thanh' && inRange(r) && (!fPttt||r.pttt===fPttt));
+  const tongThu  = thuRows.reduce((s,r)=>s+thuVnd(r),0);
+  const tongChi  = chiRows.reduce((s,r)=>s+chiAmt(r),0);
+  // Tiền mặt (PTTT='TM') trong khoảng — không phụ thuộc filter PTTT của bảng
+  const thuTM = THU_DATA.filter(r=>inRange(r)&&r.pttt==='TM').reduce((s,r)=>s+thuVnd(r),0);
+  const chiTM = CHI_DATA.filter(r=>r.tinh_trang==='hoan-thanh'&&inRange(r)&&r.pttt==='TM').reduce((s,r)=>s+chiAmt(r),0);
+  const soDu  = thuTM - chiTM;   // số dư TIỀN MẶT của giai đoạn
 
-  // Công nợ phải trả: luôn tính theo Công nợ (không filter theo PTTT khác)
-  const congNo = CHI_DATA.filter(r=>r.pttt==='Công nợ').reduce((s,r)=>s+r.tong,0)
+  // Công nợ phải trả: toàn bộ Chi công nợ chưa thanh toán (không theo khoảng ngày)
+  const congNo = CHI_DATA.filter(r=>r.pttt==='Công nợ'&&r.cn_status!=='da').reduce((s,r)=>s+chiAmt(r),0)
                + CN_PHAI_TRA_STATIC.reduce((s,r)=>s+r.sotien,0);
 
-  // Cập nhật KPI values
   el('tc-tong-thu', fmt(tongThu));
   el('tc-tong-chi', fmt(tongChi));
+  el('tc-thu-tm',   fmt(thuTM));
+  el('tc-chi-tm',   fmt(chiTM));
   el('tc-so-du',    fmt(soDu));
   el('tc-cong-no',  fmt(congNo));
 
-  // Cập nhật label KPI cards theo filter
-  elTxt('tc-label-thu', 'Tổng Thu T7' + ptttLabel);
-  elTxt('tc-label-chi', 'Tổng Chi T7' + ptttLabel);
-  elTxt('tc-label-du',  'Số Dư' + ptttLabel);
-  // label Công nợ không đổi (luôn là tổng công nợ)
+  elTxt('tc-label-thu', 'Tổng Thu' + ptttLabel);
+  elTxt('tc-label-chi', 'Tổng Chi' + ptttLabel);
 
-  // Màu số dư: đỏ nếu âm, vàng nếu dương
   const duEl=document.getElementById('tc-so-du');
   if(duEl) duEl.style.color = soDu<0?'var(--red)':'var(--yellow)';
 
-  // Render bảng tổng hợp
+  // Render bảng tổng hợp (cùng khoảng ngày + bộ lọc)
   const allRows = [
-    ...THU_DATA.map(r=>({loai:'thu', ngay:r.ngay, mota:r.mota, bophan:r.bophan, pttt:r.pttt, thu:r.sotien, chi:0, nguoi:r.nguoi})),
-    ...CHI_DATA.filter(r=>r.tinh_trang==='hoan-thanh').map(r=>({loai:'chi', ngay:r.ngay, mota:r.ten_hang, bophan:r.bophan, pttt:r.pttt, thu:0, chi:r.tong, nguoi:'Kế toán'})),
-  ].filter(r=>(!fLoai||r.loai===fLoai) && (!fPttt||r.pttt===fPttt))
-   .sort((a,b)=>b.ngay.localeCompare(a.ngay));
+    ...THU_DATA.map(r=>({loai:'thu', ngay:r.ngay, mota:r.mota, bophan:r.bophan, pttt:r.pttt, thu:thuVnd(r), chi:0, nguoi:r.nguoi})),
+    ...CHI_DATA.filter(r=>r.tinh_trang==='hoan-thanh').map(r=>({loai:'chi', ngay:r.ngay, mota:r.ten_hang, bophan:r.bophan, pttt:r.pttt, thu:0, chi:chiAmt(r), nguoi:'Kế toán'})),
+  ].filter(r=>(!fLoai||r.loai===fLoai) && (!fPttt||r.pttt===fPttt) && inRange(r))
+   .sort((a,b)=>(vnToIso(b.ngay)).localeCompare(vnToIso(a.ngay)));
 
   const ptttBadge={'TM':'badge-tm','CK':'badge-ck','Cà thẻ':'badge-the','Công nợ':'badge-cong-no'};
   const tbody=document.getElementById('tbl-thu-chi-body');
@@ -3258,6 +3307,7 @@ function saveThu() {
   closeModal('modal-thu');
   renderThuTab();
   syncThuChiSummary();
+  try{ renderCongNoPtr(); }catch(e){}   // cập nhật Phải Thu (khoản Thu công nợ)
   syncNow();
 }
 let editingThuId=null;
