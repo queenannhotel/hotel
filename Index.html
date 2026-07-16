@@ -2125,49 +2125,22 @@ textarea{resize:vertical;min-height:68px;}
       <div class="form-group"><label>Đơn vị tính</label><select id="ai-dvt"><option>bộ</option><option>cái</option><option>kg</option><option>lít</option><option>hộp</option><option>thùng</option><option>m²</option><option>cuộn</option><option>lần</option><option>đợt</option><option>tờ</option><option>gói</option><option>vỉ</option><option>can</option><option>đôi</option></select></div>
       <div class="form-group"><label>Bộ phận sử dụng</label><select id="ai-bophan"><option value="buong-phong">Buồng phòng</option><option value="nha-hang">Nhà hàng</option><option value="bep">Bếp</option><option value="sale">Sale</option><option value="ky-thuat">Kỹ thuật</option><option value="le-tan">Lễ tân</option><option value="hr">HR</option></select></div>
     </div>
-    <!-- GIÁ AUTO-COMPUTED - chỉ nhập lần mua gần nhất -->
+    <!-- NCC & GIÁ theo từng nhà cung cấp -->
     <div style="background:var(--cream);border:1px solid var(--border);border-radius:10px;padding:14px 15px;margin-bottom:12px;">
-      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:12px;">💰 Ghi nhận lần mua mới</div>
-      <div class="form-row three">
-        <div class="form-group"><label>Đơn giá lần này (đ) <span style="color:var(--red);">*</span></label><input type="number" id="ai-last" placeholder="0" oninput="previewPriceCalc()"></div>
-        <div class="form-group"><label>Ngày mua</label><input type="date" id="ai-last-date" value="2026-07-06"></div>
-        <div class="form-group"><label>Ghi chú lần mua</label><input id="ai-purchase-note" placeholder="VD: NCC X, mùa cao điểm"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);">🏪 Nhà cung cấp & Giá</div>
+        <button class="btn btn-ghost btn-sm" type="button" onclick="aiAddSupplier()">＋ Thêm NCC</button>
       </div>
-      <!-- Preview tính giá tự động -->
-      <div id="ai-price-preview" style="display:none;background:var(--green-bg);border-radius:8px;padding:10px 13px;font-size:12px;margin-top:4px;">
-        <div style="font-weight:600;color:var(--green);margin-bottom:6px;">📊 Sau khi lưu, hệ thống tự tính:</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-          <div>Giá thấp nhất năm: <strong id="preview-min" style="color:var(--green);">—</strong></div>
-          <div>Giá trung bình năm: <strong id="preview-avg" style="color:var(--navy);">—</strong></div>
-        </div>
-      </div>
+      <div id="ai-suppliers"></div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">Mỗi NCC có ĐVT / đơn giá / VAT riêng. Mỗi lần mua (đề xuất được duyệt) tự ghi vào lịch sử của đúng NCC.</div>
     </div>
-    <!-- Lịch sử mua - read only -->
+    <!-- Lịch sử mua của 1 NCC (mở khi bấm 📋) -->
     <div id="ai-history-wrap" style="display:none;margin-bottom:12px;">
-      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:8px;">📋 Lịch sử mua (năm 2026)</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <div id="ai-history-title" style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);">📋 Lịch sử mua</div>
+        <button class="btn btn-ghost btn-sm" type="button" onclick="document.getElementById('ai-history-wrap').style.display='none'">Đóng</button>
+      </div>
       <div id="ai-history-list"></div>
-    </div>
-    <div class="form-group" style="margin-bottom:12px;">
-      <label>NCC liên kết</label>
-      <div id="ai-ncc-list" style="display:flex;flex-wrap:wrap;gap:7px;margin-top:5px;"></div>
-    </div>
-    <!-- VAT -->
-    <div style="background:var(--cream);border:1px solid var(--border);border-radius:10px;padding:13px 15px;margin-bottom:12px;">
-      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:10px;">🧾 Thông tin VAT</div>
-      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;letter-spacing:0;font-size:13.5px;font-weight:500;color:var(--navy);">
-          <input type="checkbox" id="ai-has-vat" style="width:16px;height:16px;accent-color:var(--gold);padding:0;border:none;box-shadow:none;" onchange="toggleVatPct()">
-          Giá đã bao gồm VAT
-        </label>
-        <div id="ai-vat-pct-wrap" style="display:none;align-items:center;gap:8px;">
-          <span style="font-size:13px;color:var(--text-muted);">Thuế suất VAT:</span>
-          <input type="number" id="ai-vat-pct" min="0" max="100" placeholder="10" style="width:70px;text-align:center;font-weight:600;">
-          <span style="font-size:13px;color:var(--text-muted);">%</span>
-        </div>
-      </div>
-      <div id="ai-vat-note" style="font-size:11.5px;color:var(--text-muted);margin-top:8px;display:none;">
-        ℹ️ Giá nhập vào đã bao gồm VAT <strong id="ai-vat-pct-display"></strong>
-      </div>
     </div>
     <div class="form-row full"><div class="form-group"><label>Ghi chú / Quy cách</label><textarea id="ai-note" placeholder="Mô tả, tiêu chuẩn chất lượng..." style="min-height:56px;"></textarea></div></div>
     <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
@@ -3189,14 +3162,39 @@ function pushDxToChi(dx) {
   });
 }
 
-// Khi đề xuất chuyển sang 'da-duyet': cộng kho KT + tạo bản ghi Chi (1 lần duy nhất).
+// Ghi lần mua vào lịch sử của đúng mặt hàng + NCC trong Danh mục (mỗi lần duyệt 1 mốc).
+function recordPurchaseHistory(dx){
+  const ngay=new Date().toLocaleDateString('vi-VN');
+  dxItems(dx).forEach(it=>{
+    const price=parseFloat(it.dongia)||0; if(price<=0) return;
+    const cat=(catalogItems||[]).find(c=> it.itemId ? c.id===it.itemId : (c.name||'').trim().toLowerCase()===(it.ten||'').trim().toLowerCase());
+    if(!cat) return;
+    if(!Array.isArray(cat.suppliers)) cat.suppliers=[];
+    // Tìm NCC theo tên ghi trên dòng đề xuất
+    let sup=cat.suppliers.find(s=>(nccName(s.nccId)||'').trim().toLowerCase()===(it.ncc||'').trim().toLowerCase());
+    if(!sup){
+      const nccRec=(NCC_DATA||[]).find(n=>(n.ten||'').trim().toLowerCase()===(it.ncc||'').trim().toLowerCase());
+      if(nccRec){ sup={nccId:nccRec.id,dvt:it.dvt||cat.dvt||'',gia:price,hasVat:false,vatPct:0,history:[]}; cat.suppliers.push(sup); if(!cat.nccIds) cat.nccIds=[]; if(!cat.nccIds.includes(nccRec.id)) cat.nccIds.push(nccRec.id); }
+    }
+    if(sup){
+      if(!Array.isArray(sup.history)) sup.history=[];
+      if(!sup.history.some(h=>h.note===('ĐX '+dx.id))){       // chống trùng theo mã ĐX
+        sup.history.push({date:ngay,price,note:'ĐX '+dx.id,src:'de-xuat'});
+        sup.gia=price;   // cập nhật giá hiện tại của NCC
+      }
+    }
+  });
+}
+// Khi đề xuất chuyển sang 'da-duyet': cộng kho KT + tạo bản ghi Chi + ghi lịch sử giá (1 lần duy nhất).
 function finalizeDxApproved(dx){
   if(!dx || dx.status!=='da-duyet' || dx._done) return;
   dxItems(dx).forEach(it=> pushDxToKho(it, dx));   // cộng số lượng vào Kho tổng (Kho KT)
   pushDxToChi(dx);                                  // tạo bản ghi Chi cho từng mặt hàng
+  try{ recordPurchaseHistory(dx); }catch(e){}       // ghi giá vào lịch sử theo NCC
   dx._done = true;
   try{ renderKhoTab(); }catch(e){}
   try{ renderChiTab(); }catch(e){}
+  try{ renderCatalog(); }catch(e){}
   try{ syncThuChiSummary(); }catch(e){}
 }
 
@@ -4458,40 +4456,102 @@ document.getElementById('catalog-tbody').innerHTML=items.map(it=>{
 }).join('')||`<tr><td colspan="10" style="text-align:center;padding:30px;color:var(--text-muted);">Kh\u00f4ng t\u00ecm th\u1ea5y m\u1eb7t h\u00e0ng n\u00e0o</td></tr>`;
 }
 
+// G\u1ed9p to\u00e0n b\u1ed9 l\u1ecbch s\u1eed gi\u00e1 c\u1ee7a 1 m\u1eb7t h\u00e0ng: t\u1eeb suppliers[].history + purchaseHistory (c\u0169).
+function itemPriceHistory(item){
+  const h=[];
+  (item.suppliers||[]).forEach(s=>(s.history||[]).forEach(x=>h.push(x)));
+  (item.purchaseHistory||[]).forEach(x=>h.push(x));
+  return h;
+}
 function calcPrices(item){
-const hist=item.purchaseHistory||[];
-if(!hist.length) return {min:0,avg:0,last:0,lastDate:'\u2014'};
-// Ch\u1ec9 l\u1ea5y n\u0103m hi\u1ec7n t\u1ea1i (2026) \u2014 l\u1ecdc theo year trong date string dd/mm/yyyy
+let hist=itemPriceHistory(item);
+// N\u1ebfu ch\u01b0a c\u00f3 m\u1ed1c l\u1ecbch s\u1eed n\u00e0o, d\u00f9ng \u0111\u01a1n gi\u00e1 hi\u1ec7n t\u1ea1i c\u1ee7a t\u1eebng NCC l\u00e0m c\u01a1 s\u1edf.
+if(!hist.length){
+  const gias=(item.suppliers||[]).map(s=>parseFloat(s.gia)||0).filter(v=>v>0);
+  if(!gias.length) return {min:0,avg:0,last:0,lastDate:'\u2014'};
+  const min=Math.min(...gias), avg=Math.round(gias.reduce((a,b)=>a+b,0)/gias.length);
+  return {min,avg,last:gias[gias.length-1],lastDate:'\u2014'};
+}
 const thisYear=hist.filter(h=>(h.date||'').endsWith('2026'));
-const src=thisYear.length?thisYear:hist; // fallback to\u00e0n b\u1ed9 n\u1ebfu ch\u01b0a c\u00f3 n\u0103m nay
-const prices=src.map(h=>h.price);
+const src=thisYear.length?thisYear:hist;
+const prices=src.map(h=>h.price).filter(v=>v>0);
+if(!prices.length) return {min:0,avg:0,last:0,lastDate:'\u2014'};
 const min=Math.min(...prices);
 const avg=Math.round(prices.reduce((a,b)=>a+b,0)/prices.length);
-// L\u1ea7n mua g\u1ea7n nh\u1ea5t: ph\u1ea7n t\u1eed cu\u1ed1i trong hist (gi\u1ea3 s\u1eed sort theo ng\u00e0y mua)
 const lastEntry=hist[hist.length-1];
-return {min,avg,last:lastEntry.price,lastDate:lastEntry.date};
+return {min,avg,last:lastEntry.price,lastDate:lastEntry.date||'\u2014'};
+}
+// ---- Form Danh m\u1ee5c: c\u00e1c d\u00f2ng NCC & Gi\u00e1 ----
+function aiNccOptions(selId){
+  return '<option value="">\u2014 Ch\u1ecdn NCC \u2014</option>'+(NCC_DATA||[]).map(n=>`<option value="${n.id}" ${n.id===selId?'selected':''}>${esc(n.ten)}</option>`).join('');
+}
+function aiSupplierRowHtml(s){
+  s=s||{};
+  const hist=JSON.stringify(s.history||[]).replace(/'/g,'&#39;').replace(/"/g,'&quot;');
+  const defDvt=s.dvt||document.getElementById('ai-dvt')?.value||'';
+  return `<div class="ai-sup-row" data-history="${hist}" style="display:grid;grid-template-columns:1.4fr .7fr 1fr auto 34px 34px;gap:7px;align-items:end;margin-bottom:7px;">
+    <div class="form-group" style="margin:0;"><label style="font-size:10px;">NCC</label><select class="ais-ncc">${aiNccOptions(s.nccId)}</select></div>
+    <div class="form-group" style="margin:0;"><label style="font-size:10px;">\u0110VT</label><input class="ais-dvt" value="${esc(defDvt)}" placeholder="\u0111vt"></div>
+    <div class="form-group" style="margin:0;"><label style="font-size:10px;">\u0110\u01a1n gi\u00e1</label><input type="number" class="ais-gia" value="${s.gia!=null?s.gia:''}" placeholder="0"></div>
+    <div class="form-group" style="margin:0;"><label style="font-size:10px;">VAT</label><div style="display:flex;gap:4px;align-items:center;height:38px;"><input type="checkbox" class="ais-vat" ${s.hasVat?'checked':''} onchange="aiToggleVat(this)"><input type="number" class="ais-vatpct" value="${s.vatPct!=null?s.vatPct:''}" placeholder="%" style="width:48px;${s.hasVat?'':'display:none;'}"></div></div>
+    <button class="btn btn-ghost btn-sm" type="button" onclick="aiSupHistory(this)" title="L\u1ecbch s\u1eed mua" style="height:38px;padding:0;">\ud83d\udccb</button>
+    <button class="btn btn-ghost btn-sm" type="button" onclick="aiRemoveSupplier(this)" title="Xo\u00e1 NCC" style="height:38px;padding:0;">\ud83d\uddd1</button>
+  </div>`;
+}
+function aiRenderSuppliers(list){
+  const box=document.getElementById('ai-suppliers'); if(!box) return;
+  box.innerHTML=(list&&list.length?list:[{}]).map(s=>aiSupplierRowHtml(s)).join('');
+}
+function aiAddSupplier(){ const box=document.getElementById('ai-suppliers'); if(box) box.insertAdjacentHTML('beforeend',aiSupplierRowHtml({})); }
+function aiRemoveSupplier(btn){ const row=btn.closest('.ai-sup-row'); const box=document.getElementById('ai-suppliers'); if(box&&box.querySelectorAll('.ai-sup-row').length<=1){ aiRenderSuppliers([]); return; } if(row) row.remove(); }
+function aiToggleVat(cb){ const pct=cb.closest('div').querySelector('.ais-vatpct'); if(pct) pct.style.display=cb.checked?'':'none'; }
+function aiSupHistory(btn){
+  const row=btn.closest('.ai-sup-row'); if(!row) return;
+  let hist=[]; try{ hist=JSON.parse(row.getAttribute('data-history')||'[]'); }catch(e){}
+  const nccId=row.querySelector('.ais-ncc')?.value;
+  const wrap=document.getElementById('ai-history-wrap'), list=document.getElementById('ai-history-list'), title=document.getElementById('ai-history-title');
+  if(title) title.textContent='\ud83d\udccb L\u1ecbch s\u1eed mua \u2014 '+(nccName(nccId)||'NCC');
+  if(list) list.innerHTML = hist.length
+    ? hist.slice().reverse().map(h=>`<div class="purchase-row"><span>${esc(h.date)||'\u2014'}</span><span style="font-weight:600;color:var(--navy);">${fmt(h.price)}</span>${h.note?`<span style="color:var(--text-muted);font-size:10px;">${esc(h.note)}</span>`:''}</div>`).join('')
+    : '<div style="font-size:12px;color:var(--text-muted);padding:8px 0;">Ch\u01b0a c\u00f3 l\u1ecbch s\u1eed mua t\u1eeb NCC n\u00e0y.</div>';
+  if(wrap) wrap.style.display='';
+}
+// \u0110\u1ecdc c\u00e1c d\u00f2ng NCC \u1edf form \u2192 m\u1ea3ng suppliers
+function aiReadSuppliers(){
+  const today=new Date().toLocaleDateString('vi-VN');
+  return [...document.querySelectorAll('#ai-suppliers .ai-sup-row')].map(row=>{
+    const nccId=row.querySelector('.ais-ncc')?.value||'';
+    if(!nccId) return null;
+    let history=[]; try{ history=JSON.parse(row.getAttribute('data-history')||'[]'); }catch(e){}
+    const gia=parseFloat(row.querySelector('.ais-gia')?.value)||0;
+    // Seed 1 m\u1ed1c l\u1ecbch s\u1eed khi c\u00f3 gi\u00e1 m\u00e0 ch\u01b0a c\u00f3 l\u1ecbch s\u1eed n\u00e0o (gi\u00e1 kh\u1edfi t\u1ea1o).
+    if(gia>0 && !history.length) history=[{date:today,price:gia,note:'Gi\u00e1 kh\u1edfi t\u1ea1o'}];
+    return {
+      nccId,
+      dvt:(row.querySelector('.ais-dvt')?.value||'').trim(),
+      gia,
+      hasVat:!!row.querySelector('.ais-vat')?.checked,
+      vatPct:parseFloat(row.querySelector('.ais-vatpct')?.value)||0,
+      history,
+    };
+  }).filter(Boolean);
 }
 
 function saveItem(){
 const name=document.getElementById('ai-name').value.trim();
 if(!name){ showToast('Vui l\u00f2ng nh\u1eadp t\u00ean m\u1eb7t h\u00e0ng!',2500,'error'); return; }
-const newPrice=parseFloat(document.getElementById('ai-last').value)||0;
-const newDate=document.getElementById('ai-last-date').value.split('-').reverse().join('/');
-const newNote=document.getElementById('ai-purchase-note').value.trim();
-const selectedNcc=[...document.querySelectorAll('#ai-ncc-list input:checked')].map(cb=>cb.value);
-const base={code:document.getElementById('ai-code').value.trim(),name,dvt:document.getElementById('ai-dvt').value,bophan:document.getElementById('ai-bophan').value,nccIds:selectedNcc,note:document.getElementById('ai-note').value.trim()};
+const suppliers=aiReadSuppliers();
+const nccIds=[...new Set(suppliers.map(s=>s.nccId))];   // suy ra danh s\u00e1ch NCC li\u00ean k\u1ebft
+const base={code:document.getElementById('ai-code').value.trim(),name,dvt:document.getElementById('ai-dvt').value,bophan:document.getElementById('ai-bophan').value,nccIds,suppliers,note:document.getElementById('ai-note').value.trim()};
 if(editingItemId){
   const idx=catalogItems.findIndex(x=>x.id===editingItemId);
-  if(idx>-1){
-    catalogItems[idx]={...catalogItems[idx],...base};
-    if(newPrice>0) catalogItems[idx].purchaseHistory.push({date:newDate,price:newPrice,note:newNote});
-  }
+  if(idx>-1) catalogItems[idx]={...catalogItems[idx],...base};
 } else {
-  const hist=newPrice>0?[{date:newDate,price:newPrice,note:newNote}]:[];
-  catalogItems.push({id:'IT'+Date.now(),...base,purchaseHistory:hist});
+  catalogItems.push({id:'IT'+Date.now(),...base,purchaseHistory:[]});
 }
 closeModal('modal-add-item');
 renderCatalog();
+syncNow();
 }
 
 // ===== ĐỀ XUẤT MUA HÀNG — mô hình nhiều mặt hàng/1 phiếu =====
@@ -4591,11 +4651,27 @@ function dxNccInput(inp, showAll){
   let html='';
   if(note) html+=`<div class="dropdown-item" style="color:var(--text-muted);cursor:default;">${esc(note)}</div>`;
   if(filtered.length){
-    html+=filtered.slice(0,60).map(n=>`<div class="dropdown-item" onmousedown="dxSetCell(this,'${esc(n).replace(/'/g,"\\'")}')"><span>${esc(n)}</span></div>`).join('');
+    html+=filtered.slice(0,60).map(n=>`<div class="dropdown-item" onmousedown="dxPickNccPrice(this,'${esc(n).replace(/'/g,"\\'")}')"><span>${esc(n)}</span></div>`).join('');
   } else if(!note){
     html+='<div class="dropdown-item" style="color:var(--text-muted);cursor:default;">Không có NCC phù hợp — có thể gõ tay</div>';
   }
   dd.innerHTML=html; dd.classList.add('open');
+}
+// Chọn NCC ở đề xuất → điền tên NCC + tự điền ĐVT/Đơn giá theo giá của NCC đó cho mặt hàng.
+function dxPickNccPrice(el, name){
+  const row=el.closest('.dx-item-row');
+  dxSetCell(el, name);
+  if(!row) return;
+  const id=row.dataset.itemId||'';
+  const it=id?(catalogItems||[]).find(x=>x.id===id):null;
+  if(it && Array.isArray(it.suppliers)){
+    const sup=it.suppliers.find(s=>(nccName(s.nccId)||'').trim().toLowerCase()===(name||'').trim().toLowerCase());
+    if(sup){
+      const dvt=row.querySelector('.dxr-dvt'); if(dvt && sup.dvt) dvt.value=sup.dvt;
+      const dg=row.querySelector('.dxr-dongia'); if(dg && (parseFloat(sup.gia)||0)>0) dg.value=sup.gia;   // giá riêng của NCC này
+      dxUpdateTotal();
+    }
+  }
 }
 function dxUpdateTotal(){
   let tong=0;
@@ -5269,31 +5345,82 @@ function renderKhoTab(){
   }).join(''):`<tr><td colspan="12" style="text-align:center;padding:30px;color:var(--text-muted);">Kho trống — <a href="#" onclick="openKhoAddItem()" style="color:var(--gold);">+ Thêm hàng</a></td></tr>`;
 }
 
+// Thống kê 1 dòng kho nhưng CHỈ tính nhập/xuất/huỷ THỰC (bỏ transfer nội bộ) — dùng cho kho tổng.
+function calcKyStatsReal(item){
+  const inKy=(item.lichSu||[]).filter(h=>!(h.loai==='nhap'&&(h.lydo||'').includes('đầu kỳ')));
+  const nhap=inKy.filter(h=>h.loai==='nhap').reduce((s,h)=>s+h.sl,0);
+  const xuat=inKy.filter(h=>h.loai==='xuat').reduce((s,h)=>s+h.sl,0);
+  const huy =inKy.filter(h=>h.loai==='huy').reduce((s,h)=>s+h.sl,0);
+  return {nhap,xuat,huy};
+}
+// Gom các dòng kho theo mặt hàng (khoá = mã hàng, fallback tên) — cộng mọi bộ phận.
+function khoGroups(){
+  const map=new Map();
+  KHO_DATA.forEach(it=>{
+    const key=(it.ma||it.ten||'').trim().toLowerCase();
+    if(!map.has(key)) map.set(key,{ma:it.ma,ten:it.ten,dvt:it.dvt,rows:[]});
+    map.get(key).rows.push(it);
+  });
+  return [...map.values()];
+}
 function renderKhoTongHop(search,fVitri){
-  const items=KHO_DATA.filter(it=>(!search||(it.ma+it.ten).toLowerCase().includes(search))&&(!fVitri||it.vitri===fVitri));
-  const cnt=document.getElementById('kho-count'); if(cnt) cnt.textContent=items.length+' mặt hàng';
+  let groups=khoGroups().filter(g=>!search||((g.ma||'')+(g.ten||'')).toLowerCase().includes(search));
+  const cnt=document.getElementById('kho-count'); if(cnt) cnt.textContent=groups.length+' mặt hàng';
+  // KPI tổng: chỉ nhập/xuất/huỷ thực toàn kho (bỏ transfer nội bộ)
   let tN=0,tX=0,tH=0;
-  items.forEach(it=>{const s=calcKyStats(it);tN+=s.nhap;tX+=s.xuat;tH+=s.huy;});
-  document.getElementById('kho-kpi-items').textContent=KHO_DATA.length;
+  KHO_DATA.forEach(it=>{const s=calcKyStatsReal(it);tN+=s.nhap;tX+=s.xuat;tH+=s.huy;});
+  document.getElementById('kho-kpi-items').textContent=groups.length;
   document.getElementById('kho-kpi-nhap').textContent=tN;
   document.getElementById('kho-kpi-xuat').textContent=tX;
   document.getElementById('kho-kpi-huy').textContent=tH;
-  document.getElementById('kho-thead').innerHTML=`<tr><th>Mã</th><th>Tên hàng</th><th>Kho</th><th>Vị trí</th><th>ĐVT</th><th>Tồn đầu</th><th>Nhập</th><th>Xuất</th><th>Huỷ</th><th style="color:var(--green);">Còn lại</th></tr>`;
-  document.getElementById('kho-tbody').innerHTML=items.map(it=>{
-    const s=calcKyStats(it);
-    const cc=s.con<=0?'var(--red)':s.con<=5?'var(--yellow)':'var(--green)';
+  document.getElementById('kho-thead').innerHTML=`<tr><th>Mã</th><th>Tên hàng</th><th>ĐVT</th><th>Tồn đầu</th><th style="color:var(--green)">Nhập</th><th style="color:var(--yellow)">Xuất</th><th style="color:var(--red)">Huỷ</th><th style="color:var(--green);font-weight:700">Còn lại</th><th>Bộ phận giữ</th><th>Thao tác</th></tr>`;
+  document.getElementById('kho-tbody').innerHTML=groups.map(g=>{
+    let tonDau=0,nhap=0,xuat=0,huy=0,con=0;
+    g.rows.forEach(it=>{ const r=calcKyStatsReal(it); const s=calcKyStats(it); tonDau+=it.ton_dau||0; nhap+=r.nhap; xuat+=r.xuat; huy+=r.huy; con+=s.con; });
+    const cc=con<=0?'var(--red)':con<=5?'var(--yellow)':'var(--green)';
+    const bpBadges=g.rows.filter(it=>calcKyStats(it).con>0).map(it=>`<span class="badge badge-navy" style="font-size:9px;margin:1px;">${KHO_BP_LABELS[it.bophan]||it.bophan}: ${calcKyStats(it).con}</span>`).join('')||'<span style="font-size:11px;color:var(--text-muted);">—</span>';
     return `<tr>
-      <td style="font-size:11px;font-weight:600;color:var(--text-muted);">${it.ma}</td>
-      <td><div style="font-weight:500;">${it.ten}</div></td>
-      <td><span class="badge badge-navy" style="font-size:10px;">${KHO_BP_LABELS[it.bophan]||it.bophan}</span></td>
-      <td style="font-size:11px;">${it.vitri}</td><td>${it.dvt}</td>
-      <td style="text-align:center;font-weight:600;">${it.ton_dau}</td>
-      <td style="text-align:center;color:var(--green);">${s.nhap||'—'}</td>
-      <td style="text-align:center;color:var(--yellow);">${s.xuat||'—'}</td>
-      <td style="text-align:center;color:var(--red);">${s.huy||'—'}</td>
-      <td style="text-align:center;font-weight:700;color:${cc};">${s.con}</td>
+      <td style="font-size:11px;font-weight:600;color:var(--text-muted);">${esc(g.ma)}</td>
+      <td><div style="font-weight:500;">${esc(g.ten)}</div></td>
+      <td>${esc(g.dvt)}</td>
+      <td style="text-align:center;font-weight:600;">${tonDau}</td>
+      <td style="text-align:center;color:var(--green);">${nhap||'—'}</td>
+      <td style="text-align:center;color:var(--yellow);">${xuat||'—'}</td>
+      <td style="text-align:center;color:var(--red);">${huy||'—'}</td>
+      <td style="text-align:center;font-weight:700;font-size:15px;color:${cc};">${con}</td>
+      <td style="max-width:200px;">${bpBadges}</td>
+      <td><button class="btn btn-ghost btn-sm" onclick="openKhoHistoryByMa('${esc(g.ma||g.ten).replace(/'/g,"\\'")}')" title="Lịch sử gộp tất cả bộ phận">📋 Lịch sử</button></td>
     </tr>`;
   }).join('')||`<tr><td colspan="10" style="text-align:center;padding:30px;color:var(--text-muted);">Chưa có dữ liệu kho</td></tr>`;
+}
+// Lịch sử GỘP của 1 mặt hàng ở tất cả bộ phận (theo mã, fallback tên).
+function openKhoHistoryByMa(maOrTen){
+  const key=(maOrTen||'').trim().toLowerCase();
+  const rows=KHO_DATA.filter(it=>((it.ma||it.ten||'').trim().toLowerCase())===key);
+  if(!rows.length) return;
+  const ten=rows[0].ten, ma=rows[0].ma, dvt=rows[0].dvt;
+  let con=0; rows.forEach(it=>con+=calcKyStats(it).con);
+  document.getElementById('kho-hist-title').textContent=`📋 Lịch Sử (gộp mọi bộ phận): ${ten} (${ma})`;
+  document.getElementById('kho-hist-summary').innerHTML=rows.map(it=>{const s=calcKyStats(it);return `<div style="padding:8px 14px;background:var(--cream);border-radius:8px;font-size:13px;"><div style="font-size:10px;color:var(--text-muted);">${KHO_BP_LABELS[it.bophan]||it.bophan}</div><div style="font-weight:700;color:var(--green);">${s.con} ${dvt}</div></div>`;}).join('')+`<div style="padding:8px 14px;background:var(--green-bg);border-radius:8px;font-size:13px;"><div style="font-size:10px;color:var(--text-muted);">TỔNG CÒN</div><div style="font-weight:700;color:var(--green);">${con} ${dvt}</div></div>`;
+  const loaiMap={nhap:'Nhập vào',xuat:'Xuất ra','transfer-in':'Nhận Transfer','transfer-out':'Transfer đi',huy:'Huỷ'};
+  const all=[];
+  rows.forEach(it=>(it.lichSu||[]).forEach(h=>all.push({...h,bophan:it.bophan})));
+  const parseD=s=>{const p=(s||'').split('/');return new Date(+p[2]||0,(+p[1]||1)-1,+p[0]||1).getTime();};
+  all.sort((a,b)=>parseD(b.ngay)-parseD(a.ngay));
+  document.getElementById('kho-hist-body').innerHTML=all.map(h=>{
+    const sc=h.loai==='nhap'||h.loai==='transfer-in'?'var(--green)':h.loai==='huy'?'var(--red)':'var(--yellow)';
+    const sg=h.loai==='nhap'||h.loai==='transfer-in'?'+':'-';
+    const route=`${h.tu?(KHO_BP_LABELS[h.tu]||h.tu):''}${h.den?' → '+(KHO_BP_LABELS[h.den]||h.den):''}`;
+    return `<tr>
+      <td style="font-size:12px;">${h.ngay}</td>
+      <td><span class="badge badge-navy" style="font-size:10px;">${loaiMap[h.loai]||h.loai}</span> <span style="font-size:10px;color:var(--text-muted);">[${KHO_BP_LABELS[h.bophan]||h.bophan}]</span></td>
+      <td style="font-weight:700;color:${sc};">${sg}${h.sl}</td>
+      <td style="font-size:11px;color:var(--text-muted);">${route||'—'}</td>
+      <td style="font-size:12px;">${esc(h.lydo)||'—'}</td>
+      <td style="font-size:12px;">${esc(h.nguoi)||'—'}</td>
+    </tr>`;
+  }).join('')||`<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted);">Chưa có lịch sử</td></tr>`;
+  openModal('modal-kho-history');
 }
 
 function renderKhoLogTab(type){
@@ -5684,19 +5811,13 @@ function editItem(id){
   fillCatSelect('ai-bophan','bophan',{});
   const bp=document.getElementById('ai-bophan'); if(bp) bp.value=it.bophan||'buong-phong';
   const note=document.getElementById('ai-note'); if(note) note.value=it.note||'';
-  // Reset ô nhập lần mua mới (chỉ nhập khi có lần mua mới)
-  ['ai-last','ai-purchase-note'].forEach(x=>{const el=document.getElementById(x);if(el)el.value='';});
-  const prev=document.getElementById('ai-price-preview'); if(prev) prev.style.display='none';
-  renderAiNccList(it.nccIds||[]);
-  // Lịch sử mua (read-only)
-  const histWrap=document.getElementById('ai-history-wrap'), histList=document.getElementById('ai-history-list');
-  if(histWrap&&histList){
-    const h=(it.purchaseHistory||[]);
-    if(h.length){
-      histWrap.style.display='';
-      histList.innerHTML=h.slice().reverse().map(r=>`<div class="purchase-row"><span>${esc(r.date)}</span><span style="font-weight:600;color:var(--navy);">${fmt(r.price)}</span>${r.note?`<span style="color:var(--text-muted);font-size:10px;">${esc(r.note)}</span>`:''}</div>`).join('');
-    } else histWrap.style.display='none';
+  const hist=document.getElementById('ai-history-wrap'); if(hist) hist.style.display='none';
+  // Nạp các dòng NCC & Giá. Tương thích item cũ (chỉ có nccIds) → dựng suppliers từ nccIds.
+  let sups=it.suppliers;
+  if(!sups || !sups.length){
+    sups=(it.nccIds||[]).map(nid=>({nccId:nid, dvt:it.dvt||'', gia:0, hasVat:false, vatPct:0, history:(it.purchaseHistory||[])}));
   }
+  aiRenderSuppliers(sups);
   openModal('modal-add-item');
 }
 // Nạp checkbox NCC (từ NCC_DATA) vào form Danh mục hàng hóa
@@ -5710,11 +5831,10 @@ function nccName(id){ const n=(NCC_DATA||[]).find(x=>x.id===id)||(typeof NCC_LIS
 function openAddItemModal(){
   editingItemId=null; editingCatalogId=null;
   document.getElementById('ai-modal-title').textContent='📦 Thêm Mặt Hàng';
-  ['ai-name','ai-code','ai-ghichu','ai-note','ai-last','ai-purchase-note'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
-  const prev=document.getElementById('ai-price-preview'); if(prev) prev.style.display='none';
+  ['ai-name','ai-code','ai-note'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   const hist=document.getElementById('ai-history-wrap'); if(hist) hist.style.display='none';
   fillCatSelect('ai-bophan','bophan',{});
-  renderAiNccList([]);
+  aiRenderSuppliers([]);
   openModal('modal-add-item');
 }
 function switchCatalogTab(tab,el){
