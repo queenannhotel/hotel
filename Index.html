@@ -94,7 +94,7 @@ function lsLoad(){
     if(d.sxData?.length)  SX_DATA=d.sxData;
     if(d.nsBhxh)          NS_BHXH=d.nsBhxh;
     if(d.nsTncn)          NS_TNCN=d.nsTncn;
-    if(d.cats){ ['ncc','thu','bophan'].forEach(k=>{ if(Array.isArray(d.cats[k])) CATS[k]=d.cats[k]; }); rebuildBpLabels(); }
+    if(d.cats){ ['ncc','thu','bophan'].forEach(k=>{ if(Array.isArray(d.cats[k])) CATS[k]=d.cats[k]; }); enforceThuCats(); rebuildBpLabels(); }
     return true;
   }catch(e){return false;}
 }
@@ -2276,9 +2276,12 @@ let DX_DATA  = Array.isArray(window.DX_DATA)  ? window.DX_DATA  : [];   // Đề
 let NCC_DATA = Array.isArray(window.NCC_DATA) ? window.NCC_DATA : [];   // Nhà cung cấp
 // ===== DANH MỤC TẬP TRUNG (Giám đốc thêm/xóa; đồng bộ mọi máy) =====
 // ncc/thu: mảng chuỗi; bophan: mảng {v,l} (value lưu trong dữ liệu, l là nhãn hiển thị)
+// Danh mục Doanh Thu — NGUỒN CHUẨN dùng chung cho form Ghi Thu và tab Báo cáo tài chính.
+const THU_CATEGORIES = ['Doanh thu phòng','Buffet','Cơm trưa','Minibar','Decor','Khác'];
+function enforceThuCats(){ if(typeof CATS==='object'&&CATS) CATS.thu = THU_CATEGORIES.slice(); }
 let CATS = {
   ncc: ['Thực phẩm','Đồ uống','Rau củ quả','Thịt - Hải sản','Amenity','CCDC','Hóa chất','Vật tư tiêu hao','Đồ vải','Thiết bị','Kỹ thuật','Trang trí','Văn phòng phẩm','Dịch vụ','Khác'],
-  thu: ['Doanh thu phòng','Buffet','Cơm trưa','Minibar','Decor','Khác'],
+  thu: THU_CATEGORIES.slice(),
   bophan: [
     {v:'buong-phong',l:'Buồng phòng'},{v:'nha-hang',l:'Nhà hàng'},{v:'bep',l:'Bếp'},
     {v:'le-tan',l:'Lễ tân'},{v:'ky-thuat',l:'Kỹ thuật'},{v:'sale',l:'Sale'},
@@ -2295,7 +2298,8 @@ const HD_LABELS = {'co-vat':'Có VAT','ko-vat':'Không VAT','sau-tt':'Sau khi TT
 // Gộp các giá trị đã dùng trong dữ liệu vào danh mục (không mất dữ liệu cũ)
 function catMergeUsed(){
   [...new Set((NCC_DATA||[]).map(n=>n.danhmuc).filter(Boolean))].forEach(u=>{ if(!CATS.ncc.includes(u)) CATS.ncc.push(u); });
-  [...new Set((THU_DATA||[]).map(t=>t.danhmuc).filter(Boolean))].forEach(u=>{ if(!CATS.thu.includes(u)) CATS.thu.push(u); });
+  // Danh mục Thu cố định theo Báo cáo tài chính — không gộp giá trị cũ, luôn ép về THU_CATEGORIES.
+  enforceThuCats();
 }
 // Đổ options cho 1 <select> từ CATS[key]; opts:{selected, allLabel}
 function fillCatSelect(id, key, opts={}){
@@ -2560,7 +2564,9 @@ async function enterApp(session){
   applyPermissions();               // áp lại theo tab tuỳ chỉnh
   refreshAllCatSelects();           // nạp danh mục vào mọi dropdown
   // Nút ⚙ quản lý danh mục chỉ hiện cho Giám đốc
-  ['btn-cat-ncc','btn-cat-thu','btn-cat-bophan'].forEach(id=>{ const e=document.getElementById(id); if(e) e.style.display=currentUser.role==='giamdoc'?'inline-flex':'none'; });
+  // Danh mục Thu cố định theo Báo cáo → không cho quản lý tay (ẩn btn-cat-thu).
+  ['btn-cat-ncc','btn-cat-bophan'].forEach(id=>{ const e=document.getElementById(id); if(e) e.style.display=currentUser.role==='giamdoc'?'inline-flex':'none'; });
+  const bThu=document.getElementById('btn-cat-thu'); if(bThu) bThu.style.display='none';
   // Chỉ hiện nút Xóa data / Nhập Sheet cũ cho Giám đốc
   const btnClear=document.getElementById('btn-clear-data');
   if(btnClear) btnClear.style.display=currentUser.role==='giamdoc'?'flex':'none';
@@ -5254,7 +5260,8 @@ function updateDashboardKPI(){
 function renderBaoCao(){
   // ===== Doanh thu theo danh mục (từ THU_DATA thực tế) — CHỈ tính VND (bỏ ngoại tệ) =====
   const tongThu = THU_DATA.reduce((s,r)=>s+thuVnd(r),0);
-  const nhomMap = {
+  // nhomMap dựng theo THU_CATEGORIES (nguồn chuẩn dùng chung với form Ghi Thu).
+  const nhomCfg = {
     'Doanh thu phòng': {id:'phong',  color:'var(--gold)'},
     'Buffet':          {id:'buffet', color:'#4A6FA5'},
     'Cơm trưa':        {id:'comtrua',color:'#9B8EC4'},
@@ -5262,6 +5269,8 @@ function renderBaoCao(){
     'Decor':           {id:'decor',  color:'#E8904A'},
     'Khác':            {id:'khac',   color:'#aaa'},
   };
+  const nhomMap = {};
+  THU_CATEGORIES.forEach(n=>{ nhomMap[n]=nhomCfg[n]||{id:'khac',color:'#aaa'}; });
   const totals = {};
   THU_DATA.forEach(r=>{
     const key = nhomMap[r.danhmuc] ? r.danhmuc : 'Khác';
@@ -6201,7 +6210,7 @@ const COLLECTIONS = {
   mbData:    { read:()=>_mapDump(MB_DATE_DATA),        write:r=>{const m={};r.forEach(x=>m[x.id]=x.obj);MB_DATE_DATA=m;},        render:()=>{try{renderMinibar();}catch(e){}} },
   hvRewash:  { read:()=>[{id:'_', obj:HV_REWASH_DATA}], write:r=>{const x=r.find(v=>v.id==='_'); HV_REWASH_DATA=x?x.obj:{};}, render:()=>{try{renderHangVai();}catch(e){}} },
   hvCols:    { read:()=>[{id:'_', obj:HV_REWASH_COLS}], write:r=>{const x=r.find(v=>v.id==='_'); HV_REWASH_COLS=x?x.obj:[];}, render:()=>{try{renderHangVai();}catch(e){}} },
-  cats:      { read:()=>[{id:'_', obj:CATS}], write:r=>{const x=r.find(v=>v.id==='_'); if(x&&x.obj){ CATS=x.obj; rebuildBpLabels(); }}, render:()=>{try{refreshAllCatSelects();}catch(e){}} },
+  cats:      { read:()=>[{id:'_', obj:CATS}], write:r=>{const x=r.find(v=>v.id==='_'); if(x&&x.obj){ CATS=x.obj; enforceThuCats(); rebuildBpLabels(); }}, render:()=>{try{refreshAllCatSelects();}catch(e){}} },
 };
 
 // lastSnapshot phản ánh trạng thái ĐÃ ở trên cloud: {collection:{id:json}}
