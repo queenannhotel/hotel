@@ -801,7 +801,7 @@ textarea{resize:vertical;min-height:68px;}
       <div class="grid-2">
         <div class="card">
           <div class="card-header"><div class="card-title">🔄 Giao Dịch Gần Nhất</div></div>
-          <div class="card-body" style="padding:0;"><table><thead><tr><th>Mô tả</th><th>Loại</th><th>Số tiền</th></tr></thead><tbody>
+          <div class="card-body" style="padding:0;"><table><thead><tr><th>Mô tả</th><th>Loại</th><th>Số tiền</th></tr></thead><tbody id="db-recent-tx">
             <tr><td colspan="3" style="text-align:center;color:var(--text-muted);padding:16px;">Chưa có giao dịch nào</td></tr>
           </tbody></table></div>
         </div>
@@ -862,7 +862,7 @@ textarea{resize:vertical;min-height:68px;}
       <div class="section-header"><span class="section-title">⬆ Ghi Thu</span>
         <div style="display:flex;gap:8px;">
           <button class="btn btn-excel btn-sm" onclick="exportExcel('tab-thu')">📊 Xuất Excel</button>
-          <button class="btn btn-gold" onclick="openModal('modal-thu')">+ Ghi Thu Mới</button>
+          <button class="btn btn-gold" onclick="openThuModalNew()">+ Ghi Thu Mới</button>
         </div>
       </div>
       <div class="card">
@@ -875,7 +875,7 @@ textarea{resize:vertical;min-height:68px;}
             <span id="thu-count" style="font-size:12px;color:var(--text-muted);margin-left:4px;"></span>
           </div>
         </div>
-        <div class="table-wrap wide"><table><thead><tr><th>STT</th><th>Ngày</th><th>Danh mục</th><th>Mô tả</th><th>Bộ phận</th><th>Số tiền (đ)</th><th>Phương thức TT</th><th>Người thu</th><th>Ghi chú</th></tr></thead>
+        <div class="table-wrap wide"><table><thead><tr><th>STT</th><th>Ngày</th><th>Danh mục</th><th>Mô tả</th><th>Bộ phận</th><th>Số tiền</th><th>Phương thức TT</th><th>Người thu</th><th>Ghi chú</th><th></th></tr></thead>
         <tbody id="tbl-thu-body"></tbody></table></div>
       </div>
     </div>
@@ -1412,7 +1412,7 @@ textarea{resize:vertical;min-height:68px;}
       </div>
       <div class="grid-3">
         <div class="card"><div class="card-header"><div class="card-title">📊 Tổng hợp T7/2026</div></div><div class="card-body">
-          <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);"><span>Tổng Thu</span><strong class="amount-pos">0đ</strong></div>
+          <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);"><span>Tổng Thu</span><strong class="amount-pos" id="tc-tong-thu-panel">0đ</strong></div>
           <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);"><span>Tổng Chi</span><strong class="amount-neg" id="tc-tong-chi-panel">0đ</strong></div>
           <div style="display:flex;justify-content:space-between;padding:10px 0;"><span style="font-weight:600;">Lợi Nhuận</span><strong style="color:var(--yellow);font-size:16px;" id="tc-loi-nhuan-panel">0đ</strong></div>
         </div></div>
@@ -1986,7 +1986,16 @@ textarea{resize:vertical;min-height:68px;}
     <div class="modal-header"><span class="modal-title">💰 Ghi Khoản Thu Mới</span><button class="close-btn" onclick="closeModal('modal-thu')">✕</button></div>
     <div class="form-row">
       <div class="form-group"><label>Ngày thu</label><input type="date" id="thu-ngay" value="2026-07-06"></div>
-      <div class="form-group"><label>Số tiền (đồng) <span style="color:var(--red);">*</span></label><input type="number" id="thu-sotien" placeholder="VD: 12500000"></div>
+      <div class="form-group"><label>Số tiền <span style="color:var(--red);">*</span></label>
+        <div style="display:flex;gap:7px;">
+          <input type="number" id="thu-sotien" placeholder="VD: 12500000" style="flex:1;">
+          <select id="thu-currency" style="width:92px;">
+            <option value="VND">VND</option><option value="USD">USD</option><option value="EUR">EUR</option>
+            <option value="RUB">RUB</option><option value="JPY">JPY</option><option value="CNY">CNY</option>
+            <option value="GBP">GBP</option><option value="KRW">KRW</option><option value="AUD">AUD</option>
+          </select>
+        </div>
+      </div>
     </div>
     <div class="form-row">
       <div class="form-group">
@@ -2852,46 +2861,82 @@ const NCC_LIST=[];
 let catalogItems=[];
 
 // ==================== EXPORT CSV ====================
-function exportCSV(section){
-  let filename='', headers=[], rows=[];
-  if(section==='thu'){
-    filename='GhiThu.csv'; headers=['ID','Ngày','Mô tả','Số tiền','Danh mục','Bộ phận','PTTT','Người ghi'];
-    rows=THU_DATA.map(r=>[r.id,r.ngay,r.mota,r.sotien,r.danhmuc,r.bophan,r.pttt,r.nguoi||'']);
-  } else if(section==='chi'){
-    filename='GhiChi.csv'; headers=['ID','Ngày','Mô tả','Số tiền','Danh mục','Bộ phận','PTTT','Người ghi'];
-    rows=CHI_DATA.map(r=>[r.id,r.ngay,r.mota,r.sotien,r.danhmuc,r.bophan,r.pttt,r.nguoi||'']);
-  } else if(section==='kho'){
-    filename='KhoHang.csv'; headers=['Mã','Tên','ĐVT','Bộ phận','Vị trí','Tồn kho'];
-    rows=KHO_DATA.map(r=>[r.ma,r.ten,r.dvt,r.bophan,r.vitri||'',r.ton_dau||0]);
-  } else if(section==='danh-muc'){
-    filename='DanhMuc_HangHoa.csv';
-    headers=['Mã hàng','Tên mặt hàng','ĐVT','Bộ phận','NCC liên kết','Giá thấp nhất năm (đ)','Giá TB năm (đ)','Lần mua gần nhất (đ)','Ngày mua gần nhất'];
-    rows=catalogItems.map(it=>{ const p=calcPrices(it); const nccs=(it.nccIds||[]).map(nid=>nccName(nid)).filter(Boolean).join(' / '); return [it.code,it.name,it.dvt,BP_LABELS[it.bophan]||it.bophan,nccs,p.min,p.avg,p.last,p.lastDate]; });
-  } else if(section==='bao-cao'){
-    filename='BaoCao_TaoChinh_T7_2026.csv';
-    headers=['Hạng mục','Giá trị (đ)','Tỷ trọng'];
-    rows=[['Chưa có dữ liệu','—','—']];
-  } else if(section==='nha-cung-cap'){
-    filename='NhaCungCap.csv';
-    headers=['Tên NCC','Danh mục','Đặt hàng qua','SĐT','Email','Người phụ trách','Địa chỉ','PTTT','Hóa đơn','Hợp đồng','Ghi chú'];
-    rows=NCC_DATA.map(r=>[r.ten,r.danhmuc,r.ptdh,r.sdt,r.email,r.nguoi,r.diachi,r.pttt,HD_LABELS[r.hoadon]||r.hoadon,r.hopdong==='co'?'Có HĐ':'Không HĐ',r.ghichu]);
-  } else if(section==='cong-no'){
-    filename='CongNo_T7_2026.csv';
-    headers=['Loại','Khách hàng/NCC','Chi tiết','Số tiền','Hạn TT','Tình trạng'];
-    const pt=[...document.querySelectorAll('#tbl-pt tbody tr')].map(tr=>{const c=[...tr.querySelectorAll('td')];return['Phải thu',c[0].innerText,c[1].innerText,c[2].innerText,c[3].innerText,c[4].innerText];});
-    const ptr=[...document.querySelectorAll('#tbl-ptr tbody tr')].map(tr=>{const c=[...tr.querySelectorAll('td')];return['Phải trả',c[0].innerText,c[1].innerText,c[2].innerText,c[3].innerText,c[4].innerText];});
-    rows=[...pt,...ptr];
-  } else return;
-
-  // Build CSV with BOM for Vietnamese
-  const BOM='\uFEFF';
+// Ghi 1 bảng ra file: ưu tiên .xlsx qua SheetJS (chạy tốt trên iPad), fallback CSV blob.
+function writeSheet(baseName, headers, rows){
+  const aoa=[headers, ...rows];
+  if(typeof XLSX!=='undefined' && XLSX.utils && XLSX.writeFile){
+    try{
+      const ws=XLSX.utils.aoa_to_sheet(aoa);
+      const wb=XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+      XLSX.writeFile(wb, baseName+'.xlsx');
+      return;
+    }catch(e){ /* rơi xuống CSV */ }
+  }
   const escape=v=>{ const s=String(v??''); return s.includes(',')||s.includes('"')||s.includes('\n')?`"${s.replace(/"/g,'""')}"`:s; };
-  const csv=BOM+[headers,...rows].map(r=>r.map(escape).join(',')).join('\r\n');
+  const csv='﻿'+aoa.map(r=>r.map(escape).join(',')).join('\r\n');
   const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
   const url=URL.createObjectURL(blob);
-  const a=document.createElement('a'); a.href=url; a.download=filename; a.click();
-  URL.revokeObjectURL(url);
+  const a=document.createElement('a'); a.href=url; a.download=baseName+'.csv'; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url), 1500);
 }
+
+// Xuất Excel thống nhất cho mọi tab.
+function exportExcel(section){
+  const S={ 'tab-thu':'thu', 'tab-chi':'chi' }[section] || section;
+  let name='', headers=[], rows=[];
+  const HD=(h)=> (typeof HD_LABELS!=='undefined' && HD_LABELS[h]) || h || '';
+  if(S==='thu'){
+    name='GhiThu'; headers=['ID','Ngày','Mô tả','Số tiền','Loại tiền','Danh mục','Bộ phận','PTTT','Người thu'];
+    rows=THU_DATA.map(r=>[r.id,r.ngay,r.mota,r.sotien,r.currency||'VND',r.danhmuc,r.bophan,r.pttt,r.nguoi||'']);
+  } else if(S==='chi'){
+    name='GhiChi'; headers=['ID','Ngày','Tên hàng','ĐVT','Đơn giá','SL','Thành tiền','Bộ phận','NCC','Hoá đơn','PTTT','Tình trạng','Nguồn'];
+    rows=CHI_DATA.map(r=>[r.id,r.ngay,r.ten_hang||r.mota||'',r.dvt||'',r.don_gia||0,r.sl||0,r.tong??((r.don_gia||0)*(r.sl||0)),r.bophan||'',r.ten_ncc||'',r.hoa_don||'',r.pttt||'',r.tinh_trang||'',r.nguon||'']);
+  } else if(S==='thu-chi'){
+    name='ThuChi_TongHop'; headers=['Ngày','Loại','Mô tả','Bộ phận','PTTT','Thu','Chi'];
+    rows=[
+      ...THU_DATA.map(r=>[r.ngay,'Thu',r.mota,r.bophan,r.pttt,r.sotien||0,0]),
+      ...CHI_DATA.map(r=>[r.ngay,'Chi',r.ten_hang||r.mota||'',r.bophan,r.pttt,0,r.tong??((r.don_gia||0)*(r.sl||0))]),
+    ];
+  } else if(S==='kho'){
+    name='Kho_'+(currentKhoTab||'all');
+    headers=['Mã','Tên','Kho/Bộ phận','ĐVT','Vị trí','Tồn đầu','Nhập','Xuất','Huỷ','Còn lại'];
+    const src=(['tong-hop','xuat','nhap','huy'].includes(currentKhoTab)?KHO_DATA:KHO_DATA.filter(it=>it.bophan===currentKhoTab));
+    rows=src.map(it=>{const s=calcKyStats(it);return [it.ma,it.ten,KHO_BP_LABELS[it.bophan]||it.bophan,it.dvt,it.vitri||'',it.ton_dau||0,s.nhap,s.xuat,s.huy,s.con];});
+  } else if(S==='danh-muc'){
+    name='DanhMuc_HangHoa';
+    headers=['Mã hàng','Tên mặt hàng','ĐVT','Bộ phận','NCC liên kết','Giá thấp nhất năm','Giá TB năm','Lần mua gần nhất','Ngày mua gần nhất'];
+    rows=catalogItems.map(it=>{ const p=calcPrices(it); const nccs=(it.nccIds||[]).map(nid=>nccName(nid)).filter(Boolean).join(' / '); return [it.code,it.name,it.dvt,BP_LABELS[it.bophan]||it.bophan,nccs,p.min,p.avg,p.last,p.lastDate]; });
+  } else if(S==='nha-cung-cap'){
+    name='NhaCungCap';
+    headers=['Tên NCC','Danh mục','MST','Đặt hàng qua','SĐT','Email','Người phụ trách','Địa chỉ','PTTT','Hoá đơn','Hợp đồng','Ghi chú'];
+    rows=NCC_DATA.map(r=>[r.ten,r.danhmuc,r.mst||'',r.ptdh||'',r.sdt||'',r.email||'',r.nguoi||'',r.diachi||'',r.pttt||'',HD(r.hoadon),r.hopdong==='co'?'Có HĐ':'Không HĐ',r.ghichu||'']);
+  } else if(S==='de-xuat'){
+    name='DeXuat_MuaHang';
+    headers=['Mã ĐX','Bộ phận','Người đề xuất','Ngày','Ưu tiên','Trạng thái','Tên hàng','NCC','SL','ĐVT','Đơn giá','Thành tiền'];
+    const BPL={'buong-phong':'Buồng phòng','nha-hang':'Nhà hàng','bep':'Bếp','le-tan':'Lễ tân','ky-thuat':'Kỹ thuật','sale':'Sale','hr':'HR'};
+    DX_DATA.forEach(d=>dxItems(d).forEach(it=>rows.push([d.id,BPL[d.bophan]||d.bophan,d.nguoi||'',d.ngay,d.priority||'Thường',d.status,it.ten,it.ncc||'',it.sl,it.dvt||'',it.dongia||0,(parseFloat(it.sl)||0)*(parseFloat(it.dongia)||0)])));
+  } else if(S==='nhan-su'){
+    name='NhanSu_Luong';
+    headers=['Tháng','Loại','Mô tả','Số tiền','Người','Ghi chú'];
+    rows=NS_LUONG.map(r=>[(r.thang||'').slice(0,7),r.loai,r.mota,r.sotien||0,r.nguoi||'',r.ghichu||'']);
+  } else if(S==='cong-no'){
+    name='CongNo';
+    headers=['Loại','Khách hàng/NCC','Chi tiết','Số tiền','Hạn TT','Tình trạng'];
+    const grab=(sel,label)=>[...document.querySelectorAll(sel+' tbody tr')].map(tr=>{const c=[...tr.querySelectorAll('td')];return c.length>=5?[label,c[0].innerText,c[1].innerText,c[2].innerText,c[3].innerText,c[4].innerText]:null;}).filter(Boolean);
+    rows=[...grab('#tbl-pt','Phải thu'),...grab('#tbl-ptr','Phải trả')];
+  } else if(S==='bao-cao'){
+    name='BaoCao_TaiChinh';
+    const now=new Date(),m=now.getMonth()+1,y=now.getFullYear();
+    const inMonth=r=>{const p=(r.ngay||'').split('/');return parseInt(p[1])===m&&parseInt(p[2])===y;};
+    const tThu=THU_DATA.filter(inMonth).reduce((s,r)=>s+(typeof thuVnd==='function'?thuVnd(r):(r.sotien||0)),0);
+    const tChi=CHI_DATA.filter(inMonth).reduce((s,r)=>s+(typeof chiAmt==='function'?chiAmt(r):(r.tong||0)),0);
+    headers=['Hạng mục','Giá trị (đ)'];
+    rows=[['Tổng Thu tháng '+m,tThu],['Tổng Chi tháng '+m,tChi],['Lợi nhuận',tThu-tChi]];
+  } else return;
+  writeSheet(name, headers, rows);
+}
+function exportCSV(section){ exportExcel(section); }   // t\u01B0\u01A1ng th\u00EDch ch\u1ED7 g\u1ECDi c\u0169
 
 // ==================== DATA THU / CHI ====================
 // THU_DATA: mỗi bản ghi là 1 khoản thu
@@ -2919,12 +2964,13 @@ function renderThuTab() {
         <td><span class="badge badge-navy">${esc(r.danhmuc)}</span></td>
         <td>${esc(r.mota)}</td>
         <td style="font-size:12px;">${esc(r.bophan)}</td>
-        <td class="amount-pos" style="font-weight:700;">${fmt(r.sotien)}</td>
+        <td class="amount-pos" style="font-weight:700;">${r.currency&&r.currency!=='VND'?(r.sotien||0).toLocaleString('vi-VN')+' '+esc(r.currency):fmt(r.sotien)}</td>
         <td><span class="badge ${ptttBadge[r.pttt]||'badge-navy'}">${esc(r.pttt)}</span></td>
         <td style="font-size:12px;">${esc(r.nguoi)}</td>
         <td style="font-size:11px;color:var(--text-muted);">${esc(r.ghichu)||'—'}</td>
+        <td><button class="btn btn-ghost btn-sm" onclick="editThu('${r.id}')" title="Sửa">✏</button></td>
       </tr>`).join('')
-    : `<tr><td colspan="9" style="text-align:center;padding:28px;color:var(--text-muted);">Không có bản ghi thu nào</td></tr>`;
+    : `<tr><td colspan="10" style="text-align:center;padding:28px;color:var(--text-muted);">Không có bản ghi thu nào</td></tr>`;
   syncThuChiSummary();
 }
 
@@ -3092,6 +3138,16 @@ function syncThuChiSummary() {
 function renderThuChi(){ syncThuChiSummary(); }
 
 // ==================== NHẢY ĐỀ XUẤT ĐÃ DUYỆT → CHI ====================
+// Suy ra giá trị mặc định 'hoa_don' (VAT) + 'pttt' cho bản ghi Chi từ thông tin 1 NCC.
+function nccChiDefaults(nccRec){
+  // Hoá đơn: các nhóm có VAT → 'VAT-chưa nhận' (kế toán cập nhật 'đã nhận' sau); còn lại → 'KO VAT'.
+  const vatSet = ['co-vat','sau-tt','truoc-tt','hd-lien','hd-gom','hd-cuoi-thang'];
+  const hoa_don = (nccRec && vatSet.includes(nccRec.hoadon)) ? 'VAT-chưa nhận' : 'KO VAT';
+  // PTTT: NCC lưu 'TM'/'CK'/'CN' → bản ghi Chi dùng 'TM'/'CK'/'Công nợ'.
+  const pMap = {TM:'TM', CK:'CK', CN:'Công nợ'};
+  const pttt = (nccRec && pMap[nccRec.pttt]) || 'CK';
+  return { hoa_don, pttt };
+}
 // Tạo 1 bản ghi CHI cho từng mặt hàng của đề xuất đã duyệt (chống trùng theo dx_id + chỉ số dòng).
 function pushDxToChi(dx) {
   if(!dx) return;
@@ -3106,6 +3162,9 @@ function pushDxToChi(dx) {
       const catItem = (typeof catalogItems!=='undefined'?catalogItems:[]).find(c=>(c.name||'').trim().toLowerCase()===(it.ten||'').trim().toLowerCase());
       if(catItem && (catItem.nccIds||[]).length){ tenNcc = nccName(catItem.nccIds[0]) || ''; }
     }
+    // Kế thừa PTTT + Hoá đơn (VAT) mặc định theo thông tin NCC (kế toán vẫn chỉnh tay được sau).
+    const nccRec = (NCC_DATA||[]).find(n=>(n.ten||'').trim().toLowerCase()===(tenNcc||'').trim().toLowerCase());
+    const { hoa_don: defHoaDon, pttt: defPttt } = nccChiDefaults(nccRec);
     const sl = parseFloat(it.sl)||1;
     const don_gia = parseFloat(it.dongia)||0;
     CHI_DATA.unshift({
@@ -3118,8 +3177,8 @@ function pushDxToChi(dx) {
       don_gia,
       tong: sl*don_gia,
       ten_ncc: tenNcc||'—',
-      hoa_don: 'KO VAT',
-      pttt: 'CK',
+      hoa_don: defHoaDon,
+      pttt: defPttt,
       so_phieu_chi: '',
       so_tk: '',
       tinh_trang: 'dang-len-don',
@@ -3145,20 +3204,46 @@ function finalizeDxApproved(dx){
 function saveThu() {
   const ngay   = document.getElementById('thu-ngay').value;
   const sotien = parseFloat(document.getElementById('thu-sotien').value)||0;
+  const currency = document.getElementById('thu-currency')?.value || 'VND';
   const dm     = document.getElementById('thu-danhmuc').value;
   const bp     = document.getElementById('thu-bophan').value;
   const pttt   = document.getElementById('thu-pttt').value;
+  const nguoi  = document.getElementById('thu-nguoi').value.trim();
   const mota   = document.getElementById('thu-mota').value.trim();
   if(!sotien||sotien<=0){ showToast('Vui lòng nhập số tiền!',2500,'error'); return; }
-  THU_DATA.unshift({
-    id:'T'+Date.now(),
+  const fields = {
     ngay: ngay.split('-').reverse().join('/'),
-    danhmuc: dm, mota: mota||dm, bophan: bp, sotien, pttt,
-    nguoi: currentUser?.fullname||'Kế toán', ghichu:'',
-  });
+    danhmuc: dm, mota: mota||dm, bophan: bp, sotien, currency, pttt,
+    nguoi: nguoi || currentUser?.fullname || 'Kế toán',
+  };
+  if(editingThuId){
+    const idx=THU_DATA.findIndex(x=>x.id===editingThuId);
+    if(idx>-1) THU_DATA[idx]={...THU_DATA[idx],...fields};
+    editingThuId=null;
+  } else {
+    THU_DATA.unshift({ id:'T'+Date.now(), ...fields, ghichu:'' });
+  }
   closeModal('modal-thu');
   renderThuTab();
   syncThuChiSummary();
+  syncNow();
+}
+let editingThuId=null;
+function openThuModalNew(){ editingThuId=null; openModal('modal-thu'); }
+function editThu(id){
+  const r=THU_DATA.find(x=>x.id===id); if(!r) return;
+  editingThuId=id;
+  document.querySelector('#modal-thu .modal-title').textContent='✏️ Sửa Khoản Thu';
+  document.getElementById('thu-ngay').value=(r.ngay||'').split('/').reverse().join('-');
+  document.getElementById('thu-sotien').value=r.sotien||'';
+  const cur=document.getElementById('thu-currency'); if(cur) cur.value=r.currency||'VND';
+  populateThuDropdowns();
+  document.getElementById('thu-danhmuc').value=r.danhmuc||'';
+  document.getElementById('thu-bophan').value=r.bophan||'';
+  document.getElementById('thu-pttt').value=r.pttt||'TM';
+  document.getElementById('thu-nguoi').value=r.nguoi||'';
+  document.getElementById('thu-mota').value=r.mota||'';
+  openModal('modal-thu');
 }
 
 // ==================== MODAL GHI CHI THỦ CÔNG ====================
@@ -4300,7 +4385,8 @@ function renderNccTable() {
     ? rows.map(r=>`<tr>
         <td><div style="font-weight:600;">${esc(r.ten)}</div><div style="font-size:11px;color:var(--text-muted);">${esc(r.email)||'\u2014'}</div></td>
         <td><span class="badge badge-navy">${esc(r.danhmuc)}</span></td>
-        <td style="font-size:12px;">${esc(r.ptdh)}</td>
+        <td style="font-size:12px;">${esc(r.mst)||'\u2014'}</td>
+        <td style="font-size:12px;">${esc(r.ptdh)||'\u2014'}</td>
         <td style="font-size:12px;font-weight:500;">${esc(r.sdt)||'\u2014'}</td>
         <td style="font-size:12px;">${esc(r.nguoi)||'\u2014'}<div style="font-size:10px;color:var(--text-muted);">${esc(r.diachi)||''}</div></td>
         <td><span class="badge ${ptttBadge[r.pttt]||'badge-navy'}">${esc(r.pttt)}</span></td>
@@ -4322,6 +4408,7 @@ function saveNcc() {
   if(!dm){ showToast('Vui lòng chọn danh mục!',2000,'error'); return; }
   const data={
     ten, danhmuc:dm,
+    mst:document.getElementById('ncc-mst').value.trim(),
     sdt:document.getElementById('ncc-sdt').value.trim(),
     email:document.getElementById('ncc-email').value.trim(),
     nguoi:document.getElementById('ncc-nguoi').value.trim(),
@@ -4917,17 +5004,21 @@ function pushYcToHvAndAmenity(yc){
   // Refresh amenity nếu đang xem
   if(currentBpTab==='amenity') renderAmenity();
 }
+// Số tiền 1 bản ghi Chi: chi mua hàng dùng 'tong', chi thủ công cũ có thể dùng 'sotien'.
+function chiAmt(r){ return r.tong ?? r.sotien ?? ((parseFloat(r.don_gia)||0)*(parseFloat(r.sl)||0)) ?? 0; }
+// Số tiền Thu quy về VND để cộng tổng (ngoại tệ chỉ tính khi = VND; khác thì bỏ qua khỏi tổng VND).
+function thuVnd(r){ return (!r.currency||r.currency==='VND') ? (r.sotien||0) : 0; }
 function updateDashboardKPI(){
   const now=new Date();
   const m=now.getMonth()+1, y=now.getFullYear();
-  // Lọc tháng hiện tại
-  const thuThang=THU_DATA.filter(r=>{const p=(r.ngay||'').split('/');return parseInt(p[1])===m&&parseInt(p[2])===y;});
-  const chiThang=CHI_DATA.filter(r=>{const p=(r.ngay||'').split('/');return parseInt(p[1])===m&&parseInt(p[2])===y;});
-  const tThu=thuThang.reduce((s,r)=>s+(r.sotien||0),0);
-  const tChi=chiThang.reduce((s,r)=>s+(r.sotien||0),0);
+  const inMonth=r=>{const p=(r.ngay||'').split('/');return parseInt(p[1])===m&&parseInt(p[2])===y;};
+  const thuThang=THU_DATA.filter(inMonth);
+  const chiThang=CHI_DATA.filter(inMonth);
+  const tThu=thuThang.reduce((s,r)=>s+thuVnd(r),0);
+  const tChi=chiThang.reduce((s,r)=>s+chiAmt(r),0);
   const loiNhuan=tThu-tChi;
   const tyLe=tThu>0?Math.round(loiNhuan/tThu*100):0;
-  const fmt=v=>v.toLocaleString('vi-VN')+'đ';
+  const fmt=v=>(v||0).toLocaleString('vi-VN')+'đ';
   const el=(id,val)=>{const e=document.getElementById(id);if(e)e.textContent=val;};
   el('db-tong-thu',fmt(tThu));
   el('db-tong-chi',fmt(tChi));
@@ -4937,6 +5028,29 @@ function updateDashboardKPI(){
   el('db-chi-change',`${chiThang.length} giao dịch T${m}/${y}`);
   el('db-ln-change',loiNhuan>=0?`▲ Có lãi`:`▼ Bị lỗ`);
   el('db-tl-change',`Tháng ${m}/${y}`);
+
+  // ----- Nguồn Thu Tháng: gom theo danh mục -----
+  const nguon=document.getElementById('db-nguon-thu');
+  if(nguon){
+    const byDm={};
+    thuThang.forEach(r=>{ const k=r.danhmuc||'Khác'; byDm[k]=(byDm[k]||0)+thuVnd(r); });
+    const entries=Object.entries(byDm).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]);
+    nguon.innerHTML = entries.length
+      ? entries.map(([k,v])=>{const pct=tThu>0?Math.round(v/tThu*100):0;return `<div style="margin-bottom:8px;"><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px;"><span>${esc(k)}</span><strong>${fmt(v)} <span style="color:var(--text-muted);font-weight:400;">(${pct}%)</span></strong></div><div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:var(--green);"></div></div></div>`;}).join('')
+      : '<div style="color:var(--text-muted);font-size:13px;padding:12px 0;">Chưa có dữ liệu — nhập Thu Chi để xem thống kê</div>';
+  }
+  // ----- Giao Dịch Gần Nhất: 5 giao dịch mới nhất (Thu + Chi) -----
+  const recent=document.getElementById('db-recent-tx');
+  if(recent){
+    const parseD=s=>{const p=(s||'').split('/');return new Date(+p[2]||0,(+p[1]||1)-1,+p[0]||1).getTime();};
+    const all=[
+      ...THU_DATA.map(r=>({mota:r.mota||r.danhmuc||'Thu',loai:'thu',amt:r.currency&&r.currency!=='VND'?(r.sotien||0).toLocaleString('vi-VN')+' '+r.currency:fmt(r.sotien),ngay:r.ngay})),
+      ...CHI_DATA.map(r=>({mota:r.ten_hang||r.mota||'Chi',loai:'chi',amt:fmt(chiAmt(r)),ngay:r.ngay})),
+    ].sort((a,b)=>parseD(b.ngay)-parseD(a.ngay)).slice(0,5);
+    recent.innerHTML = all.length
+      ? all.map(r=>`<tr><td style="font-size:12px;">${esc(r.mota)}</td><td><span class="badge ${r.loai==='thu'?'badge-green':'badge-red'}" style="font-size:10px;">${r.loai==='thu'?'Thu':'Chi'}</span></td><td class="${r.loai==='thu'?'amount-pos':'amount-neg'}" style="font-weight:600;">${r.amt}</td></tr>`).join('')
+      : '<tr><td colspan="3" style="text-align:center;color:var(--text-muted);padding:16px;">Chưa có giao dịch nào</td></tr>';
+  }
 }
 
 function renderBaoCao(){
@@ -4978,6 +5092,14 @@ function renderBaoCao(){
   setChi('bc-chi-nhansu','bc-bar-nhansu',nhanSu);
   setChi('bc-chi-vanhanh','bc-bar-vanhanh',vanHanh);
   setChi('bc-chi-vattu','bc-bar-vattu',vatTu);
+
+  // ===== Tổng hợp: Tổng Thu / Tổng Chi / Lợi nhuận =====
+  const totChi = nhanSu + vanHanh + vatTu;
+  const loiNhuan = tongThu - totChi;
+  const setTxt=(id,v)=>{const e=document.getElementById(id); if(e) e.textContent=fmt(v);};
+  setTxt('tc-tong-thu-panel', tongThu);
+  setTxt('tc-tong-chi-panel', totChi);
+  setTxt('tc-loi-nhuan-panel', loiNhuan);
 }
 
 // ==================== IMAGE PICKER ====================
@@ -5125,7 +5247,7 @@ function renderKhoTab(){
   document.getElementById('kho-tbody').innerHTML=items.length?items.map(it=>{
     const s=calcKyStats(it);
     const cc=s.con<=0?'var(--red)':s.con<=5?'var(--yellow)':'var(--green)';
-    const imgEl=it.img&&it.img.startsWith('http')?`<img src="${it.img}" class="img-thumb">`:`<div class="img-thumb">${it.img||'📦'}</div>`;
+    const imgEl=it.img&&/^(https?:|data:|blob:)/.test(it.img)?`<img src="${it.img}" class="img-thumb" style="object-fit:cover;">`:`<div class="img-thumb">${esc(it.img)||'📦'}</div>`;
     return `<tr>
       <td style="font-size:11px;font-weight:600;color:var(--text-muted);">${it.ma}</td>
       <td>${imgEl}</td>
@@ -5366,7 +5488,7 @@ function importKhoExcel(input){
   input.value='';
 }
 
-function exportKhoExcel(){
+function exportKhoExcel(){ exportExcel('kho'); return; /* dùng exportExcel thống nhất; code dưới không chạy */
   const rows=[['Mã hàng','Tên hàng','ĐVT','Kho','Vị trí','Tồn đầu kỳ','Nhập kỳ','Xuất kỳ','Huỷ kỳ','Còn lại']];
   KHO_DATA.forEach(it=>{const s=calcKyStats(it);rows.push([it.ma,it.ten,it.dvt,KHO_BP_LABELS[it.bophan]||it.bophan,it.vitri,it.ton_dau,s.nhap,s.xuat,s.huy,s.con]);});
   const csv='\uFEFF'+rows.map(r=>r.map(c=>`"${c}"`).join(',')).join('\n');
@@ -5440,6 +5562,7 @@ function openNccModal(id=null){
     const ncc=NCC_DATA.find(x=>x.id===id);
     if(!ncc) return;
     document.getElementById('ncc-ten').value=ncc.ten||'';
+    document.getElementById('ncc-mst').value=ncc.mst||'';
     populateNccDanhmuc(ncc.danhmuc||'');
     document.getElementById('ncc-sdt').value=ncc.sdt||'';
     document.getElementById('ncc-email').value=ncc.email||'';
@@ -5451,7 +5574,7 @@ function openNccModal(id=null){
     document.getElementById('ncc-hopdong').value=ncc.hopdong||'co';
     document.getElementById('ncc-ghichu').value=ncc.ghichu||'';
   } else {
-    ['ncc-ten','ncc-sdt','ncc-email','ncc-nguoi','ncc-diachi','ncc-ghichu'].forEach(id=>{
+    ['ncc-ten','ncc-mst','ncc-sdt','ncc-email','ncc-nguoi','ncc-diachi','ncc-ghichu'].forEach(id=>{
       const el=document.getElementById(id); if(el) el.value='';
     });
     populateNccDanhmuc('');
@@ -5486,10 +5609,12 @@ function openModal(id){
       updateBophanVisibility();
     }
   }
-  if(id==='modal-thu'){
+  if(id==='modal-thu' && !editingThuId){   // chỉ reset khi Ghi MỚI, không phá dữ liệu khi Sửa
+    document.querySelector('#modal-thu .modal-title').textContent='💰 Ghi Khoản Thu Mới';
     populateThuDropdowns();
     document.getElementById('thu-ngay').value=new Date().toISOString().slice(0,10);
     document.getElementById('thu-sotien').value='';
+    const cur=document.getElementById('thu-currency'); if(cur) cur.value='VND';
     document.getElementById('thu-nguoi').value='';
     document.getElementById('thu-mota').value='';
   }
@@ -5631,7 +5756,6 @@ function rejectDx(id){
   renderDxTable(); renderDashDx(); syncNow();
   showToast('Đã từ chối đề xuất',2000,'info');
 }
-function exportExcel(section){ exportCSV(section); }
 
 function toggleAnySidebar(){
   const sb=document.querySelector('.sidebar');
