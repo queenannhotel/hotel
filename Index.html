@@ -2082,7 +2082,6 @@ textarea{resize:vertical;min-height:68px;}
     </div>
     <!-- Danh sách mặt hàng (nhiều dòng / 1 đề xuất) -->
     <datalist id="dx-catalog-list"></datalist>
-    <datalist id="dx-ncc-list"></datalist>
     <div style="display:flex;justify-content:space-between;align-items:center;margin:6px 0 8px;">
       <label style="margin:0;">Danh sách mặt hàng <span style="color:var(--red);">*</span> <span style="font-size:10px;color:var(--text-muted);text-transform:none;font-weight:400;">— gõ tên khớp danh mục để gợi ý giá</span></label>
       <button class="btn btn-ghost btn-sm" onclick="dxAddRow()" type="button">＋ Thêm hàng</button>
@@ -2868,7 +2867,7 @@ function exportCSV(section){
   } else if(section==='danh-muc'){
     filename='DanhMuc_HangHoa.csv';
     headers=['Mã hàng','Tên mặt hàng','ĐVT','Bộ phận','NCC liên kết','Giá thấp nhất năm (đ)','Giá TB năm (đ)','Lần mua gần nhất (đ)','Ngày mua gần nhất'];
-    rows=catalogItems.map(it=>{ const p=calcPrices(it); const nccs=(it.nccIds||[]).map(nid=>{const n=NCC_LIST.find(x=>x.id===nid);return n?n.name:''}).filter(Boolean).join(' / '); return [it.code,it.name,it.dvt,BP_LABELS[it.bophan]||it.bophan,nccs,p.min,p.avg,p.last,p.lastDate]; });
+    rows=catalogItems.map(it=>{ const p=calcPrices(it); const nccs=(it.nccIds||[]).map(nid=>nccName(nid)).filter(Boolean).join(' / '); return [it.code,it.name,it.dvt,BP_LABELS[it.bophan]||it.bophan,nccs,p.min,p.avg,p.last,p.lastDate]; });
   } else if(section==='bao-cao'){
     filename='BaoCao_TaoChinh_T7_2026.csv';
     headers=['Hạng mục','Giá trị (đ)','Tỷ trọng'];
@@ -4356,7 +4355,7 @@ const items=catalogItems.filter(it=>{
 document.getElementById('catalog-count').textContent=items.length+' m\u1eb7t h\u00e0ng';
 document.getElementById('catalog-tbody').innerHTML=items.map(it=>{
   const p=calcPrices(it);
-  const nccBadges=it.nccIds.map(nid=>{const n=NCC_LIST.find(x=>x.id===nid);return n?`<span class="badge badge-blue" style="margin:2px;">${n.name}</span>`:''}).join('');
+  const nccBadges=(it.nccIds||[]).map(nid=>{const nm=nccName(nid);return nm?`<span class="badge badge-blue" style="margin:2px;">${esc(nm)}</span>`:''}).join('');
   const histRows=(it.purchaseHistory||[]).slice().reverse().slice(0,3).map(h=>`<div class="purchase-row"><span>${h.date}</span><span style="font-weight:600;color:var(--navy);">${fmt(h.price)}</span>${h.note?`<span style="color:var(--text-muted);font-size:10px;">${h.note}</span>`:''}</div>`).join('');
   return `<tr>
     <td style="font-size:11px;color:var(--text-muted);font-weight:600;">${it.code}</td>
@@ -4422,17 +4421,27 @@ function dxItemMinPrice(ten){
   return it?(calcPrices(it).min||0):0;
 }
 // ----- Form: các dòng hàng động -----
+let dxRowSeq=0;
+// Options datalist NCC (toàn bộ NCC) — dùng khi chưa khớp mặt hàng / mặt hàng chưa gán NCC.
+function dxAllNccOptions(){ return (NCC_DATA||[]).map(n=>`<option value="${esc(n.ten)}"></option>`).join(''); }
 function dxRowHtml(){
+  const uid=++dxRowSeq;
   return `<div class="dx-item-row" style="display:grid;grid-template-columns:1.7fr 1.3fr .6fr .6fr .9fr 1.3fr 34px;gap:8px;align-items:end;margin-bottom:8px;padding:10px;background:var(--cream);border:1px solid var(--border);border-radius:8px;">
     <div class="form-group" style="margin:0;"><label style="font-size:10px;">Tên hàng <span style="color:var(--red);">*</span></label><input class="dxr-ten" list="dx-catalog-list" oninput="dxRowChanged(this)" placeholder="Tên mặt hàng"></div>
-    <div class="form-group" style="margin:0;"><label style="font-size:10px;">Nhà cung cấp</label><input class="dxr-ncc" list="dx-ncc-list" placeholder="Tên NCC"></div>
+    <div class="form-group" style="margin:0;"><label style="font-size:10px;">Nhà cung cấp</label><input class="dxr-ncc" list="dx-ncc-list-${uid}" placeholder="Tên NCC"><datalist id="dx-ncc-list-${uid}">${dxAllNccOptions()}</datalist></div>
     <div class="form-group" style="margin:0;"><label style="font-size:10px;">SL <span style="color:var(--red);">*</span></label><input type="number" class="dxr-sl" min="1" value="1" oninput="dxUpdateTotal()"></div>
     <div class="form-group" style="margin:0;"><label style="font-size:10px;">ĐVT</label><input type="text" class="dxr-dvt" placeholder="đvt"></div>
     <div class="form-group" style="margin:0;"><label style="font-size:10px;">Đơn giá dự kiến</label><input type="number" class="dxr-dongia" min="0" placeholder="0" oninput="dxUpdateTotal()"></div>
     <div class="form-group" style="margin:0;"><label style="font-size:10px;">Lý do / Mục đích</label><input type="text" class="dxr-lydo" placeholder="Lý do"></div>
     <button class="btn btn-ghost btn-sm" type="button" onclick="dxRemoveRow(this)" title="Xoá dòng" style="height:38px;padding:0;">🗑</button>
+    <div class="dxr-ncc-chips" style="grid-column:1 / -1;font-size:11px;display:none;flex-wrap:wrap;gap:6px;align-items:center;"></div>
     <div class="dxr-hint" style="grid-column:1 / -1;font-size:11px;color:var(--green);display:none;"></div>
   </div>`;
+}
+// Bấm 1 chip NCC → điền vào ô Nhà cung cấp của cùng dòng.
+function dxPickNcc(el, name){
+  const row=el.closest('.dx-item-row'); if(!row) return;
+  const nccEl=row.querySelector('.dxr-ncc'); if(nccEl) nccEl.value=name;
 }
 function dxAddRow(){ const box=document.getElementById('dx-items'); if(box) box.insertAdjacentHTML('beforeend',dxRowHtml()); }
 function dxRemoveRow(btn){
@@ -4444,14 +4453,35 @@ function dxRowChanged(inp){
   const row=inp.closest('.dx-item-row'); if(!row) return;
   const it=(typeof catalogItems!=='undefined'?catalogItems:[]).find(x=>(x.name||'').trim().toLowerCase()===(inp.value||'').trim().toLowerCase());
   const hint=row.querySelector('.dxr-hint');
+  const chips=row.querySelector('.dxr-ncc-chips');
+  const nccList=row.querySelector('.dxr-ncc')?.list;   // datalist riêng của dòng
   if(it){
     const p=calcPrices(it);
     const dvt=row.querySelector('.dxr-dvt'); if(dvt&&!dvt.value) dvt.value=it.dvt||'';
     const dg=row.querySelector('.dxr-dongia'); if(dg&&!dg.value&&p.last) dg.value=p.last;
+    // Danh sách NCC có bán mặt hàng này (từ liên kết trong Danh mục)
+    const nccNames=(it.nccIds||[]).map(id=>nccName(id)).filter(Boolean);
     const nccEl=row.querySelector('.dxr-ncc');
-    if(nccEl&&!nccEl.value){ const nm=(it.nccIds||[]).map(id=>nccName(id)).filter(Boolean)[0]; if(nm) nccEl.value=nm; }
+    if(nccNames.length){
+      // Lọc gợi ý datalist về đúng các NCC của mặt hàng
+      if(nccList) nccList.innerHTML=nccNames.map(n=>`<option value="${esc(n)}"></option>`).join('');
+      if(nccEl&&!nccEl.value) nccEl.value=nccNames[0];   // tự điền NCC đầu (giữ hành vi cũ)
+      if(chips){
+        chips.style.display='flex';
+        chips.innerHTML=`<span style="color:var(--text-muted);">🏷️ NCC có bán:</span>`+
+          nccNames.map(n=>`<span class="badge badge-blue" style="cursor:pointer;" onclick="dxPickNcc(this,'${esc(n).replace(/'/g,"\\'")}')">${esc(n)}</span>`).join('');
+      }
+    } else {
+      // Mặt hàng có trong danh mục nhưng chưa gán NCC → gợi ý toàn bộ NCC
+      if(nccList) nccList.innerHTML=dxAllNccOptions();
+      if(chips){ chips.style.display='flex'; chips.innerHTML=`<span style="color:var(--text-muted);">Chưa gán NCC cho mặt hàng này — thêm ở tab Danh mục hàng hoá.</span>`; }
+    }
     if(hint){ hint.style.display=''; hint.innerHTML=`📊 Giá thấp nhất năm: <strong>${fmt(p.min)}</strong> · TB năm: ${fmt(p.avg)} · gần nhất: ${fmt(p.last)}`; }
-  } else if(hint){ hint.style.display='none'; }
+  } else {
+    if(nccList) nccList.innerHTML=dxAllNccOptions();   // không khớp → gợi ý toàn bộ NCC
+    if(chips){ chips.style.display='none'; chips.innerHTML=''; }
+    if(hint){ hint.style.display='none'; }
+  }
   dxUpdateTotal();
 }
 function dxUpdateTotal(){
@@ -4464,10 +4494,9 @@ function dxUpdateTotal(){
   if(wrap) wrap.style.display=tong?'flex':'none';
 }
 function dxFillDatalists(){
+  // Datalist gợi ý tên hàng (NCC dùng datalist riêng theo từng dòng — xem dxRowHtml/dxRowChanged).
   const cl=document.getElementById('dx-catalog-list');
   if(cl) cl.innerHTML=(typeof catalogItems!=='undefined'?catalogItems:[]).map(it=>`<option value="${esc(it.name)}">${esc(it.code||'')} · ${esc(it.dvt||'')}</option>`).join('');
-  const nl=document.getElementById('dx-ncc-list');
-  if(nl) nl.innerHTML=(NCC_DATA||[]).map(n=>`<option value="${esc(n.ten)}"></option>`).join('');
 }
 // ----- Quyền duyệt -----
 function dxApproveLevel(status){ return {'cho-duyet-truong-bp':'truong-bp','cho-duyet-ketoan':'ketoan','cho-duyet-gd':'gd'}[status]||null; }
