@@ -1433,7 +1433,7 @@ textarea{resize:vertical;min-height:68px;}
           <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap;">
             <select id="yc-f-loai" onchange="renderYeuCau()" style="font-size:12px;padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;">
               <option value="">Tất cả loại</option>
-              <option>Dọn phòng</option><option>Thay đồ</option><option>Thêm đồ</option>
+              <option>Dọn phòng</option><option>KO dọn phòng (NNS)</option><option>Thay đồ</option><option>Thêm đồ</option>
               <option>Laundry</option><option>Ủi đồ</option>
             </select>
             <select id="yc-f-status" onchange="renderYeuCau()" style="font-size:12px;padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;">
@@ -1952,6 +1952,7 @@ textarea{resize:vertical;min-height:68px;}
       <div class="form-group"><label>Loại yêu cầu <span style="color:var(--red)">*</span></label>
         <select id="yc-loai" onchange="ycLoaiChange()">
           <option value="don-phong">Dọn phòng</option>
+          <option value="ko-don-phong">KO dọn phòng (NNS)</option>
           <option value="thay-do">Thay đồ</option>
           <option value="them-do">Thêm đồ</option>
           <option value="laundry">Laundry</option>
@@ -4522,7 +4523,7 @@ function exportSetupXe(){const rows=[['Tên','SL Setup','SL Thực tế','Tồn/
 
 const YC_THAY_DO=['Ga','Bọc mền','Áo gối','Khăn tắm','Khăn tay','Thảm chân','Kimono'];
 const YC_THEM_DO=['Gối','Mền/chăn','Khăn tắm','Khăn tay','Thảm chân','Suối free','Trà','Cà phê','Đường','Bàn chải','Lược','Chụp tóc','Tăm bông','Dao cạo râu','Giấy vệ sinh'];
-const YC_LOAI_LABEL={'don-phong':'Dọn phòng','thay-do':'Thay đồ','them-do':'Thêm đồ','laundry':'Laundry','ui-do':'Ủi đồ'};
+const YC_LOAI_LABEL={'don-phong':'Dọn phòng','ko-don-phong':'KO dọn phòng (NNS)','thay-do':'Thay đồ','them-do':'Thêm đồ','laundry':'Laundry','ui-do':'Ủi đồ'};
 function ycLoaiChange(){const loai=document.getElementById('yc-loai').value;const wrap=document.getElementById('yc-items-wrap');if(loai==='thay-do'||loai==='them-do'){wrap.style.display='block';document.getElementById('yc-items-label').textContent=loai==='thay-do'?'Danh sách thay đồ':'Danh sách thêm đồ';ycItemCount=0;document.getElementById('yc-items-list').innerHTML='';ycAddItem();}else{wrap.style.display='none';document.getElementById('yc-items-list').innerHTML='';ycItemCount=0;}}
 function ycAddItem(){
   const loai=document.getElementById('yc-loai').value;
@@ -5176,7 +5177,7 @@ function renderYeuCau(){
     'dang-xu-ly': {cls:'badge-blue',  lbl:'Đang xử lý', color:'#3A5FA0',bg:'#EEF3FB'},
     'hoan-thanh': {cls:'badge-green', lbl:'Hoàn thành',  color:'var(--green)',bg:'var(--green-bg)'},
   };
-  const loaiBadge={'don-phong':'badge-navy','thay-do':'badge-blue','them-do':'badge-green','laundry':'badge-yellow','ui-do':'badge-navy'};
+  const loaiBadge={'don-phong':'badge-navy','ko-don-phong':'badge-red','thay-do':'badge-blue','them-do':'badge-green','laundry':'badge-yellow','ui-do':'badge-navy'};
   document.getElementById('yc-list').innerHTML=rows.length?rows.map(yc=>{
     const s=sMap[yc.status]||{cls:'badge-navy',lbl:yc.status,color:'#333',bg:'#eee'};
     const iStr=yc.items.map(i=>`<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:12px;font-size:11px;background:var(--gold-pale);color:var(--navy);margin:2px;">${i.ten} <strong>×${i.sl}</strong></span>`).join('');
