@@ -54,6 +54,54 @@ async function clearLocalData(){
   setTimeout(()=>location.reload(),1500);
 }
 
+// Ánh xạ tab (id trang, bỏ tiền tố "page-") -> danh sách collection thuộc tab đó.
+// Các tab tổng hợp/hiển thị (dashboard, bao-cao, cong-no, quan-ly-tk, cai-dat) không có
+// dữ liệu riêng -> không xoá được.
+const TAB_COLLECTIONS = {
+  'tab-thu': ['thu'],
+  'tab-chi': ['chi'],
+  'thu-chi': ['thu','chi'],
+  'de-xuat': ['dx'],
+  'nha-cung-cap': ['ncc'],
+  'danh-muc': ['catalog'],
+  'kho': ['kho'],
+  'nhan-su': ['nsLuong','bhxh','tncn'],
+  'buong-phong': ['wsData','roomStatus','amData','mbData','hvLinen','hvRewash','hvCols','yc','sx'],
+};
+
+// Chỉ xoá dữ liệu của TAB đang mở (không xoá toàn bộ như clearLocalData).
+async function clearTabData(){
+  if(currentUser?.role !== 'giamdoc'){
+    showToast('⛔ Chỉ Giám đốc mới có quyền xóa dữ liệu!', 2500, 'error');
+    return;
+  }
+  const activePage = document.querySelector('.page.active');
+  const pageId = activePage ? activePage.id.replace(/^page-/, '') : '';
+  const keys = TAB_COLLECTIONS[pageId];
+  const tabName = PAGE_TITLES[pageId] || 'này';
+  if(!keys || !keys.length){
+    showToast('ℹ️ Tab "'+tabName+'" không có dữ liệu riêng để xoá.', 3000, 'info');
+    return;
+  }
+  if(!confirm('Xoá dữ liệu của tab "'+tabName+'" trên MỌI thiết bị? Hành động này KHÔNG thể hoàn tác.')) return;
+  // Xoá mềm trên cloud đúng phạm vi collection của tab (không thì tải lại sẽ kéo về nguyên)
+  if(sb){
+    showToast('🗑 Đang xoá dữ liệu đám mây...', 3000, 'info');
+    try{
+      const {error}=await sb.from('records').update({deleted:true, updated_at:new Date().toISOString()}).in('collection', keys);
+      if(error) throw error;
+    }catch(e){
+      showToast('❌ Không xoá được dữ liệu đám mây: '+(e.message||e), 4000, 'error');
+      return;
+    }
+  }
+  // Xoá bộ nhớ + snapshot của các collection thuộc tab (write([]) làm rỗng mảng/map/obj)
+  keys.forEach(k=>{ try{ COLLECTIONS[k].write([]); }catch(e){} if(lastSnapshot) delete lastSnapshot[k]; });
+  lsSave();
+  showToast('✅ Đã xoá dữ liệu tab "'+tabName+'" — trang sẽ tải lại',2000,'success');
+  setTimeout(()=>location.reload(),1500);
+}
+
 function lsSave(){
   const ok=_lsSaveRaw();
   // Ghi local xong thì lên lịch đẩy lên Supabase (nếu bật đồng bộ)
@@ -747,7 +795,7 @@ textarea{resize:vertical;min-height:68px;}
     <div class="topbar-right">
       <span class="badge-date" id="topbar-date">📅 Tháng 7 / 2026</span>
       <span class="role-badge badge-navy" id="topbar-role">—</span>
-      <button id="btn-clear-data" onclick="clearLocalData()" title="Xóa toàn bộ dữ liệu local — chỉ Giám đốc"
+      <button id="btn-clear-data" onclick="clearTabData()" title="Xoá dữ liệu của tab đang mở — chỉ Giám đốc"
         style="display:none;align-items:center;gap:4px;padding:6px 10px;border-radius:8px;border:1.5px solid var(--red);background:none;color:var(--red);cursor:pointer;font-size:12px;font-weight:600;font-family:'Inter',sans-serif;">
         🗑 Xóa data
       </button>
