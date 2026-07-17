@@ -1582,6 +1582,9 @@ textarea{resize:vertical;min-height:68px;}
       <div class="form-group"><label>Mã số thuế (MST)</label><input id="ncc-mst" placeholder="VD: 0312345678"></div>
     </div>
     <div class="form-row">
+      <div class="form-group" style="flex:1 1 100%;"><label>Tên NCC (đầy đủ) <span style="color:var(--text-muted);font-weight:400;">— chỉ hiện trong hồ sơ</span></label><input id="ncc-tenfull" placeholder="VD: Công ty TNHH Thương mại & Dịch vụ ABC"></div>
+    </div>
+    <div class="form-row">
       <div class="form-group">
         <label>Danh mục <span style="color:var(--red);">*</span></label>
         <div style="display:flex;gap:6px;">
@@ -2978,8 +2981,8 @@ function exportExcel(section){
     rows=catalogItems.map(it=>{ const p=calcPrices(it); const nccs=(it.nccIds||[]).map(nid=>nccName(nid)).filter(Boolean).join(' / '); return [it.code,it.name,it.dvt,BP_LABELS[it.bophan]||it.bophan,nccs,p.min,p.avg,p.last,p.lastDate]; });
   } else if(S==='nha-cung-cap'){
     name='NhaCungCap';
-    headers=['Tên NCC','Danh mục','MST','Đặt hàng qua','SĐT','Email','Người phụ trách','Địa chỉ','PTTT','Hoá đơn','Hợp đồng','Ghi chú'];
-    rows=NCC_DATA.map(r=>[r.ten,nccCats(r).join(', '),r.mst||'',r.ptdh||'',r.sdt||'',r.email||'',r.nguoi||'',r.diachi||'',r.pttt||'',HD(r.hoadon),r.hopdong==='co'?'Có HĐ':'Không HĐ',r.ghichu||'']);
+    headers=['Tên NCC','Tên đầy đủ','Danh mục','MST','Đặt hàng qua','SĐT','Email','Người phụ trách','Địa chỉ','PTTT','Hoá đơn','Hợp đồng','Ghi chú'];
+    rows=NCC_DATA.map(r=>[r.ten,r.tenFull||'',nccCats(r).join(', '),r.mst||'',r.ptdh||'',r.sdt||'',r.email||'',r.nguoi||'',r.diachi||'',r.pttt||'',HD(r.hoadon),r.hopdong==='co'?'Có HĐ':'Không HĐ',r.ghichu||'']);
   } else if(S==='de-xuat'){
     name='DeXuat_MuaHang';
     headers=['Mã ĐX','Bộ phận','Người đề xuất','Ngày','Ưu tiên','Trạng thái','Tên hàng','NCC','SL','ĐVT','Đơn giá','Thành tiền'];
@@ -4620,6 +4623,7 @@ function saveNcc() {
   if(!cats.length){ showToast('Vui lòng chọn danh mục!',2000,'error'); return; }
   const data={
     ten, danhmucs:cats, danhmuc:cats[0],
+    tenFull:document.getElementById('ncc-tenfull').value.trim(),
     mst:document.getElementById('ncc-mst').value.trim(),
     sdt:document.getElementById('ncc-sdt').value.trim(),
     email:document.getElementById('ncc-email').value.trim(),
@@ -6042,6 +6046,7 @@ function openNccModal(id=null){
     const ncc=NCC_DATA.find(x=>x.id===id);
     if(!ncc) return;
     document.getElementById('ncc-ten').value=ncc.ten||'';
+    document.getElementById('ncc-tenfull').value=ncc.tenFull||'';
     document.getElementById('ncc-mst').value=ncc.mst||'';
     populateNccDanhmuc('');
     nccPickedCats=nccCats(ncc).slice();
@@ -6056,7 +6061,7 @@ function openNccModal(id=null){
     document.getElementById('ncc-hopdong').value=ncc.hopdong||'co';
     document.getElementById('ncc-ghichu').value=ncc.ghichu||'';
   } else {
-    ['ncc-ten','ncc-mst','ncc-sdt','ncc-email','ncc-nguoi','ncc-diachi','ncc-ghichu'].forEach(id=>{
+    ['ncc-ten','ncc-tenfull','ncc-mst','ncc-sdt','ncc-email','ncc-nguoi','ncc-diachi','ncc-ghichu'].forEach(id=>{
       const el=document.getElementById(id); if(el) el.value='';
     });
     populateNccDanhmuc('');
