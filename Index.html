@@ -2978,8 +2978,8 @@ function exportExcel(section){
     rows=src.map(it=>{const s=calcKyStats(it);return [it.ma,it.ten,KHO_BP_LABELS[it.bophan]||it.bophan,it.dvt,it.vitri||'',it.ton_dau||0,s.nhap,s.xuat,s.huy,s.con];});
   } else if(S==='danh-muc'){
     name='DanhMuc_HangHoa';
-    headers=['Mã hàng','Tên mặt hàng','ĐVT','Bộ phận','NCC liên kết','Giá thấp nhất năm','Giá TB năm','Lần mua gần nhất','Ngày mua gần nhất'];
-    rows=catalogItems.map(it=>{ const p=calcPrices(it); const nccs=(it.nccIds||[]).map(nid=>nccName(nid)).filter(Boolean).join(' / '); return [it.code,it.name,it.dvt,BP_LABELS[it.bophan]||it.bophan,nccs,p.min,p.avg,p.last,p.lastDate]; });
+    headers=['Mã hàng','Tên mặt hàng','ĐVT','Bộ phận','NCC liên kết','Giá thấp nhất năm','Giá TB năm','Lần mua gần nhất','Ngày mua gần nhất','VAT'];
+    rows=catalogItems.map(it=>{ const p=calcPrices(it); const nccs=(it.nccIds||[]).map(nid=>nccName(nid)).filter(Boolean).join(' / '); const vat=catVatParts(it).map(v=>(v.nm?v.nm+': ':'')+v.txt).join(' / '); return [it.code,it.name,it.dvt,BP_LABELS[it.bophan]||it.bophan,nccs,p.min,p.avg,p.last,p.lastDate,vat]; });
   } else if(S==='nha-cung-cap'){
     name='NhaCungCap';
     headers=['Tên NCC','Tên đầy đủ','Danh mục','MST','Đặt hàng qua','SĐT','Email','Người phụ trách','Địa chỉ','PTTT','Hoá đơn','Hợp đồng','Ghi chú'];
@@ -4669,10 +4669,23 @@ document.getElementById('catalog-tbody').innerHTML=items.map(it=>{
     <td style="color:var(--green);font-weight:700;">${fmt(p.min)}<div style="font-size:9px;color:var(--text-muted);font-weight:400;">t\u1ef1 t\u00ednh</div></td>
     <td>${fmt(p.avg)}<div style="font-size:9px;color:var(--text-muted);">t\u1ef1 t\u00ednh</div></td>
     <td><div style="font-weight:600;">${fmt(p.last)}</div><div style="font-size:10px;color:var(--text-muted);">${p.lastDate}</div></td>
+    <td>${catVatParts(it).map(v=>`<span class="badge ${v.hasVat?'badge-green':'badge-navy'}" style="margin:1px;font-size:10px;">${v.nm?esc(v.nm)+': ':''}${v.txt}</span>`).join('')||'—'}</td>
     <td style="min-width:160px;">${histRows}</td>
     <td><div style="display:flex;gap:4px;"><button class="btn btn-ghost btn-sm" onclick="editItem('${it.id}')">\u270f S\u1eeda</button><button class="btn btn-danger btn-sm" onclick="deleteItem('${it.id}')" title="Xo\u00e1 m\u1eb7t h\u00e0ng">\ud83d\uddd1</button></div></td>
   </tr>`;
-}).join('')||`<tr><td colspan="10" style="text-align:center;padding:30px;color:var(--text-muted);">Kh\u00f4ng t\u00ecm th\u1ea5y m\u1eb7t h\u00e0ng n\u00e0o</td></tr>`;
+}).join('')||`<tr><td colspan="11" style="text-align:center;padding:30px;color:var(--text-muted);">Kh\u00f4ng t\u00ecm th\u1ea5y m\u1eb7t h\u00e0ng n\u00e0o</td></tr>`;
+}
+
+// Th\u00f4ng tin VAT c\u1ee7a 1 m\u1eb7t h\u00e0ng theo t\u1eebng NCC (suppliers[]); fallback VAT c\u1ea5p g\u1ed1c (b\u1ea3n ghi c\u0169).
+function catVatParts(it){
+  const sup=(it&&it.suppliers)||[];
+  if(sup.length) return sup.map(s=>({
+    nm: nccName(s.nccId)||'',
+    txt: s.hasVat ? ('VAT'+(s.vatPct?' '+s.vatPct+'%':'')) : 'KO VAT',
+    hasVat: !!s.hasVat,
+  }));
+  if(it && it.hasVat!=null) return [{nm:'', txt:(it.hasVat?('VAT'+(it.vatPct?' '+it.vatPct+'%':'')):'KO VAT'), hasVat:!!it.hasVat}];
+  return [];
 }
 
 // G\u1ed9p to\u00e0n b\u1ed9 l\u1ecbch s\u1eed gi\u00e1 c\u1ee7a 1 m\u1eb7t h\u00e0ng: t\u1eeb suppliers[].history + purchaseHistory (c\u0169).
