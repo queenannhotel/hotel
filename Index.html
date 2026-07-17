@@ -1586,7 +1586,8 @@ textarea{resize:vertical;min-height:68px;}
         <label>Danh mục <span style="color:var(--red);">*</span></label>
         <div style="display:flex;gap:6px;">
           <select id="ncc-danhmuc" style="flex:1;"><option value="">— Chọn —</option></select>
-          <button class="btn btn-ghost btn-sm" onclick="addNccCategory()" style="white-space:nowrap;">+ Thêm</button>
+          <button class="btn btn-ghost btn-sm" onclick="nccAddPickedCat()" style="white-space:nowrap;" title="Thêm danh mục đang chọn vào NCC">+ Thêm</button>
+          <button class="btn btn-ghost btn-sm" onclick="addNccCategory()" style="white-space:nowrap;" title="Tạo danh mục mới">＋ mới</button>
         </div>
         <div id="ncc-dm-list" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;"></div>
       </div>
@@ -2354,7 +2355,7 @@ const HD_LABELS = {'co-vat':'Có VAT','ko-vat':'Không VAT','sau-tt':'Sau khi TT
 
 // Gộp các giá trị đã dùng trong dữ liệu vào danh mục (không mất dữ liệu cũ)
 function catMergeUsed(){
-  [...new Set((NCC_DATA||[]).map(n=>n.danhmuc).filter(Boolean))].forEach(u=>{ if(!CATS.ncc.includes(u)) CATS.ncc.push(u); });
+  [...new Set((NCC_DATA||[]).flatMap(n=>nccCats(n)).filter(Boolean))].forEach(u=>{ if(!CATS.ncc.includes(u)) CATS.ncc.push(u); });
   // Danh mục Thu cố định theo Báo cáo tài chính — không gộp giá trị cũ, luôn ép về THU_CATEGORIES.
   enforceThuCats();
 }
@@ -2978,7 +2979,7 @@ function exportExcel(section){
   } else if(S==='nha-cung-cap'){
     name='NhaCungCap';
     headers=['Tên NCC','Danh mục','MST','Đặt hàng qua','SĐT','Email','Người phụ trách','Địa chỉ','PTTT','Hoá đơn','Hợp đồng','Ghi chú'];
-    rows=NCC_DATA.map(r=>[r.ten,r.danhmuc,r.mst||'',r.ptdh||'',r.sdt||'',r.email||'',r.nguoi||'',r.diachi||'',r.pttt||'',HD(r.hoadon),r.hopdong==='co'?'Có HĐ':'Không HĐ',r.ghichu||'']);
+    rows=NCC_DATA.map(r=>[r.ten,nccCats(r).join(', '),r.mst||'',r.ptdh||'',r.sdt||'',r.email||'',r.nguoi||'',r.diachi||'',r.pttt||'',HD(r.hoadon),r.hopdong==='co'?'Có HĐ':'Không HĐ',r.ghichu||'']);
   } else if(S==='de-xuat'){
     name='DeXuat_MuaHang';
     headers=['Mã ĐX','Bộ phận','Người đề xuất','Ngày','Ưu tiên','Trạng thái','Tên hàng','NCC','SL','ĐVT','Đơn giá','Thành tiền'];
@@ -4558,7 +4559,7 @@ function renderNccTable() {
   const fVat   = document.getElementById('ncc-f-vat')?.value||'';
   let rows = NCC_DATA.filter(r=>{
     const mS  = !search || r.ten.toLowerCase().includes(search) || (r.nguoi||'').toLowerCase().includes(search);
-    const mDm = !fDm || r.danhmuc===fDm;
+    const mDm = !fDm || nccCats(r).includes(fDm);
     const mV  = !fVat || (fVat==='co-vat'?r.hoadon==='co-vat'||r.hoadon==='sau-tt'||r.hoadon==='truoc-tt':r.hoadon==='ko-vat'||r.hoadon==='hd-lien'||r.hoadon==='hd-gom'||r.hoadon==='hd-cuoi-thang');
     return mS&&mDm&&mV;
   });
@@ -4567,7 +4568,7 @@ function renderNccTable() {
   document.getElementById('tbl-ncc-body').innerHTML = rows.length
     ? rows.map(r=>`<tr>
         <td><div style="font-weight:600;">${esc(r.ten)}</div><div style="font-size:11px;color:var(--text-muted);">${esc(r.email)||'\u2014'}</div></td>
-        <td><span class="badge badge-navy">${esc(r.danhmuc)}</span></td>
+        <td>${nccCats(r).map(c=>`<span class="badge badge-navy" style="margin:1px;">${esc(c)}</span>`).join('')||'\u2014'}</td>
         <td style="font-size:12px;">${esc(r.mst)||'\u2014'}</td>
         <td style="font-size:12px;">${esc(r.ptdh)||'\u2014'}</td>
         <td style="font-size:12px;font-weight:500;">${esc(r.sdt)||'\u2014'}</td>
@@ -4584,13 +4585,41 @@ function renderNccTable() {
     : `<tr><td colspan="10" style="text-align:center;padding:28px;color:var(--text-muted);">Kh\u00f4ng t\u00ecm th\u1ea5y NCC n\u00e0o</td></tr>`;
 }
 
+// Danh sách danh mục của 1 NCC (hỗ trợ nhiều danh mục). Tương thích bản ghi cũ chỉ có `danhmuc`.
+function nccCats(r){
+  if(r && Array.isArray(r.danhmucs) && r.danhmucs.length) return r.danhmucs;
+  return (r && r.danhmuc) ? [r.danhmuc] : [];
+}
+// Danh mục đang chọn cho NCC trong modal (nhiều danh mục)
+let nccPickedCats=[];
+function renderNccPickedCats(){
+  const box=document.getElementById('ncc-dm-list'); if(!box) return;
+  box.innerHTML = nccPickedCats.length
+    ? nccPickedCats.map((c,i)=>`<span class="badge badge-navy" style="display:inline-flex;align-items:center;gap:5px;">${esc(c)}<span onclick="nccRemovePickedCat(${i})" style="cursor:pointer;font-weight:700;">✕</span></span>`).join('')
+    : '<span style="color:var(--text-muted);font-size:12px;">Chưa chọn danh mục nào</span>';
+}
+function nccAddPickedCat(){
+  const sel=document.getElementById('ncc-danhmuc'); const v=sel?sel.value:'';
+  if(!v){ showToast('Chọn một danh mục để thêm',2000,'error'); return; }
+  if(!nccPickedCats.includes(v)) nccPickedCats.push(v);
+  if(sel) sel.value='';
+  renderNccPickedCats();
+}
+function nccRemovePickedCat(i){
+  nccPickedCats.splice(i,1);
+  renderNccPickedCats();
+}
+
 function saveNcc() {
   const ten=document.getElementById('ncc-ten').value.trim();
-  const dm =document.getElementById('ncc-danhmuc').value;
+  // Gộp danh mục đang chọn ở dropdown (nếu chưa bấm "+ Thêm") vào danh sách
+  const selVal=document.getElementById('ncc-danhmuc').value;
+  const cats=[...nccPickedCats];
+  if(selVal && !cats.includes(selVal)) cats.push(selVal);
   if(!ten){ showToast('Vui lòng nhập tên NCC!',2000,'error'); return; }
-  if(!dm){ showToast('Vui lòng chọn danh mục!',2000,'error'); return; }
+  if(!cats.length){ showToast('Vui lòng chọn danh mục!',2000,'error'); return; }
   const data={
-    ten, danhmuc:dm,
+    ten, danhmucs:cats, danhmuc:cats[0],
     mst:document.getElementById('ncc-mst').value.trim(),
     sdt:document.getElementById('ncc-sdt').value.trim(),
     email:document.getElementById('ncc-email').value.trim(),
@@ -6014,7 +6043,9 @@ function openNccModal(id=null){
     if(!ncc) return;
     document.getElementById('ncc-ten').value=ncc.ten||'';
     document.getElementById('ncc-mst').value=ncc.mst||'';
-    populateNccDanhmuc(ncc.danhmuc||'');
+    populateNccDanhmuc('');
+    nccPickedCats=nccCats(ncc).slice();
+    renderNccPickedCats();
     document.getElementById('ncc-sdt').value=ncc.sdt||'';
     document.getElementById('ncc-email').value=ncc.email||'';
     document.getElementById('ncc-nguoi').value=ncc.nguoi||'';
@@ -6029,6 +6060,8 @@ function openNccModal(id=null){
       const el=document.getElementById(id); if(el) el.value='';
     });
     populateNccDanhmuc('');
+    nccPickedCats=[];
+    renderNccPickedCats();
   }
   openModal('modal-ncc');
 }
@@ -6191,7 +6224,9 @@ function addNccCategory(){
   if(!name) return;
   if(!CATS.ncc.includes(name)) CATS.ncc.push(name);
   refreshCatSelects('ncc');   // nạp lại cả bộ lọc + form
-  const sel=document.getElementById('ncc-danhmuc'); if(sel) sel.value=name;
+  if(!nccPickedCats.includes(name)) nccPickedCats.push(name);
+  renderNccPickedCats();
+  const sel=document.getElementById('ncc-danhmuc'); if(sel) sel.value='';
   lsSave(); syncNow();
   showToast('✅ Đã thêm danh mục: '+name,2000,'success');
 }
