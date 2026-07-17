@@ -2129,7 +2129,7 @@ textarea{resize:vertical;min-height:68px;}
       <span id="dx-total-val" style="font-size:18px;font-weight:700;color:var(--yellow);">—</span>
     </div>
     <div style="background:var(--gold-pale);border-radius:8px;padding:9px 13px;font-size:12px;color:var(--yellow);margin:10px 0;border:1px solid rgba(201,168,76,.3);">
-      ℹ️ Luồng duyệt: <strong>Trưởng bộ phận → Kế toán trưởng → Giám đốc</strong>
+      ℹ️ Luồng duyệt: <strong>Trưởng BP (tự duyệt) → Kế toán trưởng (chỉnh đơn giá) → Giám đốc</strong>
     </div>
     <div style="display:flex;justify-content:flex-end;gap:10px;">
       <button class="btn btn-ghost" onclick="closeModal('modal-de-xuat')">Huỷ</button>
@@ -4740,7 +4740,8 @@ function dxFlowHtml(status){
 function canEditDx(d){
   if(!d || !(d.status||'').startsWith('cho-duyet')) return false;
   const role=currentUser?.role;
-  return role==='giamdoc' || d.nguoi===currentUser?.fullname || (role==='truong-bp'&&d.bophan===currentUser?.bophan);
+  return role==='giamdoc' || d.nguoi===currentUser?.fullname || (role==='truong-bp'&&d.bophan===currentUser?.bophan)
+      || (role==='ketoan' && d.status==='cho-duyet-ketoan');   // kế toán chỉnh đơn giá ở bước của mình
 }
 function canDeleteDx(d){
   const role=currentUser?.role;
@@ -4973,7 +4974,8 @@ function submitDx(){
     id:'DX'+Date.now(), bophan, priority,
     nguoi:currentUser?.fullname||'',
     ngay:new Date().toLocaleDateString('vi-VN'),
-    status:'cho-duyet-truong-bp', flow:[false,false,false],
+    // Trưởng BP tạo đề xuất = tự duyệt bước BP → bắt đầu ở bước chờ Kế toán.
+    status:'cho-duyet-ketoan', flow:[true,false,false],
     ghichu:'', items,
   };
   DX_DATA.unshift(newDx);
