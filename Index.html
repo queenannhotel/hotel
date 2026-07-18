@@ -2583,9 +2583,9 @@ const ROLE_PERM_DESC = {
 
 // Mặc định tab theo role (nếu user không custom)
 const DEFAULT_TABS = {
-  giamdoc:    ['dashboard','thu-chi','tab-thu','tab-chi','cong-no','nhan-su','kho','kho-kt','kho-bep','kho-nha-hang','kho-hk','kho-ky-thuat','kho-van-phong','kho-le-tan','kho-xuat','kho-nhap','kho-huy','buong-phong','de-xuat','nha-cung-cap','danh-muc','bao-cao','quan-ly-tk','cai-dat'],
+  giamdoc:    ['dashboard','thu-chi','tab-thu','tab-chi','cong-no','nhan-su','kho','kho-kt','kho-bep','kho-nha-hang','kho-hk','kho-ky-thuat','kho-van-phong','kho-le-tan','kho-xuat','kho-nhap','kho-huy','buong-phong','lich-lam-phong','de-xuat','nha-cung-cap','danh-muc','bao-cao','quan-ly-tk','cai-dat'],
   ketoan:     ['thu-chi','tab-thu','tab-chi','cong-no','nhan-su','kho','kho-kt','kho-xuat','kho-nhap','de-xuat','nha-cung-cap','danh-muc','bao-cao'],
-  'truong-bp':['de-xuat','kho','buong-phong'],
+  'truong-bp':['de-xuat','kho','buong-phong','lich-lam-phong'],
   hr:         ['nhan-su'],
 };
 
@@ -2869,6 +2869,7 @@ const AU_TAB_GROUPS = [
     group: '🛏 Buồng Phòng',
     tabs: [
       {id:'buong-phong',  label:'Buồng Phòng (tất cả)'},
+      {id:'lich-lam-phong', label:'Lịch làm phòng'},
     ]
   },
 ];
