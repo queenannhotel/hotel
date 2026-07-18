@@ -379,8 +379,9 @@
   </section>
 
   <div class="note">
-    <b>Thứ tự ưu tiên:</b> 🔁 Back-to-Back → 🔑 ARR → 🧹 OUT thường → 🛏 Inhouse. Trong số các phòng đã sẵn sàng, cặp luôn
-    chọn phòng ưu tiên cao hơn trước (cùng loại thì phòng có hạn chót sớm hơn trước). <b>Inhouse chỉ làm từ 8:00</b> và chỉ
+    <b>Thứ tự ưu tiên:</b> phòng có <b>hạn chót sớm nhất</b> làm trước (khách check-in sớm ưu tiên; phòng B2B mà khách
+    check-in muộn — vd 15h — sẽ tự lùi sau các phòng cần xong lúc 14h, nhưng vẫn được làm nếu lúc đó không có phòng nào
+    gấp hơn). Cùng hạn chót thì theo loại: 🔁 Back-to-Back → 🔑 ARR → 🧹 OUT thường → 🛏 Inhouse. <b>Inhouse chỉ làm từ 8:00</b> và chỉ
     <b>xen kẽ vào lúc rảnh</b> khi chưa có phòng OUT/B2B nào tới giờ. Trước 8:00 chỉ làm phòng OUT đã trả.
     <br><br><b>Chia cụm tầng</b>: mỗi cặp phụ trách một cụm tầng riêng (vd Cặp 1 tầng 2–6, Cặp 2 tầng 7–11) để hai cặp không
     giẫm chân nhau. Khi cụm của mình <b>hết phòng sẵn sàng</b>, cặp sẽ <b>lên hỗ trợ cụm khác</b> (đánh dấu “↗ hỗ trợ”). Chỉnh
@@ -596,16 +597,12 @@ function schedule(tasks,N,p){
       const cand=(zoneOn&&own.length)?own:ready;   // cụm của mình hết phòng sẵn sàng -> lên hỗ trợ cụm khác
       helping=zoneOn&&!own.length&&ready.length>0;
       if(floorOpt){
-        const lf=lastFloor[ti], sameF=t=>(lf!=null&&t.floor===lf)?0:1, dist=t=>lf!=null?Math.abs(parseInt(t.floor,10)-parseInt(lf,10))||0:0;
-        // Đợt khách (B2B/ARR) ưu tiên trước & theo hạn giờ; nhóm OUT/Inhouse thì ưu tiên CÙNG TẦNG rồi tầng GẦN nhất
-        cand.sort((a,b)=>{
-          const aa=(a.type==="b2b"||a.type==="arr")?0:1, bb=(b.type==="b2b"||b.type==="arr")?0:1;
-          if(aa!==bb)return aa-bb;
-          if(aa===0)return a.dl-b.dl||sameF(a)-sameF(b)||dist(a)-dist(b)||a.ready-b.ready;
-          return sameF(a)-sameF(b)||CATRANK[a.type]-CATRANK[b.type]||dist(a)-dist(b)||a.dl-b.dl||a.ready-b.ready;
-        });
+        const lf=lastFloor[ti], sameF=t=>(lf!=null&&t.floor===lf)?0:1, dist=t=>lf!=null?Math.abs(parseInt(t.floor,10)-parseInt(lf,10)):0;
+        // 1) HẠN CHÓT sớm hơn làm trước (B2B check-in muộn -> hạn muộn -> tự lùi sau, nhường phòng gấp 14h)
+        // 2) cùng hạn: B2B → ARR → OUT → Inhouse  3) cùng tầng  4) tầng gần nhất
+        cand.sort((a,b)=>a.dl-b.dl||CATRANK[a.type]-CATRANK[b.type]||sameF(a)-sameF(b)||dist(a)-dist(b)||a.ready-b.ready);
       } else {
-        cand.sort((a,b)=>CATRANK[a.type]-CATRANK[b.type]||a.dl-b.dl||a.ready-b.ready||a.dur-b.dur);
+        cand.sort((a,b)=>a.dl-b.dl||CATRANK[a.type]-CATRANK[b.type]||a.ready-b.ready||a.dur-b.dur);
       }
       pick=cand[0];
     }
