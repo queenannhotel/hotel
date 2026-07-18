@@ -769,6 +769,7 @@ textarea{resize:vertical;min-height:68px;}
     <div class="nav-item" onclick="showPage('kho',this)" data-perm="ketoan,giamdoc,truong-bp"><span class="icon">🏭</span> Quản Lý Kho</div>
     <div class="nav-section" data-perm="ketoan,giamdoc,truong-bp">Buồng Phòng</div>
     <div class="nav-item" onclick="showPage('buong-phong',this)" data-perm="ketoan,giamdoc,truong-bp"><span class="icon">🛏</span> Buồng Phòng</div>
+    <div class="nav-item" onclick="showPage('lich-lam-phong',this)" data-perm="giamdoc,truong-bp"><span class="icon">🧹</span> Lịch làm phòng</div>
     <div class="nav-section" data-perm="ketoan,giamdoc">Hệ Thống</div>
     <div class="nav-item" onclick="showPage('danh-muc',this)" data-perm="ketoan,giamdoc"><span class="icon">📦</span> Danh Mục Hàng Hoá</div>
     <div class="nav-item" onclick="showPage('bao-cao',this)" data-perm="ketoan,giamdoc"><span class="icon">📈</span> Báo Cáo Tài Chính</div>
@@ -1467,6 +1468,11 @@ textarea{resize:vertical;min-height:68px;}
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- LỊCH LÀM PHÒNG (HK) - nhúng công cụ xếp lịch, đồng bộ qua Supabase -->
+    <div class="page" id="page-lich-lam-phong">
+      <iframe id="hkl-frame" title="Lịch làm phòng" style="width:100%;height:calc(100vh - 150px);min-height:560px;border:0;border-radius:12px;background:transparent"></iframe>
     </div>
 
     <!-- BÁO CÁO -->
@@ -5993,13 +5999,14 @@ function exportKhoExcel(){ exportExcel('kho'); return; /* dùng exportExcel th�
   const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='Kho_QueenAnn.csv';a.click();
 }
 
-const PAGE_TITLES={dashboard:'Dashboard Tài Chính','thu-chi':'Quản Lý Thu Chi','tab-thu':'Ghi Thu','tab-chi':'Ghi Chi','cong-no':'Theo Dõi Công Nợ','nhan-su':'Nhân Sự & Lương','kho':'Quản Lý Kho','buong-phong':'Buồng Phòng','de-xuat':'Đề Xuất Mua Hàng','nha-cung-cap':'Nhà Cung Cấp','danh-muc':'Danh Mục Hàng Hoá','bao-cao':'Báo Cáo Tài Chính','quan-ly-tk':'Quản Lý Tài Khoản','cai-dat':'Cài Đặt Hệ Thống'};
+const PAGE_TITLES={dashboard:'Dashboard Tài Chính','thu-chi':'Quản Lý Thu Chi','tab-thu':'Ghi Thu','tab-chi':'Ghi Chi','cong-no':'Theo Dõi Công Nợ','nhan-su':'Nhân Sự & Lương','kho':'Quản Lý Kho','buong-phong':'Buồng Phòng','lich-lam-phong':'Lịch Làm Phòng','de-xuat':'Đề Xuất Mua Hàng','nha-cung-cap':'Nhà Cung Cấp','danh-muc':'Danh Mục Hàng Hoá','bao-cao':'Báo Cáo Tài Chính','quan-ly-tk':'Quản Lý Tài Khoản','cai-dat':'Cài Đặt Hệ Thống'};
 function showPage(id,el){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById('page-'+id).classList.add('active');
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   if(el) el.classList.add('active');
   document.getElementById('page-heading').textContent=PAGE_TITLES[id]||'';
+  if(id==='lich-lam-phong'){ const f=document.getElementById('hkl-frame'); if(f&&!f.src) f.src='lich-lam-phong.html'; }
   if(id==='danh-muc') renderCatalog();
   if(id==='quan-ly-tk') renderUsersTable();
   if(id==='de-xuat') renderDxTable();
