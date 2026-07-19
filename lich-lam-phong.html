@@ -183,6 +183,7 @@
   tr.done-row>td{background:var(--good-bg)}
   tr.editing>td{background:var(--accent-soft)}
   .blk.s-done{background:var(--accent-soft);color:var(--accent);border-color:transparent}
+  .co-real{background:var(--tight-bg);color:var(--tight);padding:2px 8px;border-radius:6px;display:inline-block;font-weight:700}
   .tag{font-size:11px;color:var(--muted)}
   .teampill{font-family:var(--mono);font-weight:700;font-size:12px;background:var(--accent-soft);color:var(--accent);
     border-radius:7px;padding:2px 8px}
@@ -249,7 +250,7 @@
       <button class="btn ghost" id="qoNow" style="height:38px" title="Đặt lại giờ hiện tại">⟳ giờ này</button>
       <span id="qoMsg" class="foot" style="align-self:center"></span>
     </div>
-    <div class="foot">Khách xuống sớm/muộn hơn kế hoạch? Nhập số phòng → giờ tự điền giờ hiện tại (sửa được) → bấm <b>Ghi Out</b>. Phòng đó nhận giờ check-out thực và lịch tự xếp lại theo thời gian thật.</div>
+    <div class="foot">Khách xuống sớm/muộn hơn kế hoạch? Nhập số phòng → giờ tự điền giờ hiện tại (sửa được) → bấm <b>Ghi Out</b>. Phòng đó nhận giờ check-out thực, lịch tự xếp lại, và <b>ô số phòng bên bảng "Thứ tự làm phòng" được tô cam</b> để biết phòng đã check-out thật (khác với giờ kế hoạch).</div>
   </section>
 
   <section class="panel">
@@ -499,7 +500,7 @@ function ensureZones(){
   state.params.teamZones=z.map(x=>({lo:Math.round(+x.lo)||0,hi:Math.round(+x.hi)||99}));
   return state.params.teamZones;
 }
-function normRoom(r){return {room:String(r.room??"").trim(),co:r.co||"",ci:r.ci||"",kind:r.kind||"auto",done:!!r.done,team:(+r.team||0),ord:(r.ord==null||r.ord===""?null:+r.ord)};}
+function normRoom(r){return {room:String(r.room??"").trim(),co:r.co||"",ci:r.ci||"",kind:r.kind||"auto",done:!!r.done,checkedOut:!!r.checkedOut,team:(+r.team||0),ord:(r.ord==null||r.ord===""?null:+r.ord)};}
 function todayStr(){const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
 function fmtDate(s){const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(s||"");return m?`${m[3]}/${m[2]}/${m[1]}`:(s||"");}
 function freshDay(){return {params:defParams(),rooms:SAMPLE.map(a=>normRoom({room:a[0],co:a[1]||"",ci:a[2]||"",kind:a[3]||"auto"}))};}
@@ -529,7 +530,9 @@ function switchDate(d){
   if(d!==state.date){
     save();
     if(!store.days[d]){const src=store.days[state.date];
-      store.days[d]=src?JSON.parse(JSON.stringify(src)):freshDay();}   // ngày mới = chép ngày đang xem để đỡ nhập lại
+      const nd=src?JSON.parse(JSON.stringify(src)):freshDay();
+      (nd.rooms||[]).forEach(function(r){ r.done=false; r.checkedOut=false; r.ord=null; });   // ngày mới: bỏ trạng thái vận hành (đã sạch / đã out / sắp tay)
+      store.days[d]=nd;}   // chép ngày đang xem để đỡ nhập lại danh sách phòng/cài đặt
     state.date=d; const day=store.days[d];
     state.params=normParams(day.params); state.rooms=(day.rooms||[]).map(normRoom);
     store.current=d; save();
@@ -559,7 +562,7 @@ function buildTasks(p){
     if(t==="b2b"||t==="out"){dur=p.tout; scales=true; ready=Math.max(roomFloor,co); dl=(ci!=null)?ci:Math.max(STDCI,co);}
     else if(t==="arr"){dur=p.tarr; ready=roomFloor; dl=ci;}
     else {dur=p.tih; ready=ihFloor; dl=END;}
-    out.push({room:r.room,type:t,dur,ready,dl,scales,floor:floorOf(r.room),pinTeam:(+r.team||0),ord:(r.ord==null?null:+r.ord),done:!!r.done});
+    out.push({room:r.room,type:t,dur,ready,dl,scales,floor:floorOf(r.room),pinTeam:(+r.team||0),ord:(r.ord==null?null:+r.ord),done:!!r.done,checkedOut:!!r.checkedOut});
   }
   return out;
 }
@@ -829,7 +832,7 @@ function renderSched(jobs){
     const slk=j.slack<0?`−${-j.slack}′`:`+${j.slack}′`;
     return `<tr class="${done?"done-row":""}">
       <td class="c tag mono">${i+1}</td>
-      <td class="c"><b class="mono">${j.room}</b></td>
+      <td class="c">${j.checkedOut?`<b class="mono co-real" title="Khách đã check-out thực tế">${j.room}</b>`:`<b class="mono">${j.room}</b>`}</td>
       <td>${TYPE[j.type].ic} <span class="tag">${TYPE[j.type].label}</span>${j.help?' <span class="tag" style="color:var(--warn)">↗ hỗ trợ</span>':""}</td>
       <td class="c"><span class="teampill">${j.team}</span>${j.pinTeam?' <span title="đã ghim cặp">📌</span>':""}</td>
       <td class="c mono">${fm(j.start)}</td>
@@ -1074,7 +1077,7 @@ function bindQuickOut(){
     if(!rm){msg.style.color="var(--late)";msg.textContent="Nhập số phòng.";return;}
     const r=state.rooms.find(x=>x.room===rm);
     if(!r){msg.style.color="var(--late)";msg.textContent="Không thấy phòng "+rm+" trong danh sách.";return;}
-    r.co=tm; r.kind="auto";   // đánh dấu đã check-out: giờ thực dẫn dắt loại phòng (OUT, hoặc B2B nếu có khách vào)
+    r.co=tm; r.kind="auto"; r.checkedOut=true;   // đánh dấu ĐÃ CHECK-OUT THỰC TẾ + giờ thực dẫn dắt loại phòng
     save(); renderEditor(); render();
     msg.style.color="var(--good)"; msg.textContent="✓ Phòng "+rm+" đã Out lúc "+tm;
     $("#qoRoom").value=""; setNow(); $("#qoRoom").focus();
