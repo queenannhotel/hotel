@@ -6007,7 +6007,7 @@ function showPage(id,el){
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   if(el) el.classList.add('active');
   document.getElementById('page-heading').textContent=PAGE_TITLES[id]||'';
-  if(id==='lich-lam-phong'){ const f=document.getElementById('hkl-frame'); if(f&&!f.src) f.src='lich-lam-phong.html'; }
+  if(id==='lich-lam-phong'){ const f=document.getElementById('hkl-frame'); if(f&&!f.src) f.src='lich-lam-phong.html?v='+(window.__hklV||(window.__hklV=Date.now())); }
   if(id==='danh-muc') renderCatalog();
   if(id==='quan-ly-tk') renderUsersTable();
   if(id==='de-xuat') renderDxTable();
