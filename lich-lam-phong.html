@@ -176,6 +176,13 @@
   .chip.s-ok{background:var(--good-bg);color:var(--good)} .chip.s-attention{background:var(--warn-bg);color:var(--warn)}
   .chip.s-tight{background:var(--tight-bg);color:var(--tight)} .chip.s-late{background:var(--late-bg);color:var(--late)}
   .chip.s-extra,.chip.s-meal{background:var(--panel-2);color:var(--muted)}
+  .chip.s-done{background:var(--accent-soft);color:var(--accent)}
+  .rowbtn{border:1px solid var(--line);background:var(--panel);color:var(--muted);border-radius:6px;width:28px;height:28px;
+    cursor:pointer;font-size:13px;margin:0 1px;line-height:1}
+  .rowbtn:hover{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
+  tr.done-row>td{background:var(--good-bg)}
+  tr.editing>td{background:var(--accent-soft)}
+  .blk.s-done{background:var(--accent-soft);color:var(--accent);border-color:transparent}
   .tag{font-size:11px;color:var(--muted)}
   .teampill{font-family:var(--mono);font-weight:700;font-size:12px;background:var(--accent-soft);color:var(--accent);
     border-radius:7px;padding:2px 8px}
@@ -326,14 +333,16 @@
   </section>
 
   <section class="panel">
-    <h2 style="display:flex;justify-content:space-between;align-items:center;gap:10px">Thứ tự làm phòng chi tiết
-      <button class="btn" id="refreshBtn" style="text-transform:none;letter-spacing:0">🔄 Cập nhật lịch</button></h2>
+    <h2 style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">Thứ tự làm phòng chi tiết
+      <span style="display:flex;gap:8px">
+        <button class="btn" id="autoOrderBtn" style="text-transform:none;letter-spacing:0">↺ Tự động sắp</button>
+        <button class="btn" id="refreshBtn" style="text-transform:none;letter-spacing:0">🔄 Cập nhật</button></span></h2>
     <div class="tbl-scroll">
       <table class="sched">
         <thead><tr>
           <th class="c">#</th><th class="c">Phòng</th><th>Loại</th><th class="c">Cặp</th>
           <th class="c">Bắt đầu</th><th class="c">Xong</th><th class="c">Hạn chót</th>
-          <th class="c">Còn/Trễ</th><th>Trạng thái</th>
+          <th class="c">Còn/Trễ</th><th>Trạng thái</th><th class="c">✓ Sạch</th><th class="c">Thao tác</th>
         </tr></thead>
         <tbody id="schedBody"></tbody>
       </table>
@@ -490,7 +499,7 @@ function ensureZones(){
   state.params.teamZones=z.map(x=>({lo:Math.round(+x.lo)||0,hi:Math.round(+x.hi)||99}));
   return state.params.teamZones;
 }
-function normRoom(r){return {room:String(r.room??"").trim(),co:r.co||"",ci:r.ci||"",kind:r.kind||"auto"};}
+function normRoom(r){return {room:String(r.room??"").trim(),co:r.co||"",ci:r.ci||"",kind:r.kind||"auto",done:!!r.done,team:(+r.team||0),ord:(r.ord==null||r.ord===""?null:+r.ord)};}
 function todayStr(){const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
 function fmtDate(s){const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(s||"");return m?`${m[3]}/${m[2]}/${m[1]}`:(s||"");}
 function freshDay(){return {params:defParams(),rooms:SAMPLE.map(a=>normRoom({room:a[0],co:a[1]||"",ci:a[2]||"",kind:a[3]||"auto"}))};}
@@ -550,7 +559,7 @@ function buildTasks(p){
     if(t==="b2b"||t==="out"){dur=p.tout; scales=true; ready=Math.max(roomFloor,co); dl=(ci!=null)?ci:Math.max(STDCI,co);}
     else if(t==="arr"){dur=p.tarr; ready=roomFloor; dl=ci;}
     else {dur=p.tih; ready=ihFloor; dl=END;}
-    out.push({room:r.room,type:t,dur,ready,dl,scales,floor:floorOf(r.room)});
+    out.push({room:r.room,type:t,dur,ready,dl,scales,floor:floorOf(r.room),pinTeam:(+r.team||0),ord:(r.ord==null?null:+r.ord),done:!!r.done});
   }
   return out;
 }
@@ -593,17 +602,24 @@ function schedule(tasks,N,p){
     const ready=pool.filter(j=>j.ready<=f);
     let pick, helping=false;
     if(ready.length){
+      const pinnedOther=j=>j.pinTeam&&j.pinTeam<=N&&j.pinTeam!==ti+1;
+      const elig=ready.filter(j=>!pinnedOther(j));   // bỏ phòng đã GHIM cho cặp khác
+      if(!elig.length){
+        // cặp này chỉ còn phòng ghim cho cặp khác -> chờ tới lượt (nhích giờ tới mốc kế tiếp)
+        const evts=[]; pool.forEach(j=>{if(j.ready>f)evts.push(j.ready);}); free.forEach((v,k)=>{if(k!==ti&&v>f)evts.push(v);});
+        free[ti]=evts.length?Math.min.apply(null,evts):f+5; continue;
+      }
       const Z=zones[ti];
-      const own=zoneOn?ready.filter(j=>inZ(j.floor,Z)):[];
-      const cand=(zoneOn&&own.length)?own:ready;   // cụm của mình hết phòng sẵn sàng -> lên hỗ trợ cụm khác
-      helping=zoneOn&&!own.length&&ready.length>0;
+      const pinnedHere=elig.filter(j=>j.pinTeam===ti+1&&j.pinTeam<=N);   // phòng ghim cho chính cặp này -> làm trước
+      const own = pinnedHere.length? pinnedHere : (zoneOn? elig.filter(j=>inZ(j.floor,Z)) : []);
+      const cand = own.length? own : elig;
+      helping = zoneOn && !pinnedHere.length && !elig.filter(j=>inZ(j.floor,Z)).length;
+      const lf=lastFloor[ti], sameF=t=>(lf!=null&&t.floor===lf)?0:1, dist=t=>lf!=null?Math.abs(parseInt(t.floor,10)-parseInt(lf,10)):0;
+      const ok=t=>(t.ord==null?1e9:t.ord);   // thứ tự SẮP TAY (nếu có) ưu tiên trước; rồi hạn chót, loại, tầng
       if(floorOpt){
-        const lf=lastFloor[ti], sameF=t=>(lf!=null&&t.floor===lf)?0:1, dist=t=>lf!=null?Math.abs(parseInt(t.floor,10)-parseInt(lf,10)):0;
-        // 1) HẠN CHÓT sớm hơn làm trước (B2B check-in muộn -> hạn muộn -> tự lùi sau, nhường phòng gấp 14h)
-        // 2) cùng hạn: B2B → ARR → OUT → Inhouse  3) cùng tầng  4) tầng gần nhất
-        cand.sort((a,b)=>a.dl-b.dl||CATRANK[a.type]-CATRANK[b.type]||sameF(a)-sameF(b)||dist(a)-dist(b)||a.ready-b.ready);
+        cand.sort((a,b)=>ok(a)-ok(b)||a.dl-b.dl||CATRANK[a.type]-CATRANK[b.type]||sameF(a)-sameF(b)||dist(a)-dist(b)||a.ready-b.ready);
       } else {
-        cand.sort((a,b)=>a.dl-b.dl||CATRANK[a.type]-CATRANK[b.type]||a.ready-b.ready||a.dur-b.dur);
+        cand.sort((a,b)=>ok(a)-ok(b)||a.dl-b.dl||CATRANK[a.type]-CATRANK[b.type]||a.ready-b.ready||a.dur-b.dur);
       }
       pick=cand[0];
     }
@@ -692,6 +708,7 @@ function render(){
   ];
   $("#stats").innerHTML=stats.map(s=>`<div class="stat ${s.c||""}"><div class="n tnum">${s.n}</div><div class="l">${s.l}</div></div>`).join("");
 
+  lastJobs=jobs;
   renderTimeline(jobs,free,N,p);
   renderSched(jobs);
   renderCounts(tasks);
@@ -721,11 +738,11 @@ function renderTimeline(jobs,free,N,p){
       const lbl=j.room||"", isRoom=ROOMTYPES.includes(j.type);
       const w=Math.max((j.finish-j.start)*PX,14), short=w<42;
       const tip=isRoom
-        ? `${lbl} · ${TYPE[j.type].label}\n${fm(j.start)}–${fm(j.finish)} · hạn ${fm(j.dl)}\n${j.slack<0?"trễ "+(-j.slack):"còn "+j.slack} phút`
+        ? `${lbl} · ${TYPE[j.type].label}${j.done?" · ĐÃ SẠCH":""}\n${fm(j.start)}–${fm(j.finish)} · hạn ${fm(j.dl)}\n${j.slack<0?"trễ "+(-j.slack):"còn "+j.slack} phút`
         : `${TYPE[j.type].ic} ${j.name}\n${fm(j.start)}–${fm(j.finish)} (${j.finish-j.start}′)`;
-      const inner=isRoom?`<span class="rm">${lbl}</span>${short?"":`<span>${TYPE[j.type].ic}</span>`}`
+      const inner=isRoom?`<span class="rm">${lbl}</span>${short?"":`<span>${j.done?"🔵":TYPE[j.type].ic}</span>`}`
                         :`<span>${TYPE[j.type].ic}</span>${short?"":`<span style="font-weight:600">${j.name}</span>`}`;
-      blocks+=`<div class="blk s-${j.status}" style="left:${x(j.start)}px;width:${w}px" title="${tip}">${inner}</div>`;
+      blocks+=`<div class="blk s-${j.done?'done':j.status}" style="left:${x(j.start)}px;width:${w}px" title="${tip}">${inner}</div>`;
     }
     const roomsN=mine.filter(j=>ROOMTYPES.includes(j.type)).length;
     const sz=(p.teamSizes&&p.teamSizes[team-1])||2;
@@ -738,13 +755,49 @@ function renderTimeline(jobs,free,N,p){
   $("#timeline").innerHTML=html;
   $("#legend").innerHTML=
     Object.values(STATUS).map(s=>`<b><span class="swatch s-${s.k}" style="background:var(--${s.k}-bg);border:1px solid var(--${s.k})"></span>${s.ic} ${s.label}</b>`).join("")
-    +`<b><span class="swatch" style="background:var(--accent-soft);border:1px solid var(--accent)"></span>🍚 Ăn / 🧴 việc khác</b>`
+    +`<b><span class="swatch" style="background:var(--accent-soft);border:1px solid var(--accent)"></span>🔵 Đã sạch</b>`
+    +`<b><span class="swatch" style="background:var(--panel);border:1px dashed var(--line)"></span>🍚 Ăn / 🧴 việc khác</b>`
     +`<b><span style="border-left:2px dashed var(--accent);width:10px;height:12px;display:inline-block"></span>Giờ nhận phòng</b>`;
 }
 
+let editRoom=null, lastJobs=[];
+function moveRoom(room,dir){
+  const order=lastJobs.filter(j=>ROOMTYPES.includes(j.type)).map(j=>j.room);
+  const i=order.indexOf(room); if(i<0)return; const k=i+dir; if(k<0||k>=order.length)return;
+  const tmp=order[i]; order[i]=order[k]; order[k]=tmp;
+  order.forEach((rm,idx)=>{const r=state.rooms.find(x=>x.room===rm); if(r)r.ord=idx;});  // chốt thứ tự hiện tại + đổi chỗ
+  save(); render();
+}
+function clearManualOrder(){ state.rooms.forEach(r=>{r.ord=null;}); save(); render(); }
+function saveEditRow(room){
+  const btn=document.querySelector(`[data-esave="${room}"]`); const tr=btn&&btn.closest("tr"); if(!tr){editRoom=null;render();return;}
+  const r=state.rooms.find(x=>x.room===room);
+  if(r){
+    const ts=tr.querySelector('[data-ef="team"]'), co=tr.querySelector('[data-ef="co"]'), ci=tr.querySelector('[data-ef="ci"]');
+    if(ts)r.team=+ts.value||0; if(co)r.co=co.value; if(ci)r.ci=ci.value;
+  }
+  editRoom=null; save(); renderEditor(); render();
+}
+function bindSched(){
+  const body=$("#schedBody");
+  body.addEventListener("click",e=>{
+    let el;
+    if(el=e.target.closest("[data-up]")){moveRoom(el.dataset.up,-1);return;}
+    if(el=e.target.closest("[data-down]")){moveRoom(el.dataset.down,1);return;}
+    if(el=e.target.closest("[data-edit]")){editRoom=el.dataset.edit;renderSched(lastJobs);return;}
+    if(el=e.target.closest("[data-ecancel]")){editRoom=null;renderSched(lastJobs);return;}
+    if(el=e.target.closest("[data-esave]")){saveEditRow(el.dataset.esave);return;}
+  });
+  body.addEventListener("change",e=>{
+    const cb=e.target.closest("[data-done]"); if(!cb)return;
+    const r=state.rooms.find(x=>x.room===cb.dataset.done); if(r){r.done=cb.checked; save(); render();}
+  });
+  $("#autoOrderBtn").addEventListener("click",clearManualOrder);
+}
 function renderSched(jobs){
   const body=$("#schedBody");
-  if(!jobs.length){body.innerHTML=`<tr><td colspan="9" class="c tag" style="padding:20px">Chưa có phòng nào cần dọn.</td></tr>`;return;}
+  if(!jobs.length){body.innerHTML=`<tr><td colspan="11" class="c tag" style="padding:20px">Chưa có phòng nào cần dọn.</td></tr>`;return;}
+  const N=Math.max(1,Math.round(+state.params.teams)||1);
   body.innerHTML=jobs.map((j,i)=>{
     const isRoom=ROOMTYPES.includes(j.type);
     if(!isRoom){
@@ -757,20 +810,35 @@ function renderSched(jobs){
         <td class="c mono">${fm(j.finish)}</td>
         <td class="c tag">—</td><td class="c tag">—</td>
         <td><span class="chip s-${j.status}">${TYPE[j.type].ic} ${j.type==='meal'?'Đi ăn':'Việc khác'}</span></td>
+        <td></td><td></td>
       </tr>`;
     }
+    if(editRoom===j.room){
+      const r=state.rooms.find(x=>x.room===j.room)||{};
+      return `<tr class="editing">
+        <td class="c tag mono">${i+1}</td>
+        <td class="c"><b class="mono">${j.room}</b></td>
+        <td colspan="2"><select data-ef="team" style="width:118px"><option value="0"${!r.team?" selected":""}>Cặp tự động</option>${Array.from({length:N},(_,k)=>`<option value="${k+1}"${r.team===k+1?" selected":""}>Cặp ${k+1}</option>`).join("")}</select></td>
+        <td colspan="2"><span class="tag">out</span> <input data-ef="co" type="time" value="${r.co||""}" style="width:104px"></td>
+        <td colspan="2"><span class="tag">in</span> <input data-ef="ci" type="time" value="${r.ci||""}" style="width:104px"></td>
+        <td colspan="3" class="c" style="white-space:nowrap"><button class="btn primary" data-esave="${j.room}" style="padding:6px 10px">✓ Lưu</button> <button class="btn ghost" data-ecancel="1" style="padding:6px 10px">Huỷ</button></td>
+      </tr>`;
+    }
+    const done=j.done;
     const st=STATUS[j.status];
     const slk=j.slack<0?`−${-j.slack}′`:`+${j.slack}′`;
-    return `<tr>
+    return `<tr class="${done?"done-row":""}">
       <td class="c tag mono">${i+1}</td>
       <td class="c"><b class="mono">${j.room}</b></td>
-      <td>${TYPE[j.type].ic} <span class="tag">${TYPE[j.type].label}</span>${j.help?' <span class="tag" style="color:var(--warn)">↗ hỗ trợ</span>':''}</td>
-      <td class="c"><span class="teampill">${j.team}</span></td>
+      <td>${TYPE[j.type].ic} <span class="tag">${TYPE[j.type].label}</span>${j.help?' <span class="tag" style="color:var(--warn)">↗ hỗ trợ</span>':""}</td>
+      <td class="c"><span class="teampill">${j.team}</span>${j.pinTeam?' <span title="đã ghim cặp">📌</span>':""}</td>
       <td class="c mono">${fm(j.start)}</td>
       <td class="c mono">${fm(j.finish)}</td>
       <td class="c mono tag">${fm(j.dl)}</td>
       <td class="c mono" style="color:var(--${j.status==='ok'?'good':j.status})">${slk}</td>
-      <td><span class="chip s-${st.k}">${st.ic} ${st.label}</span></td>
+      <td>${done?'<span class="chip s-done">🔵 Đã sạch</span>':`<span class="chip s-${st.k}">${st.ic} ${st.label}</span>`}</td>
+      <td class="c"><input type="checkbox" data-done="${j.room}"${done?" checked":""} style="width:18px;height:18px;cursor:pointer"></td>
+      <td class="c" style="white-space:nowrap"><button class="rowbtn" data-up="${j.room}" title="Lên">↑</button><button class="rowbtn" data-down="${j.room}" title="Xuống">↓</button><button class="rowbtn" data-edit="${j.room}" title="Sửa cặp / giờ">✎</button></td>
     </tr>`;
   }).join("");
 }
@@ -1032,7 +1100,7 @@ function bindTheme(){
   });
 }
 
-syncParamsToInputs();bindParams();bindEditor();bindExtras();bindTeamSizes();bindShifts();bindDayBar();bindQuickOut();bindTheme();renderEditor();renderExtras();renderTeamSizes();renderShifts();renderDayBar();render();
+syncParamsToInputs();bindParams();bindEditor();bindExtras();bindTeamSizes();bindShifts();bindDayBar();bindQuickOut();bindSched();bindTheme();renderEditor();renderExtras();renderTeamSizes();renderShifts();renderDayBar();render();
 </script>
 
 
