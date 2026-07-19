@@ -510,6 +510,7 @@ function loadActive(){
 function save(){
   store.days[state.date]={params:state.params,rooms:state.rooms};
   store.current=state.date;
+  store.upd=store.upd||{}; store.upd[state.date]=Date.now();
   try{localStorage.setItem(LS,JSON.stringify(store));}catch(e){}
   if(window.__hkCloudPush)window.__hkCloudPush(state.date);
 }
@@ -1042,50 +1043,59 @@ syncParamsToInputs();bindParams();bindEditor();bindExtras();bindTeamSizes();bind
   const SUPABASE_ANON_KEY='sb_publishable_EhmK2BPqqcXP3tN9rxV7cQ_NXQ1pvsj';
   const COLL='hkLich';
   let sb=null, ready=false; const lastPushed={};
+  function localUpd(d){ return (store.upd&&store.upd[d])||0; }
+  function cloudMs(iso){ const t=Date.parse(iso||''); return isNaN(t)?0:t; }
   function setDot(s){var el=document.getElementById('hk-sync'),t=document.getElementById('hk-sync-txt');
-    var M={ok:['#1a8a4a','Đã đồng bộ'],sync:['#b9820b','Đang lưu…'],err:['#cf2f38','Mất kết nối'],off:['#9aa4b2','Chưa đăng nhập']};
+    var M={ok:['#1a8a4a','Đã lưu & đồng bộ'],sync:['#b9820b','Đang lưu…'],err:['#cf2f38','Lỗi lưu — xem Console'],off:['#9aa4b2','Chỉ lưu máy này']};
     var m=M[s]||M.off; if(el)el.style.background=m[0]; if(t)t.textContent=m[1];}
   function mountDot(){var bar=document.querySelector('.datebar'); if(!bar||document.getElementById('hk-sync'))return;
     var w=document.createElement('span'); w.style.cssText='display:flex;align-items:center;gap:6px;margin-left:auto;font-size:12px;color:var(--muted)';
     w.innerHTML='<span id="hk-sync" style="width:9px;height:9px;border-radius:50%;background:#9aa4b2;display:inline-block"></span><span id="hk-sync-txt"></span>';
     bar.appendChild(w);}
   try{ if(window.supabase&&SUPABASE_URL) sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{realtime:{params:{eventsPerSecond:5}}}); }catch(e){console.error('supa init',e);}
+  function applyCloudDay(id,data,updIso){
+    store.days[id]={params:normParams(data.params),rooms:(data.rooms||[]).map(normRoom)};
+    store.upd=store.upd||{}; store.upd[id]=cloudMs(updIso)||Date.now();
+    lastPushed[id]=JSON.stringify({params:store.days[id].params,rooms:store.days[id].rooms});
+  }
   async function pull(){
     if(!sb)return setDot('off'); setDot('sync');
     try{
-      const {data,error}=await sb.from('records').select('id,data,deleted').eq('collection',COLL);
+      const {data,error}=await sb.from('records').select('id,data,deleted,updated_at').eq('collection',COLL);
       if(error)throw error;
-      const cloudIds=new Set();
-      (data||[]).forEach(function(row){ cloudIds.add(String(row.id)); if(row.deleted||!row.data)return;
-        store.days[row.id]={params:normParams(row.data.params),rooms:(row.data.rooms||[]).map(normRoom)};
-        lastPushed[row.id]=JSON.stringify({params:store.days[row.id].params,rooms:store.days[row.id].rooms});
+      (data||[]).forEach(function(row){ if(row.deleted||!row.data)return; var id=String(row.id);
+        // CHỈ lấy bản cloud nếu MỚI HƠN (hoặc bằng) bản local -> không đè chỉnh sửa local chưa kịp đẩy
+        if(!store.days[id] || cloudMs(row.updated_at) >= localUpd(id)) applyCloudDay(id,row.data,row.updated_at);
       });
       ready=true;
-      Object.keys(store.days).forEach(function(d){ if(!cloudIds.has(d)) push(d); });
+      // Đẩy mọi ngày local lên (bản nào local mới hơn sẽ ghi đè cloud; bản trùng thì bỏ qua)
+      Object.keys(store.days).forEach(function(d){ push(d); });
       if(store.days[state.date]){ state.params=normParams(store.days[state.date].params); state.rooms=(store.days[state.date].rooms||[]).map(normRoom); }
       try{ localStorage.setItem(LS,JSON.stringify(store)); }catch(e){}
       setDot('ok'); refreshAll(); renderDayBar();
     }catch(e){ console.error('hk pull',e); setDot('err'); }
   }
   var _t=null,_pend={};
-  function schedulePush(date){ _pend[date]=1; clearTimeout(_t); _t=setTimeout(function(){ var ds=Object.keys(_pend); _pend={}; ds.forEach(function(d){push(d);}); },1200); }
+  function schedulePush(date){ _pend[date]=1; clearTimeout(_t); _t=setTimeout(flushNow,800); }
+  function flushNow(){ if(_t){clearTimeout(_t);_t=null;} var ds=Object.keys(_pend); _pend={}; ds.forEach(function(d){push(d);}); }
   async function push(date){
     if(!sb)return; var day=store.days[date]; if(!day)return;
     var payload={params:day.params,rooms:day.rooms}; var js=JSON.stringify(payload);
     if(lastPushed[date]===js)return; setDot('sync');
-    try{ const {error}=await sb.from('records').upsert([{collection:COLL,id:date,data:payload,deleted:false,updated_at:new Date().toISOString()}],{onConflict:'collection,id'});
+    try{
+      const {error}=await sb.from('records').upsert([{collection:COLL,id:date,data:payload,deleted:false,updated_at:new Date(localUpd(date)||Date.now()).toISOString()}],{onConflict:'collection,id'});
       if(error)throw error; lastPushed[date]=js; setDot('ok');
     }catch(e){ console.error('hk push',e); setDot('err'); }
   }
-  window.__hkCloudPush=function(date){ if(sb&&ready) schedulePush(date); };
+  window.__hkCloudPush=function(date){ if(sb) schedulePush(date); };
   function startRealtime(){
     if(!sb)return;
     sb.channel('hk-lich-sync').on('postgres_changes',{event:'*',schema:'public',table:'records',filter:'collection=eq.'+COLL},function(payload){
       var row=payload.new||payload.old; if(!row)return; var id=String(row.id);
       if(payload.eventType==='DELETE'||(payload.new&&payload.new.deleted))return;
       var d=payload.new.data; if(!d)return;
-      store.days[id]={params:normParams(d.params),rooms:(d.rooms||[]).map(normRoom)};
-      lastPushed[id]=JSON.stringify({params:store.days[id].params,rooms:store.days[id].rooms});
+      if(cloudMs(payload.new.updated_at) < localUpd(id)) return;   // đừng đè bản local mới hơn
+      applyCloudDay(id,d,payload.new.updated_at);
       try{ localStorage.setItem(LS,JSON.stringify(store)); }catch(e){}
       if(id===state.date){ state.params=store.days[id].params; state.rooms=store.days[id].rooms; refreshAll(); }
     }).subscribe(function(st){ if(st==='CHANNEL_ERROR'||st==='TIMED_OUT')setDot('err'); });
@@ -1096,6 +1106,8 @@ syncParamsToInputs();bindParams();bindEditor();bindExtras();bindTeamSizes();bind
     try{ const {data}=await sb.auth.getSession(); if(!data||!data.session){ setDot('off'); return; } }catch(e){ setDot('off'); return; }
     await pull(); startRealtime();
     window.addEventListener('online',pull);
+    window.addEventListener('pagehide',flushNow);
+    document.addEventListener('visibilitychange',function(){ if(document.visibilityState==='hidden')flushNow(); });
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init); else init();
 })();
