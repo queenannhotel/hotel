@@ -182,6 +182,9 @@
   .rowbtn:hover{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
   tr.done-row>td{background:var(--good-bg)}
   tr.editing>td{background:var(--accent-soft)}
+  .draghandle{touch-action:none;cursor:grab;font-size:15px}
+  .draghandle:active{cursor:grabbing}
+  tr.dragging>td{background:var(--accent-soft);opacity:.85}
   .blk.s-done{background:var(--accent-soft);color:var(--accent);border-color:transparent}
   .co-real{background:var(--tight);color:#fff;padding:3px 9px;border-radius:6px;display:inline-block;font-weight:700;box-shadow:0 0 0 2px var(--tight-bg)}
   .tag{font-size:11px;color:var(--muted)}
@@ -595,7 +598,20 @@ function schedule(tasks,N,p){
 
   // 2) Phòng — greedy theo hạn chót, có chèn giờ ăn khi cặp rảnh trong khung
   const lunched=Array.from({length:N},()=>!p.mealOn);
-  const pool=tasks.map(t=>({...t}));
+  const roomTasks=tasks.map(t=>({...t}));
+  const manual=roomTasks.some(t=>t.ord!=null);   // có phòng KÉO SẮP TAY -> chạy đúng thứ tự đã kéo
+  if(manual){
+    const order=roomTasks.slice().sort((a,b)=>(a.ord==null?1e9:a.ord)-(b.ord==null?1e9:b.ord)||a.dl-b.dl||CATRANK[a.type]-CATRANK[b.type]);
+    for(const pick of order){
+      let ti=(pick.pinTeam&&pick.pinTeam<=N)?pick.pinTeam-1:leastFree(free,N);
+      if(!lunched[ti]&&free[ti]>=lunchS){ done.push({name:"Đi ăn",type:"meal",team:ti+1,start:free[ti],finish:free[ti]+(+p.mealDur||30),status:"meal"}); free[ti]+=(+p.mealDur||30); lunched[ti]=true; }
+      const changed=(lastFloor[ti]!=null&&pick.floor!==lastFloor[ti]); const move=changed?moveMin:0; if(changed)moves++;
+      const d=durForTeam(pick,sizes[ti]); const st=Math.max(free[ti]+move,pick.ready), fin=st+d;
+      pick.team=ti+1;pick.start=st;pick.finish=fin;pick.dur=d;pick.moved=move>0;pick.help=false;free[ti]=fin;lastFloor[ti]=pick.floor;
+      pick.slack=Math.round(pick.dl-pick.finish);pick.status=statusOf(pick.slack,p);done.push(pick);
+    }
+  } else {
+  const pool=roomTasks;
   while(pool.length){
     const ti=leastFree(free,N), f=free[ti];
     if(!lunched[ti] && f>=lunchS){
@@ -637,6 +653,7 @@ function schedule(tasks,N,p){
     lastFloor[ti]=pick.floor;
     pick.slack=Math.round(pick.dl-pick.finish); pick.status=statusOf(pick.slack,p);
     pool.splice(pool.indexOf(pick),1); done.push(pick);
+  }
   }
   // cặp chưa kịp ăn (hết phòng trước khung) -> ăn sau
   if(p.mealOn) for(let t=0;t<N;t++) if(!lunched[t]){
@@ -785,8 +802,6 @@ function bindSched(){
   const body=$("#schedBody");
   body.addEventListener("click",e=>{
     let el;
-    if(el=e.target.closest("[data-up]")){moveRoom(el.dataset.up,-1);return;}
-    if(el=e.target.closest("[data-down]")){moveRoom(el.dataset.down,1);return;}
     if(el=e.target.closest("[data-edit]")){editRoom=el.dataset.edit;renderSched(lastJobs);return;}
     if(el=e.target.closest("[data-ecancel]")){editRoom=null;renderSched(lastJobs);return;}
     if(el=e.target.closest("[data-esave]")){saveEditRow(el.dataset.esave);return;}
@@ -796,11 +811,41 @@ function bindSched(){
     const r=state.rooms.find(x=>x.room===cb.dataset.done); if(r){r.done=cb.checked; save(); render();}
   });
   $("#autoOrderBtn").addEventListener("click",clearManualOrder);
+  bindDrag(body);
+}
+function bindDrag(body){
+  let dragTr=null;
+  body.addEventListener("pointerdown",e=>{
+    const h=e.target.closest("[data-drag]"); if(!h)return;
+    e.preventDefault(); dragTr=h.closest("tr"); if(!dragTr)return;
+    dragTr.classList.add("dragging"); try{h.setPointerCapture(e.pointerId);}catch(_){}
+  });
+  body.addEventListener("pointermove",e=>{
+    if(!dragTr)return; e.preventDefault();
+    const rows=[].slice.call(body.querySelectorAll("tr[data-room]")).filter(r=>r!==dragTr);
+    let before=null;
+    for(const r of rows){ const rc=r.getBoundingClientRect(); if(e.clientY < rc.top+rc.height/2){ before=r; break; } }
+    if(before){ if(dragTr.nextSibling!==before) before.parentNode.insertBefore(dragTr,before); }
+    else { const last=rows[rows.length-1]; if(last&&last!==dragTr) last.parentNode.insertBefore(dragTr,last.nextSibling); }
+  });
+  const end=()=>{
+    if(!dragTr)return; dragTr.classList.remove("dragging"); dragTr=null;
+    const order=[].slice.call(body.querySelectorAll("tr[data-room]")).map(r=>r.getAttribute("data-room"));
+    order.forEach((rm,i)=>{const r=state.rooms.find(x=>x.room===rm); if(r)r.ord=i;});
+    save(); render();
+  };
+  body.addEventListener("pointerup",end);
+  body.addEventListener("pointercancel",end);
 }
 function renderSched(jobs){
   const body=$("#schedBody");
   if(!jobs.length){body.innerHTML=`<tr><td colspan="11" class="c tag" style="padding:20px">Chưa có phòng nào cần dọn.</td></tr>`;return;}
   const N=Math.max(1,Math.round(+state.params.teams)||1);
+  if(state.rooms.some(r=>r.room&&r.ord!=null)){   // đang sắp tay -> bảng hiển thị đúng thứ tự đã kéo
+    const ordOf=room=>{const r=state.rooms.find(x=>x.room===room);return r&&r.ord!=null?r.ord:1e9;};
+    const rj=jobs.filter(j=>ROOMTYPES.includes(j.type)).slice().sort((a,b)=>ordOf(a.room)-ordOf(b.room)||a.start-b.start);
+    jobs=rj.concat(jobs.filter(j=>!ROOMTYPES.includes(j.type)).slice().sort((a,b)=>a.start-b.start));
+  }
   body.innerHTML=jobs.map((j,i)=>{
     const isRoom=ROOMTYPES.includes(j.type);
     if(!isRoom){
@@ -830,7 +875,7 @@ function renderSched(jobs){
     const done=j.done;
     const st=STATUS[j.status];
     const slk=j.slack<0?`−${-j.slack}′`:`+${j.slack}′`;
-    return `<tr class="${done?"done-row":""}">
+    return `<tr data-room="${j.room}" class="${done?"done-row":""}">
       <td class="c tag mono">${i+1}</td>
       <td class="c">${j.checkedOut?`<b class="mono co-real" title="Khách đã check-out thực tế">${j.room}</b>`:`<b class="mono">${j.room}</b>`}</td>
       <td>${TYPE[j.type].ic} <span class="tag">${TYPE[j.type].label}</span>${j.help?' <span class="tag" style="color:var(--warn)">↗ hỗ trợ</span>':""}</td>
@@ -841,7 +886,7 @@ function renderSched(jobs){
       <td class="c mono" style="color:var(--${j.status==='ok'?'good':j.status})">${slk}</td>
       <td>${done?'<span class="chip s-done">🔵 Đã sạch</span>':`<span class="chip s-${st.k}">${st.ic} ${st.label}</span>`}</td>
       <td class="c"><input type="checkbox" data-done="${j.room}"${done?" checked":""} style="width:18px;height:18px;cursor:pointer"></td>
-      <td class="c" style="white-space:nowrap"><button class="rowbtn" data-up="${j.room}" title="Lên">↑</button><button class="rowbtn" data-down="${j.room}" title="Xuống">↓</button><button class="rowbtn" data-edit="${j.room}" title="Sửa cặp / giờ">✎</button></td>
+      <td class="c" style="white-space:nowrap"><button class="rowbtn draghandle" data-drag="${j.room}" title="Giữ &amp; kéo để đổi thứ tự">⠿</button><button class="rowbtn" data-edit="${j.room}" title="Sửa cặp / giờ">✎</button></td>
     </tr>`;
   }).join("");
 }
