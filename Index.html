@@ -769,7 +769,6 @@ textarea{resize:vertical;min-height:68px;}
     <div class="nav-item" onclick="showPage('kho',this)" data-perm="ketoan,giamdoc,truong-bp"><span class="icon">🏭</span> Quản Lý Kho</div>
     <div class="nav-section" data-perm="ketoan,giamdoc,truong-bp">Buồng Phòng</div>
     <div class="nav-item" onclick="showPage('buong-phong',this)" data-perm="ketoan,giamdoc,truong-bp"><span class="icon">🛏</span> Buồng Phòng</div>
-    <div class="nav-item" onclick="showPage('lich-lam-phong',this)" data-perm="giamdoc,truong-bp"><span class="icon">🧹</span> Lịch làm phòng</div>
     <div class="nav-section" data-perm="ketoan,giamdoc">Hệ Thống</div>
     <div class="nav-item" onclick="showPage('danh-muc',this)" data-perm="ketoan,giamdoc"><span class="icon">📦</span> Danh Mục Hàng Hoá</div>
     <div class="nav-item" onclick="showPage('bao-cao',this)" data-perm="ketoan,giamdoc"><span class="icon">📈</span> Báo Cáo Tài Chính</div>
@@ -1468,11 +1467,6 @@ textarea{resize:vertical;min-height:68px;}
           </div>
         </div>
       </div>
-    </div>
-
-    <!-- LỊCH LÀM PHÒNG (HK) - nhúng công cụ xếp lịch, đồng bộ qua Supabase -->
-    <div class="page" id="page-lich-lam-phong">
-      <iframe id="hkl-frame" title="Lịch làm phòng" style="width:100%;height:calc(100vh - 150px);min-height:560px;border:0;border-radius:12px;background:transparent"></iframe>
     </div>
 
     <!-- BÁO CÁO -->
@@ -2218,7 +2212,7 @@ textarea{resize:vertical;min-height:68px;}
       <div class="form-group"><label>Tên mặt hàng <span style="color:var(--red);">*</span></label><input id="ai-name" placeholder="VD: Ga trải giường cotton"></div>
     </div>
     <div class="form-row">
-      <div class="form-group"><label>Đơn vị tính</label><select id="ai-dvt"><option>bộ</option><option>cái</option><option>kg</option><option>lít</option><option>hộp</option><option>thùng</option><option>m²</option><option>cuộn</option><option>lần</option><option>đợt</option><option>tờ</option><option>gói</option><option>vỉ</option><option>can</option><option>đôi</option></select></div>
+      <div class="form-group"><label>Đơn vị tính</label><select id="ai-dvt"><option>bộ</option><option>cái</option><option>kg</option><option>lít</option><option>hộp</option><option>thùng</option><option>m²</option><option>cuộn</option><option>lần</option><option>đợt</option><option>tờ</option><option>gói</option><option>vỉ</option><option>can</option><option>đôi</option><option>túi</option><option>lon</option><option>chai</option></select></div>
       <div class="form-group"><label>Bộ phận sử dụng</label><select id="ai-bophan"><option value="buong-phong">Buồng phòng</option><option value="nha-hang">Nhà hàng</option><option value="bep">Bếp</option><option value="sale">Sale</option><option value="ky-thuat">Kỹ thuật</option><option value="le-tan">Lễ tân</option><option value="hr">HR</option></select></div>
     </div>
     <!-- NCC & GIÁ theo từng nhà cung cấp -->
@@ -2583,9 +2577,9 @@ const ROLE_PERM_DESC = {
 
 // Mặc định tab theo role (nếu user không custom)
 const DEFAULT_TABS = {
-  giamdoc:    ['dashboard','thu-chi','tab-thu','tab-chi','cong-no','nhan-su','kho','kho-kt','kho-bep','kho-nha-hang','kho-hk','kho-ky-thuat','kho-van-phong','kho-le-tan','kho-xuat','kho-nhap','kho-huy','buong-phong','lich-lam-phong','de-xuat','nha-cung-cap','danh-muc','bao-cao','quan-ly-tk','cai-dat'],
+  giamdoc:    ['dashboard','thu-chi','tab-thu','tab-chi','cong-no','nhan-su','kho','kho-kt','kho-bep','kho-nha-hang','kho-hk','kho-ky-thuat','kho-van-phong','kho-le-tan','kho-xuat','kho-nhap','kho-huy','buong-phong','de-xuat','nha-cung-cap','danh-muc','bao-cao','quan-ly-tk','cai-dat'],
   ketoan:     ['thu-chi','tab-thu','tab-chi','cong-no','nhan-su','kho','kho-kt','kho-xuat','kho-nhap','de-xuat','nha-cung-cap','danh-muc','bao-cao'],
-  'truong-bp':['de-xuat','kho','buong-phong','lich-lam-phong'],
+  'truong-bp':['de-xuat','kho','buong-phong'],
   hr:         ['nhan-su'],
 };
 
@@ -2869,7 +2863,6 @@ const AU_TAB_GROUPS = [
     group: '🛏 Buồng Phòng',
     tabs: [
       {id:'buong-phong',  label:'Buồng Phòng (tất cả)'},
-      {id:'lich-lam-phong', label:'Lịch làm phòng'},
     ]
   },
 ];
@@ -6000,14 +5993,13 @@ function exportKhoExcel(){ exportExcel('kho'); return; /* dùng exportExcel th�
   const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='Kho_QueenAnn.csv';a.click();
 }
 
-const PAGE_TITLES={dashboard:'Dashboard Tài Chính','thu-chi':'Quản Lý Thu Chi','tab-thu':'Ghi Thu','tab-chi':'Ghi Chi','cong-no':'Theo Dõi Công Nợ','nhan-su':'Nhân Sự & Lương','kho':'Quản Lý Kho','buong-phong':'Buồng Phòng','lich-lam-phong':'Lịch Làm Phòng','de-xuat':'Đề Xuất Mua Hàng','nha-cung-cap':'Nhà Cung Cấp','danh-muc':'Danh Mục Hàng Hoá','bao-cao':'Báo Cáo Tài Chính','quan-ly-tk':'Quản Lý Tài Khoản','cai-dat':'Cài Đặt Hệ Thống'};
+const PAGE_TITLES={dashboard:'Dashboard Tài Chính','thu-chi':'Quản Lý Thu Chi','tab-thu':'Ghi Thu','tab-chi':'Ghi Chi','cong-no':'Theo Dõi Công Nợ','nhan-su':'Nhân Sự & Lương','kho':'Quản Lý Kho','buong-phong':'Buồng Phòng','de-xuat':'Đề Xuất Mua Hàng','nha-cung-cap':'Nhà Cung Cấp','danh-muc':'Danh Mục Hàng Hoá','bao-cao':'Báo Cáo Tài Chính','quan-ly-tk':'Quản Lý Tài Khoản','cai-dat':'Cài Đặt Hệ Thống'};
 function showPage(id,el){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById('page-'+id).classList.add('active');
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   if(el) el.classList.add('active');
   document.getElementById('page-heading').textContent=PAGE_TITLES[id]||'';
-  if(id==='lich-lam-phong'){ const f=document.getElementById('hkl-frame'); if(f&&!f.src) f.src='lich-lam-phong.html?v='+(window.__hklV||(window.__hklV=Date.now())); }
   if(id==='danh-muc') renderCatalog();
   if(id==='quan-ly-tk') renderUsersTable();
   if(id==='de-xuat') renderDxTable();
