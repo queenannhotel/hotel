@@ -30,19 +30,39 @@ Deno.serve(async (req) => {
     }
     webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE);
 
-    const { title, body, tag, url, excludeEndpoint } = await req.json();
+    const { title, body, tag, url, tab, excludeEndpoint } = await req.json();
     const supabase = createClient(env("SUPABASE_URL"), env("SUPABASE_SERVICE_ROLE_KEY"));
 
     const { data: subs, error } = await supabase
       .from("push_subscriptions")
-      .select("endpoint, subscription");
+      .select("endpoint, subscription, email");
     if (error) throw error;
 
+    // Lọc theo tuỳ chọn nhận thông báo của từng user (user_perms.noti_tabs).
+    // Quy tắc: nếu có `tab` và user có noti_tabs là MẢNG -> chỉ gửi khi noti_tabs chứa tab.
+    // Nếu noti_tabs null / không có perm / không có email / không truyền tab -> vẫn gửi (tương thích ngược).
+    const permByEmail: Record<string, any> = {};
+    if (tab) {
+      const { data: perms } = await supabase
+        .from("user_perms")
+        .select("email, noti_tabs");
+      for (const p of (perms ?? [])) permByEmail[(p as any).email] = p;
+    }
+    const wantsTab = (email: string): boolean => {
+      if (!tab) return true;
+      const perm = email ? permByEmail[email] : null;
+      if (!perm) return true;
+      const nt = perm.noti_tabs;
+      if (!Array.isArray(nt)) return true;   // chưa cấu hình -> gửi như cũ
+      return nt.includes(tab);
+    };
+
     const payload = JSON.stringify({ title, body, tag, url });
-    let sent = 0, removed = 0;
+    let sent = 0, removed = 0, skipped = 0;
 
     await Promise.all((subs ?? []).map(async (row: any) => {
       if (excludeEndpoint && row.endpoint === excludeEndpoint) return;
+      if (!wantsTab(row.email || "")) { skipped++; return; }
       try {
         await webpush.sendNotification(row.subscription, payload);
         sent++;
@@ -56,7 +76,7 @@ Deno.serve(async (req) => {
       }
     }));
 
-    return json({ ok: true, sent, removed });
+    return json({ ok: true, sent, removed, skipped });
   } catch (e) {
     return json({ ok: false, error: String(e) }, 400);
   }
