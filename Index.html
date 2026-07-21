@@ -2304,9 +2304,14 @@ textarea{resize:vertical;min-height:68px;}
       <div style="font-weight:600;color:var(--navy);margin-bottom:5px;">Quyền truy cập theo vai trò:</div>
       <div id="au-perm-desc" style="color:var(--text-muted);line-height:1.6;"></div>
     </div>
+    <!-- Bộ phận phụ trách (nhiều) — chỉ hiện khi sửa user Trưởng BP -->
+    <div id="au-bophans-wrap" style="display:none;margin-bottom:12px;">
+      <div style="font-size:11.5px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin-bottom:8px;">Bộ phận phụ trách <span style="text-transform:none;font-weight:400;">(chọn nhiều)</span></div>
+      <div id="au-bophans-list" style="display:flex;flex-wrap:wrap;gap:6px 14px;"></div>
+    </div>
     <!-- Phân quyền tab (chỉ GĐ mới thấy/dùng) -->
     <div id="au-tab-perm-wrap" style="display:none;margin-bottom:12px;">
-      <div style="font-size:11.5px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin-bottom:8px;">Phân quyền Tab hiển thị</div>
+      <div style="font-size:11.5px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin-bottom:8px;">Phân quyền Tab hiển thị <span style="text-transform:none;font-weight:400;">— tick 🔔 để nhận thông báo tab đó</span></div>
       <div id="au-tab-checkboxes" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
     </div>
     <div id="au-tc-filter-wrap" style="display:none;margin-bottom:12px;">
@@ -2629,11 +2634,18 @@ function currentUserFromSession(session){
     id:u.id, email:u.email, username:u.email,
     role:m.role||'truong-bp',
     bophan:m.bophan||'',
+    bophans:m.bophans||null,
     fullname:m.fullname||u.email,
     tabs:m.tabs||null,
     tc_filter:m.tc_filter||'',
     active:true,
   };
+}
+
+// Danh sách bộ phận của 1 user (hỗ trợ nhiều bộ phận). Tương thích user chỉ có `bophan`.
+function userBophans(u){
+  if(u && Array.isArray(u.bophans) && u.bophans.length) return u.bophans;
+  return (u && u.bophan) ? [u.bophan] : [];
 }
 
 async function doLogin(){
@@ -2763,11 +2775,12 @@ function applyPermissions(){
     btn.style.display=(role==='ketoan'||role==='giamdoc')?'':'none';
   });
 
-  // Lock bộ phận với truong-bp
+  // Lock bộ phận với truong-bp (cho phép các bộ phận user phụ trách)
   const bpSel=document.getElementById('dx-bophan');
-  if(role==='truong-bp'&&currentUser.bophan){
-    [...bpSel.options].forEach(o=>o.disabled=(o.value&&o.value!==currentUser.bophan));
-    bpSel.value=currentUser.bophan;
+  const myBps=userBophans(currentUser);
+  if(role==='truong-bp'&&myBps.length){
+    [...bpSel.options].forEach(o=>o.disabled=(o.value&&!myBps.includes(o.value)));
+    bpSel.value=myBps[0];
     onBophanChange();
   } else {
     [...bpSel.options].forEach(o=>o.disabled=false);
@@ -2823,7 +2836,7 @@ async function renderUsersTable(){
         <td><strong>${u.email}</strong></td>
         <td>${u.fullname||'—'}</td>
         <td><span class="badge" style="background:${meta.bg||'#eee'};color:${meta.color||'#333'};">${meta.label||u.role}</span></td>
-        <td>${u.bophan?(BP_LABELS_USR[u.bophan]||u.bophan):'—'}</td>
+        <td>${userBophans(u).map(b=>`<span class="badge badge-navy" style="font-size:10px;margin:1px;">${BP_LABELS_USR[b]||b}</span>`).join('')||'—'}</td>
         <td style="max-width:340px;">${tabBadges||'—'} ${hasCustom?'':'<span style="font-size:10px;color:var(--text-muted);">(mặc định)</span>'}</td>
         <td><button class="btn btn-primary btn-sm" onclick="editUser('${u.email}')">✏ Sửa tab</button></td>
       </tr>`;
@@ -2841,6 +2854,7 @@ async function loadUserPerms(){
     if(error) throw error;
     if(data){
       if(Array.isArray(data.tabs)&&data.tabs.length) currentUser.tabs=data.tabs;
+      if(Array.isArray(data.bophans)&&data.bophans.length){ currentUser.bophans=data.bophans; currentUser.bophan=data.bophans[0]; }
     }else{
       // Tự đăng ký dòng nhận diện (tabs=null -> dùng mặc định theo vai trò).
       await sb.from('user_perms').insert({email:currentUser.email,fullname:currentUser.fullname,role:currentUser.role,bophan:currentUser.bophan,tabs:null,tc_filter:currentUser.tc_filter,active:true});
@@ -2906,19 +2920,38 @@ const AU_TAB_GROUPS = [
 // Flat list để dùng trong các chỗ khác cần
 const AU_ALL_TABS = AU_TAB_GROUPS.flatMap(g=>g.tabs);
 
-function renderAuTabCheckboxes(selected){
+function renderAuTabCheckboxes(selected, notiSel){
+  notiSel = notiSel || [];
   document.getElementById('au-tab-checkboxes').innerHTML = AU_TAB_GROUPS.map(g=>`
     <div style="width:100%;margin-bottom:12px;">
       <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--border);">${g.group}</div>
       <div style="display:flex;flex-wrap:wrap;gap:5px;">
-        ${g.tabs.map(t=>`
-          <label style="display:flex;align-items:center;gap:5px;padding:5px 10px;border:1.5px solid ${selected.includes(t.id)?'var(--gold)':'var(--border)'};border-radius:7px;cursor:pointer;font-size:12px;background:${selected.includes(t.id)?'var(--gold-pale)':'white'};text-transform:none;letter-spacing:0;color:var(--navy);font-weight:400;" id="au-tab-lbl-${t.id}">
-            <input type="checkbox" value="${t.id}" ${selected.includes(t.id)?'checked':''} style="width:13px;height:13px;accent-color:var(--gold);padding:0;border:none;box-shadow:none;"
-              onchange="this.closest('label').style.borderColor=this.checked?'var(--gold)':'var(--border)';this.closest('label').style.background=this.checked?'var(--gold-pale)':'white';">
-            ${t.label}
-          </label>`).join('')}
+        ${g.tabs.map(t=>{const on=selected.includes(t.id);const noti=on&&notiSel.includes(t.id);return `
+          <span style="display:inline-flex;align-items:center;gap:6px;padding:5px 8px 5px 10px;border:1.5px solid ${on?'var(--gold)':'var(--border)'};border-radius:7px;font-size:12px;background:${on?'var(--gold-pale)':'white'};" id="au-tab-lbl-${t.id}">
+            <label style="display:flex;align-items:center;gap:5px;cursor:pointer;color:var(--navy);font-weight:400;">
+              <input type="checkbox" class="au-access-chk" value="${t.id}" ${on?'checked':''} style="width:13px;height:13px;accent-color:var(--gold);padding:0;border:none;box-shadow:none;"
+                onchange="auAccessToggle(this,'${t.id}')">
+              ${t.label}
+            </label>
+            <label title="Nhận thông báo tab này" style="display:flex;align-items:center;gap:2px;cursor:pointer;font-size:11px;color:var(--text-muted);border-left:1px solid var(--border);padding-left:6px;">
+              <input type="checkbox" class="au-noti-chk" value="${t.id}" ${noti?'checked':''} ${on?'':'disabled'} style="width:12px;height:12px;accent-color:#B7860A;padding:0;border:none;box-shadow:none;">🔔
+            </label>
+          </span>`;}).join('')}
       </div>
     </div>`).join('');
+}
+// Khi bật/tắt quyền truy cập 1 tab → cập nhật màu + bật/tắt ô 🔔 tương ứng
+function auAccessToggle(chk, tabId){
+  const box=chk.closest('span');
+  if(box){ box.style.borderColor=chk.checked?'var(--gold)':'var(--border)'; box.style.background=chk.checked?'var(--gold-pale)':'white'; }
+  const noti=box&&box.querySelector('.au-noti-chk');
+  if(noti){ noti.disabled=!chk.checked; if(!chk.checked) noti.checked=false; }
+}
+// Bộ phận phụ trách (nhiều) trong modal Sửa user
+function renderAuBophansChecks(selected){
+  const box=document.getElementById('au-bophans-list'); if(!box) return;
+  const sel=new Set(selected||[]);
+  box.innerHTML=(CATS.bophan||[]).map(b=>`<label style="display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:500;cursor:pointer;"><input type="checkbox" class="au-bp-chk" value="${esc(b.v)}" ${sel.has(b.v)?'checked':''}>${esc(b.l)}</label>`).join('')||'<span style="color:var(--text-muted);font-size:12px;">Chưa có bộ phận nào</span>';
 }
 function updateBophanVisibility(){
   const r=document.getElementById('au-role').value;
@@ -2945,17 +2978,38 @@ function editUser(email){
   ['au-row-1','au-row-2','au-bp-wrap','au-role-desc-box','au-tc-filter-wrap'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.display='none';});
   document.getElementById('au-tab-perm-wrap').style.display='block';
   const hasCustom=Array.isArray(u.tabs)&&u.tabs.length>0;
-  renderAuTabCheckboxes(hasCustom?u.tabs:(DEFAULT_TABS[u.role]||[]));
+  const accessTabs=hasCustom?u.tabs:(DEFAULT_TABS[u.role]||[]);
+  // Mặc định noti = đúng các tab được truy cập (nếu user chưa từng cấu hình noti_tabs)
+  const notiTabs=Array.isArray(u.noti_tabs)?u.noti_tabs:accessTabs;
+  renderAuTabCheckboxes(accessTabs, notiTabs);
+  // Bộ phận phụ trách (nhiều) — chỉ với Trưởng BP
+  const bpWrap=document.getElementById('au-bophans-wrap');
+  if(u.role==='truong-bp'){ bpWrap.style.display='block'; renderAuBophansChecks(userBophans(u)); }
+  else { bpWrap.style.display='none'; }
   document.getElementById('modal-add-user').classList.add('open');
 }
 async function saveUser(){
   if(!editingPermEmail||!sb){ closeModal('modal-add-user'); return; }
-  const tabs=[...document.querySelectorAll('#au-tab-checkboxes input:checked')].map(cb=>cb.value);
+  const tabs=[...document.querySelectorAll('#au-tab-checkboxes .au-access-chk:checked')].map(cb=>cb.value);
+  // noti chỉ giữ tab vừa được truy cập vừa bật 🔔
+  const notiRaw=[...document.querySelectorAll('#au-tab-checkboxes .au-noti-chk:checked')].map(cb=>cb.value);
+  const noti_tabs=notiRaw.filter(id=>tabs.includes(id));
+  const upd={tabs, noti_tabs, updated_at:new Date().toISOString()};
+  // Bộ phận phụ trách (nhiều) — chỉ khi khối đang hiện (user Trưởng BP)
+  let bophans=null;
+  if(document.getElementById('au-bophans-wrap').style.display!=='none'){
+    bophans=[...document.querySelectorAll('#au-bophans-list .au-bp-chk:checked')].map(cb=>cb.value);
+    upd.bophans=bophans;
+  }
   try{
-    const {error}=await sb.from('user_perms').update({tabs, updated_at:new Date().toISOString()}).eq('email',editingPermEmail);
+    const {error}=await sb.from('user_perms').update(upd).eq('email',editingPermEmail);
     if(error) throw error;
-    showToast('✅ Đã lưu quyền tab. User sẽ thấy ở lần đăng nhập/tải lại tới.',3000,'success');
-    if(currentUser && editingPermEmail===currentUser.email){ currentUser.tabs=tabs; applyPermissions(); }
+    showToast('✅ Đã lưu quyền tab + thông báo. User sẽ thấy ở lần đăng nhập/tải lại tới.',3000,'success');
+    if(currentUser && editingPermEmail===currentUser.email){
+      currentUser.tabs=tabs; currentUser.noti_tabs=noti_tabs;
+      if(bophans&&bophans.length){ currentUser.bophans=bophans; currentUser.bophan=bophans[0]; }
+      applyPermissions();
+    }
     editingPermEmail=null;
     closeModal('modal-add-user');
     renderUsersTable();
@@ -4891,13 +4945,13 @@ function dxFlowHtml(status){
 function canEditDx(d){
   if(!d || !(d.status||'').startsWith('cho-duyet')) return false;
   const role=currentUser?.role;
-  return role==='giamdoc' || d.nguoi===currentUser?.fullname || (role==='truong-bp'&&d.bophan===currentUser?.bophan)
+  return role==='giamdoc' || d.nguoi===currentUser?.fullname || (role==='truong-bp'&&userBophans(currentUser).includes(d.bophan))
       || (role==='ketoan' && d.status==='cho-duyet-ketoan');   // kế toán chỉnh đơn giá ở bước của mình
 }
 function canDeleteDx(d){
   const role=currentUser?.role;
   if(role==='giamdoc') return true;
-  return (d.status||'').startsWith('cho-duyet') && (d.nguoi===currentUser?.fullname || (role==='truong-bp'&&d.bophan===currentUser?.bophan));
+  return (d.status||'').startsWith('cho-duyet') && (d.nguoi===currentUser?.fullname || (role==='truong-bp'&&userBophans(currentUser).includes(d.bophan)));
 }
 // ----- Form: các dòng hàng động -----
 function dxRowHtml(){
@@ -5021,7 +5075,7 @@ function canApproveDx(d){
   const lvl=dxApproveLevel(d.status); if(!lvl) return false;
   const role=currentUser?.role;
   if(role==='giamdoc') return true;                                   // Giám đốc duyệt được mọi cấp
-  if(lvl==='truong-bp') return role==='truong-bp' && d.bophan===currentUser?.bophan;
+  if(lvl==='truong-bp') return role==='truong-bp' && userBophans(currentUser).includes(d.bophan);
   if(lvl==='ketoan')    return role==='ketoan';
   return false;                                                        // cấp 'gd' chỉ giám đốc
 }
@@ -5037,8 +5091,8 @@ function renderDxTable(){
     if(fStatus&&!d.status.includes(fStatus)) return false;
     if(fBp&&d.bophan!==fBp) return false;
     if(fm){const p=(d.ngay||'').split('/');if(parseInt(p[1])!==fm||parseInt(p[2])!==fy) return false;}
-    // Phân quyền: truong-bp chỉ xem đề xuất của bộ phận mình
-    if(currentUser?.role==='truong-bp'&&d.bophan!==currentUser.bophan) return false;
+    // Phân quyền: truong-bp chỉ xem đề xuất của (các) bộ phận mình phụ trách
+    if(currentUser?.role==='truong-bp'&&!userBophans(currentUser).includes(d.bophan)) return false;
     return true;
   });
 
@@ -5278,7 +5332,7 @@ function renderYeuCau(){
 function ycSetStatus(id,s){
   const yc=YC_DATA.find(x=>x.id===id);if(!yc)return;
   yc.status=s;renderYeuCau();renderYeuCauStats();syncNow();
-  if(s==='hoan-thanh') sendPush('✅ Yêu Cầu Đã Xong', `P.${yc.phong} — ${yc.loaiLabel}`, 'yeu-cau', '/hotel/Index.html');
+  if(s==='hoan-thanh') sendPush('✅ Yêu Cầu Đã Xong', `P.${yc.phong} — ${yc.loaiLabel}`, 'yeu-cau', '/hotel/Index.html', 'buong-phong');
 }
 let ycDeletingId=null;
 function ycDelete(id){
@@ -6184,7 +6238,7 @@ function openDeXuatModal(){
   const title=document.getElementById('dx-modal-title'); if(title) title.textContent='🛒 Tạo Đề Xuất Mua Hàng';
   const sbtn=document.getElementById('dx-submit-btn'); if(sbtn) sbtn.textContent='📤 Gửi đề xuất';
   const bp=document.getElementById('dx-bophan');
-  if(bp) bp.value=(currentUser?.role==='truong-bp')?(currentUser.bophan||''):'';
+  if(bp) bp.value=(currentUser?.role==='truong-bp')?(userBophans(currentUser)[0]||''):'';
   const pr=document.getElementById('dx-priority'); if(pr) pr.value='Thường';
   const box=document.getElementById('dx-items'); if(box) box.innerHTML='';
   dxAddRow();
@@ -6353,7 +6407,7 @@ function confirmApprove(id, level){
   if(dx.status==='da-duyet') finalizeDxApproved(dx);   // cộng Kho KT + tạo Chi (1 lần)
   renderDxTable(); renderDashDx(); syncNow();
   const tenList=dxItems(dx).map(i=>i.ten).join(', ');
-  if(dx.status==='da-duyet') sendPush('✅ Đề Xuất Đã Duyệt', `${tenList} đã được duyệt`, 'de-xuat', '/hotel/Index.html');
+  if(dx.status==='da-duyet') sendPush('✅ Đề Xuất Đã Duyệt', `${tenList} đã được duyệt`, 'de-xuat', '/hotel/Index.html', 'de-xuat');
   showToast('✅ Đã duyệt đề xuất',2000,'success');
 }
 function rejectDx(id){
@@ -6471,21 +6525,22 @@ async function subscribeToPush(){
   }catch(e){ console.warn('subscribeToPush',e); }
 }
 // Gửi push tới tất cả thiết bị (trừ máy đang gửi) qua Edge Function 'send-push'
-async function sendPush(title, body, tag='queen-ann', url='/hotel/Index.html'){
+// tab = tab id để Edge Function lọc theo tuỳ chọn nhận thông báo của từng user (noti_tabs).
+async function sendPush(title, body, tag='queen-ann', url='/hotel/Index.html', tab=''){
   try{
     if(!sb) return;
     const excludeEndpoint=await currentPushEndpoint();
-    await sb.functions.invoke('send-push',{body:{title, body, tag, url, excludeEndpoint}});
+    await sb.functions.invoke('send-push',{body:{title, body, tag, url, tab, excludeEndpoint}});
   }catch(e){ console.warn('sendPush',e); }
 }
 
 // Gọi notification khi có đề xuất mới chờ duyệt
 function notifyDeXuatMoi(tenHang, bophan){
-  sendPush('🛒 Đề Xuất Mua Hàng Mới', `${bophan} vừa tạo đề xuất: ${tenHang}`, 'de-xuat', '/hotel/Index.html');
+  sendPush('🛒 Đề Xuất Mua Hàng Mới', `${bophan} vừa tạo đề xuất: ${tenHang}`, 'de-xuat', '/hotel/Index.html', 'de-xuat');
 }
 // Gọi notification khi có yêu cầu khách mới
 function notifyYeuCauMoi(phong, loai, gio){
-  sendPush(`📞 Khách Yêu Cầu — P.${phong}`, `${loai} lúc ${gio}`, 'yeu-cau', '/hotel/Index.html');
+  sendPush(`📞 Khách Yêu Cầu — P.${phong}`, `${loai} lúc ${gio}`, 'yeu-cau', '/hotel/Index.html', 'buong-phong');
 }
 
 // Khởi động PWA
