@@ -5178,6 +5178,7 @@ function submitDx(){
   const newDx={
     id:'DX'+Date.now(), bophan, priority,
     nguoi:currentUser?.fullname||'',
+    email:currentUser?.email||'',            // email người tạo — để lọc noti về đúng người
     ngay:new Date().toLocaleDateString('vi-VN'),
     // Trưởng BP tạo đề xuất = tự duyệt bước BP → bắt đầu ở bước chờ Kế toán.
     status:'cho-duyet-ketoan', flow:[true,false,false],
@@ -5187,7 +5188,7 @@ function submitDx(){
   closeModal('modal-de-xuat');
   renderDxTable();
   syncNow();
-  notifyDeXuatMoi(items.map(i=>i.ten).join(', '), BP_LABELS[bophan]||bophan);
+  notifyDeXuatMoi(items.map(i=>i.ten).join(', '), BP_LABELS[bophan]||bophan, currentUser?.email||'');
   showToast('✅ Đã gửi đề xuất '+items.length+' mặt hàng',2500,'success');
 }
 let editingDxId=null;
@@ -6407,7 +6408,7 @@ function confirmApprove(id, level){
   if(dx.status==='da-duyet') finalizeDxApproved(dx);   // cộng Kho KT + tạo Chi (1 lần)
   renderDxTable(); renderDashDx(); syncNow();
   const tenList=dxItems(dx).map(i=>i.ten).join(', ');
-  if(dx.status==='da-duyet') sendPush('✅ Đề Xuất Đã Duyệt', `${tenList} đã được duyệt`, 'de-xuat', '/hotel/Index.html', 'de-xuat');
+  if(dx.status==='da-duyet') sendPush('✅ Đề Xuất Đã Duyệt', `${tenList} đã được duyệt`, 'de-xuat', '/hotel/Index.html', 'de-xuat', dx.email||'');
   showToast('✅ Đã duyệt đề xuất',2000,'success');
 }
 function rejectDx(id){
@@ -6526,17 +6527,18 @@ async function subscribeToPush(){
 }
 // Gửi push tới tất cả thiết bị (trừ máy đang gửi) qua Edge Function 'send-push'
 // tab = tab id để Edge Function lọc theo tuỳ chọn nhận thông báo của từng user (noti_tabs).
-async function sendPush(title, body, tag='queen-ann', url='/hotel/Index.html', tab=''){
+// ownerEmail = email người tạo (đề xuất) — Edge Function chỉ gửi cho người tạo + Kế toán/GĐ.
+async function sendPush(title, body, tag='queen-ann', url='/hotel/Index.html', tab='', ownerEmail=''){
   try{
     if(!sb) return;
     const excludeEndpoint=await currentPushEndpoint();
-    await sb.functions.invoke('send-push',{body:{title, body, tag, url, tab, excludeEndpoint}});
+    await sb.functions.invoke('send-push',{body:{title, body, tag, url, tab, ownerEmail, excludeEndpoint}});
   }catch(e){ console.warn('sendPush',e); }
 }
 
-// Gọi notification khi có đề xuất mới chờ duyệt
-function notifyDeXuatMoi(tenHang, bophan){
-  sendPush('🛒 Đề Xuất Mua Hàng Mới', `${bophan} vừa tạo đề xuất: ${tenHang}`, 'de-xuat', '/hotel/Index.html', 'de-xuat');
+// Gọi notification khi có đề xuất mới chờ duyệt (chỉ về người tạo + Kế toán/GĐ)
+function notifyDeXuatMoi(tenHang, bophan, ownerEmail){
+  sendPush('🛒 Đề Xuất Mua Hàng Mới', `${bophan} vừa tạo đề xuất: ${tenHang}`, 'de-xuat', '/hotel/Index.html', 'de-xuat', ownerEmail||'');
 }
 // Gọi notification khi có yêu cầu khách mới
 function notifyYeuCauMoi(phong, loai, gio){
