@@ -30,7 +30,7 @@ Deno.serve(async (req) => {
     }
     webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE);
 
-    const { title, body, tag, url, tab, excludeEndpoint } = await req.json();
+    const { title, body, tag, url, tab, ownerEmail, excludeEndpoint } = await req.json();
     const supabase = createClient(env("SUPABASE_URL"), env("SUPABASE_SERVICE_ROLE_KEY"));
 
     const { data: subs, error } = await supabase
@@ -38,16 +38,18 @@ Deno.serve(async (req) => {
       .select("endpoint, subscription, email");
     if (error) throw error;
 
-    // Lọc theo tuỳ chọn nhận thông báo của từng user (user_perms.noti_tabs).
-    // Quy tắc: nếu có `tab` và user có noti_tabs là MẢNG -> chỉ gửi khi noti_tabs chứa tab.
-    // Nếu noti_tabs null / không có perm / không có email / không truyền tab -> vẫn gửi (tương thích ngược).
+    // Nạp user_perms (role + noti_tabs) khi cần lọc theo tab hoặc theo người tạo.
     const permByEmail: Record<string, any> = {};
-    if (tab) {
+    if (tab || ownerEmail) {
       const { data: perms } = await supabase
         .from("user_perms")
-        .select("email, noti_tabs");
+        .select("email, role, noti_tabs");
       for (const p of (perms ?? [])) permByEmail[(p as any).email] = p;
     }
+
+    // Lọc theo tuỳ chọn nhận thông báo của từng user (user_perms.noti_tabs).
+    // Nếu có `tab` và user có noti_tabs là MẢNG -> chỉ gửi khi noti_tabs chứa tab.
+    // Nếu noti_tabs null / không có perm / không có email / không truyền tab -> vẫn gửi (tương thích ngược).
     const wantsTab = (email: string): boolean => {
       if (!tab) return true;
       const perm = email ? permByEmail[email] : null;
@@ -57,12 +59,22 @@ Deno.serve(async (req) => {
       return nt.includes(tab);
     };
 
+    // Lọc theo người tạo (vd đề xuất mua hàng): chỉ gửi cho người tạo + Kế toán/Giám đốc.
+    // ownerEmail rỗng -> không giới hạn (giữ hành vi cũ cho các loại push khác).
+    const canGetOwned = (email: string): boolean => {
+      if (!ownerEmail) return true;
+      const role = (email ? permByEmail[email] : null)?.role;
+      if (role === "ketoan" || role === "giamdoc") return true;
+      return !!email && email === ownerEmail;
+    };
+
     const payload = JSON.stringify({ title, body, tag, url });
     let sent = 0, removed = 0, skipped = 0;
 
     await Promise.all((subs ?? []).map(async (row: any) => {
       if (excludeEndpoint && row.endpoint === excludeEndpoint) return;
-      if (!wantsTab(row.email || "")) { skipped++; return; }
+      const em = row.email || "";
+      if (!wantsTab(em) || !canGetOwned(em)) { skipped++; return; }
       try {
         await webpush.sendNotification(row.subscription, payload);
         sent++;
