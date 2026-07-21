@@ -111,7 +111,7 @@ function lsSave(){
 function _lsSaveRaw(){
   try{
     const data={
-      thu:THU_DATA,chi:CHI_DATA,dx:DX_DATA,ncc:NCC_DATA,kho:KHO_DATA,yc:YC_DATA,
+      thu:THU_DATA,chi:CHI_DATA,dx:DX_DATA,ncc:NCC_DATA,kho:KHO_DATA,yc:YC_DATA,ycDeleted:YC_DELETED,
       hvLinen:HV_LINEN,hvRewash:HV_REWASH_DATA,hvCols:HV_REWASH_COLS,
       wsData:WS_DATA_BY_DATE,roomStatus:ROOM_STATUS_BY_DATE,
       amData:AM_DATA_BY_DATE,mbData:MB_DATE_DATA,nsLuong:NS_LUONG,sxData:SX_DATA,
@@ -131,6 +131,7 @@ function lsLoad(){
     if(d.ncc?.length)    NCC_DATA=d.ncc;
     if(d.kho?.length)    KHO_DATA=d.kho;
     if(d.yc?.length)     YC_DATA=d.yc;
+    if(d.ycDeleted?.length) YC_DELETED=d.ycDeleted;
     if(d.hvLinen)        HV_LINEN=d.hvLinen;
     if(d.hvRewash)       HV_REWASH_DATA=d.hvRewash;
     if(d.hvCols)         HV_REWASH_COLS=d.hvCols;
@@ -1426,6 +1427,7 @@ textarea{resize:vertical;min-height:68px;}
         <div style="display:flex;gap:6px;margin-bottom:16px;">
           <div class="bp-tab active" id="yc-subtab-ds" onclick="switchYcTab('ds',this)" style="font-size:12px;padding:6px 16px;">📋 Danh sách yêu cầu</div>
           <div class="bp-tab"        id="yc-subtab-tk" onclick="switchYcTab('tk',this)" style="font-size:12px;padding:6px 16px;">📊 Thống kê ngày</div>
+          <div class="bp-tab"        id="yc-subtab-xoa" onclick="switchYcTab('xoa',this)" style="font-size:12px;padding:6px 16px;">🗑 Thống kê xoá yêu cầu</div>
         </div>
 
         <!-- SHEET 1: DANH SÁCH -->
@@ -1433,7 +1435,7 @@ textarea{resize:vertical;min-height:68px;}
           <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap;">
             <select id="yc-f-loai" onchange="renderYeuCau()" style="font-size:12px;padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;">
               <option value="">Tất cả loại</option>
-              <option>Dọn phòng</option><option>KO dọn phòng (NNS)</option><option>Thay đồ</option><option>Thêm đồ</option>
+              <option>Dọn phòng</option><option>KO dọn phòng (NNS)</option><option>DND</option><option>Thay đồ</option><option>Thêm đồ</option>
               <option>Laundry</option><option>Ủi đồ</option>
             </select>
             <select id="yc-f-status" onchange="renderYeuCau()" style="font-size:12px;padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;">
@@ -1463,6 +1465,23 @@ textarea{resize:vertical;min-height:68px;}
                 <th>Giờ</th><th>Phòng</th><th>Loại YC</th><th>Chi tiết đồ</th><th>Ghi chú</th><th>Người tiếp nhận</th><th>Trạng thái</th>
               </tr></thead>
               <tbody id="yc-stats-detail"></tbody>
+            </table></div>
+          </div>
+        </div>
+
+        <!-- SHEET 3: THỐNG KÊ XOÁ YÊU CẦU -->
+        <div id="yc-panel-xoa" style="display:none;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:8px;flex-wrap:wrap;">
+            <span style="font-size:13px;color:var(--text-muted);">Danh sách các yêu cầu đã bị xoá kèm lý do</span>
+            <button class="btn btn-excel btn-sm" onclick="exportExcel('yc-xoa')">📊 Xuất Excel</button>
+          </div>
+          <div class="card">
+            <div class="card-header"><div class="card-title">Yêu cầu đã xoá</div></div>
+            <div class="table-wrap wide">
+              <table><thead><tr>
+                <th>Ngày xoá</th><th>Phòng</th><th>Loại YC</th><th>Chi tiết đồ</th><th>Thời điểm YC</th><th>Lý do xoá</th><th>Người xoá</th>
+              </tr></thead>
+              <tbody id="yc-deleted-body"></tbody>
             </table></div>
           </div>
         </div>
@@ -1953,6 +1972,7 @@ textarea{resize:vertical;min-height:68px;}
         <select id="yc-loai" onchange="ycLoaiChange()">
           <option value="don-phong">Dọn phòng</option>
           <option value="ko-don-phong">KO dọn phòng (NNS)</option>
+          <option value="dnd">DND</option>
           <option value="thay-do">Thay đồ</option>
           <option value="them-do">Thêm đồ</option>
           <option value="laundry">Laundry</option>
@@ -1975,6 +1995,21 @@ textarea{resize:vertical;min-height:68px;}
     <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
       <button class="btn btn-ghost" onclick="closeModal('modal-bp-yc')">Huỷ</button>
       <button class="btn btn-gold" onclick="saveYeuCau()">✅ Lưu yêu cầu</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL LÝ DO XOÁ YÊU CẦU -->
+<div class="modal-overlay" id="modal-yc-del">
+  <div class="modal" style="max-width:440px;">
+    <div class="modal-header"><span class="modal-title">🗑 Xoá Yêu Cầu</span><button class="close-btn" onclick="closeModal('modal-yc-del')">✕</button></div>
+    <div id="yc-del-info" style="font-size:13px;color:var(--text-muted);margin-bottom:12px;padding:10px 12px;background:var(--cream);border-radius:8px;"></div>
+    <div class="form-group"><label>Lý do xoá <span style="color:var(--red);">*</span></label>
+      <textarea id="yc-del-reason" placeholder="Nhập lý do xoá yêu cầu này..." style="min-height:70px;"></textarea>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
+      <button class="btn btn-ghost" onclick="closeModal('modal-yc-del')">Huỷ</button>
+      <button class="btn btn-danger" onclick="confirmYcDelete()">🗑 Xoá yêu cầu</button>
     </div>
   </div>
 </div>
@@ -3007,6 +3042,10 @@ function exportExcel(section){
     const tChi=CHI_DATA.filter(inMonth).reduce((s,r)=>s+(typeof chiAmt==='function'?chiAmt(r):(r.tong||0)),0);
     headers=['Hạng mục','Giá trị (đ)'];
     rows=[['Tổng Thu tháng '+m,tThu],['Tổng Chi tháng '+m,tChi],['Lợi nhuận',tThu-tChi]];
+  } else if(S==='yc-xoa'){
+    name='YeuCau_DaXoa';
+    headers=['Ngày xoá','Giờ xoá','Phòng','Loại YC','Chi tiết đồ','Thời điểm YC','Ghi chú','Người tiếp nhận','Lý do xoá','Người xoá'];
+    rows=(YC_DELETED||[]).map(yc=>[yc.del_ngay||'',yc.del_gio||'',yc.phong||'',yc.loaiLabel||yc.loai||'',(yc.items||[]).map(i=>`${i.ten}×${i.sl}`).join(', '),`${yc.gio||''} ${yc.ngay||''}`.trim(),yc.ghichu||'',yc.nguoi||'',yc.del_reason||'',yc.del_by||'']);
   } else return;
   writeSheet(name, headers, rows);
 }
@@ -3735,6 +3774,7 @@ let SX_DATA=[
   {id:'sx21',ten:'Giấy vuông',     sl_setup:80,  manual:true,  sl_thuc_te:0, ghichu:'Nhập tay'},
 ];
 let YC_DATA=[];
+let YC_DELETED=[];   // Yêu cầu đã xoá (kèm lý do) — đồng bộ đa thiết bị
 let currentBpTab='worksheet',wsFilter='A',mbView='date',hvView='linen',ycItemCount=0;
 
 function switchBpTab(tab,el){
@@ -4524,7 +4564,7 @@ function exportSetupXe(){const rows=[['Tên','SL Setup','SL Thực tế','Tồn/
 
 const YC_THAY_DO=['Ga','Bọc mền','Áo gối','Khăn tắm','Khăn tay','Thảm chân','Kimono'];
 const YC_THEM_DO=['Gối','Mền/chăn','Khăn tắm','Khăn tay','Thảm chân','Suối free','Trà','Cà phê','Đường','Bàn chải','Lược','Chụp tóc','Tăm bông','Dao cạo râu','Giấy vệ sinh'];
-const YC_LOAI_LABEL={'don-phong':'Dọn phòng','ko-don-phong':'KO dọn phòng (NNS)','thay-do':'Thay đồ','them-do':'Thêm đồ','laundry':'Laundry','ui-do':'Ủi đồ'};
+const YC_LOAI_LABEL={'don-phong':'Dọn phòng','ko-don-phong':'KO dọn phòng (NNS)','dnd':'DND','thay-do':'Thay đồ','them-do':'Thêm đồ','laundry':'Laundry','ui-do':'Ủi đồ'};
 function ycLoaiChange(){const loai=document.getElementById('yc-loai').value;const wrap=document.getElementById('yc-items-wrap');if(loai==='thay-do'||loai==='them-do'){wrap.style.display='block';document.getElementById('yc-items-label').textContent=loai==='thay-do'?'Danh sách thay đồ':'Danh sách thêm đồ';ycItemCount=0;document.getElementById('yc-items-list').innerHTML='';ycAddItem();}else{wrap.style.display='none';document.getElementById('yc-items-list').innerHTML='';ycItemCount=0;}}
 function ycAddItem(){
   const loai=document.getElementById('yc-loai').value;
@@ -5206,7 +5246,7 @@ function renderYeuCau(){
     'dang-xu-ly': {cls:'badge-blue',  lbl:'Đang xử lý', color:'#3A5FA0',bg:'#EEF3FB'},
     'hoan-thanh': {cls:'badge-green', lbl:'Hoàn thành',  color:'var(--green)',bg:'var(--green-bg)'},
   };
-  const loaiBadge={'don-phong':'badge-navy','ko-don-phong':'badge-red','thay-do':'badge-blue','them-do':'badge-green','laundry':'badge-yellow','ui-do':'badge-navy'};
+  const loaiBadge={'don-phong':'badge-navy','ko-don-phong':'badge-red','dnd':'badge-red','thay-do':'badge-blue','them-do':'badge-green','laundry':'badge-yellow','ui-do':'badge-navy'};
   document.getElementById('yc-list').innerHTML=rows.length?rows.map(yc=>{
     const s=sMap[yc.status]||{cls:'badge-navy',lbl:yc.status,color:'#333',bg:'#eee'};
     const iStr=yc.items.map(i=>`<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:12px;font-size:11px;background:var(--gold-pale);color:var(--navy);margin:2px;">${i.ten} <strong>×${i.sl}</strong></span>`).join('');
@@ -5240,13 +5280,53 @@ function ycSetStatus(id,s){
   yc.status=s;renderYeuCau();renderYeuCauStats();syncNow();
   if(s==='hoan-thanh') sendPush('✅ Yêu Cầu Đã Xong', `P.${yc.phong} — ${yc.loaiLabel}`, 'yeu-cau', '/hotel/Index.html');
 }
-function ycDelete(id){if(confirm('Xoá yêu cầu này?')){YC_DATA=YC_DATA.filter(x=>x.id!==id);renderYeuCau();renderYeuCauStats();syncNow();}}
+let ycDeletingId=null;
+function ycDelete(id){
+  const yc=YC_DATA.find(x=>x.id===id); if(!yc) return;
+  ycDeletingId=id;
+  const iStr=(yc.items||[]).map(i=>`${i.ten}×${i.sl}`).join(', ');
+  document.getElementById('yc-del-info').innerHTML=`<strong>P.${yc.phong}</strong> · ${yc.loaiLabel||yc.loai} · 🕐 ${yc.gio||''} ${yc.ngay||''}${iStr?`<br>${iStr}`:''}`;
+  document.getElementById('yc-del-reason').value='';
+  openModal('modal-yc-del');
+}
+function confirmYcDelete(){
+  const reason=(document.getElementById('yc-del-reason').value||'').trim();
+  if(!reason){ showToast('Vui lòng nhập lý do xoá!',2500,'error'); return; }
+  const idx=YC_DATA.findIndex(x=>x.id===ycDeletingId);
+  if(idx<0){ closeModal('modal-yc-del'); ycDeletingId=null; return; }
+  const yc=YC_DATA[idx];
+  const now=new Date();
+  YC_DELETED.unshift({...yc, del_reason:reason, del_by:currentUser?.fullname||'—', del_ngay:now.toLocaleDateString('vi-VN'), del_gio:now.toTimeString().slice(0,5)});
+  YC_DATA.splice(idx,1);
+  ycDeletingId=null;
+  closeModal('modal-yc-del');
+  renderYeuCau(); renderYeuCauStats(); renderYcDeleted(); syncNow();
+  showToast('✅ Đã xoá yêu cầu',2000,'success');
+}
+function renderYcDeleted(){
+  const tb=document.getElementById('yc-deleted-body'); if(!tb) return;
+  const rows=(YC_DELETED||[]);
+  tb.innerHTML=rows.length?rows.map(yc=>{
+    const iStr=(yc.items||[]).map(i=>`${i.ten}×${i.sl}`).join(', ')||'—';
+    return `<tr>
+      <td style="font-size:12px;font-weight:600;color:var(--navy);">${yc.del_ngay||'—'}${yc.del_gio?' '+yc.del_gio:''}</td>
+      <td style="font-weight:700;">P.${yc.phong}</td>
+      <td><span class="badge badge-navy" style="font-size:11px;">${yc.loaiLabel||yc.loai||'—'}</span></td>
+      <td style="font-size:12px;">${iStr}</td>
+      <td style="font-size:12px;color:var(--text-muted);">🕐 ${yc.gio||''} ${yc.ngay||''}</td>
+      <td style="font-size:12px;">${esc(yc.del_reason||'—')}</td>
+      <td style="font-size:12px;">${esc(yc.del_by||'—')}</td>
+    </tr>`;
+  }).join(''):`<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted);">Chưa có yêu cầu nào bị xoá</td></tr>`;
+}
 function switchYcTab(tab, el){
   document.querySelectorAll('#bp-panel-yeu-cau .bp-tab').forEach(t=>t.classList.remove('active'));
   el.classList.add('active');
   document.getElementById('yc-panel-ds').style.display=tab==='ds'?'block':'none';
   document.getElementById('yc-panel-tk').style.display=tab==='tk'?'block':'none';
+  document.getElementById('yc-panel-xoa').style.display=tab==='xoa'?'block':'none';
   if(tab==='tk') renderYeuCauStats();
+  if(tab==='xoa') renderYcDeleted();
 }
 
 function renderYeuCauStats(){
@@ -5264,14 +5344,12 @@ function renderYeuCauStats(){
     (yc.items||[]).forEach(i=>{ monCount[i.ten]=(monCount[i.ten]||0)+(i.sl||1); });
   });
 
-  // === PHẦN 2: Đếm Dọn phòng, Laundry, Ủi đồ ===
-  const dichVuCount={'Dọn phòng':0,'Laundry':0,'Ủi đồ':0};
-  ycNgay.forEach(yc=>{
-    if(yc.loaiLabel in dichVuCount) dichVuCount[yc.loaiLabel]++;
-  });
+  // === PHẦN 2: Đếm số yêu cầu theo TỪNG hạng mục (động — mọi loại, kể cả loại mới) ===
+  const dichVuCount={};
+  ycNgay.forEach(yc=>{ const lb=yc.loaiLabel||yc.loai; dichVuCount[lb]=(dichVuCount[lb]||0)+1; });
 
-  const loaiColors={'Dọn phòng':'#3A5FA0','Thay đồ':'#B7860A','Thêm đồ':'#2E7D5B','Laundry':'#7B5EA7','Ủi đồ':'#C0392B'};
-  const loaiBg={'Dọn phòng':'#EEF3FB','Thay đồ':'#FFF8E7','Thêm đồ':'#EAF5F0','Laundry':'#F5F0FF','Ủi đồ':'#FDF0EE'};
+  const loaiColors={'Dọn phòng':'#3A5FA0','KO dọn phòng (NNS)':'#C0392B','DND':'#8E44AD','Thay đồ':'#B7860A','Thêm đồ':'#2E7D5B','Laundry':'#7B5EA7','Ủi đồ':'#C0392B'};
+  const loaiBg={'Dọn phòng':'#EEF3FB','KO dọn phòng (NNS)':'#FDF0EE','DND':'#F4ECFA','Thay đồ':'#FFF8E7','Thêm đồ':'#EAF5F0','Laundry':'#F5F0FF','Ủi đồ':'#FDF0EE'};
 
   // KPI cards
   const kpiHtml=`
@@ -5279,9 +5357,9 @@ function renderYeuCauStats(){
       <div style="font-size:10px;color:var(--gold);font-weight:600;margin-bottom:4px;">TỔNG YC</div>
       <div style="font-size:30px;font-weight:700;color:#fff;line-height:1;">${ycNgay.length}</div>
     </div>
-    ${Object.entries(dichVuCount).filter(([,v])=>v>0).map(([k,v])=>`
-    <div style="padding:14px 16px;border:1.5px solid ${loaiColors[k]};border-radius:12px;background:${loaiBg[k]};min-width:100px;text-align:center;">
-      <div style="font-size:10px;font-weight:700;color:${loaiColors[k]};margin-bottom:4px;">${k.toUpperCase()}</div>
+    ${Object.entries(dichVuCount).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`
+    <div style="padding:14px 16px;border:1.5px solid ${loaiColors[k]||'#3A5FA0'};border-radius:12px;background:${loaiBg[k]||'#EEF3FB'};min-width:100px;text-align:center;">
+      <div style="font-size:10px;font-weight:700;color:${loaiColors[k]||'#3A5FA0'};margin-bottom:4px;">${k.toUpperCase()}</div>
       <div style="font-size:28px;font-weight:700;color:var(--navy);line-height:1;">${v}</div>
     </div>`).join('')}
     ${Object.entries(monCount).length?`<div style="width:100%;height:0;"></div>`:''}
@@ -6463,6 +6541,7 @@ const COLLECTIONS = {
   ncc:       { read:()=>_byIdDump(NCC_DATA),  write:r=>{NCC_DATA=r.map(x=>x.obj);},  render:()=>{try{renderNccTable();}catch(e){}} },
   kho:       { read:()=>_byIdDump(KHO_DATA),  write:r=>{KHO_DATA=r.map(x=>x.obj);},  render:()=>{try{renderKhoTab();}catch(e){}} },
   yc:        { read:()=>_byIdDump(YC_DATA),   write:r=>{YC_DATA=r.map(x=>x.obj);},   render:()=>{try{renderYeuCau();}catch(e){}} },
+  ycDeleted: { read:()=>_byIdDump(YC_DELETED),write:r=>{YC_DELETED=r.map(x=>x.obj);},render:()=>{try{renderYcDeleted();}catch(e){}} },
   nsLuong:   { read:()=>_byIdDump(NS_LUONG),  write:r=>{NS_LUONG=r.map(x=>x.obj);},  render:()=>{try{renderNsLuong();}catch(e){} try{updateNsKpi();}catch(e){}} },
   bhxh:      { read:()=>_byIdDump(NS_BHXH),   write:r=>{NS_BHXH=r.map(x=>x.obj);},   render:()=>{try{renderNsBhxh();}catch(e){} try{updateNsKpi();}catch(e){}} },
   tncn:      { read:()=>_byIdDump(NS_TNCN),   write:r=>{NS_TNCN=r.map(x=>x.obj);},   render:()=>{try{renderNsTncn();}catch(e){} try{updateNsKpi();}catch(e){}} },
@@ -6522,7 +6601,7 @@ const WRITE_MATRIX = {
   thu:['giamdoc','ketoan'], chi:['giamdoc','ketoan'],
   ncc:['giamdoc','ketoan'], catalog:['giamdoc','ketoan'],
   nsLuong:['giamdoc','hr'], bhxh:['giamdoc','hr'], tncn:['giamdoc','hr'], cats:['giamdoc'],
-  dx:['giamdoc','ketoan','truong-bp','hr'], kho:['giamdoc','ketoan','truong-bp','hr'], yc:['giamdoc','ketoan','truong-bp','hr'],
+  dx:['giamdoc','ketoan','truong-bp','hr'], kho:['giamdoc','ketoan','truong-bp','hr'], yc:['giamdoc','ketoan','truong-bp','hr'], ycDeleted:['giamdoc','ketoan','truong-bp','hr'],
   wsData:['giamdoc','truong-bp'], roomStatus:['giamdoc','truong-bp'], amData:['giamdoc','truong-bp'],
   mbData:['giamdoc','truong-bp'], hvLinen:['giamdoc','truong-bp'], hvRewash:['giamdoc','truong-bp'],
   hvCols:['giamdoc','truong-bp'], sx:['giamdoc','truong-bp'],
