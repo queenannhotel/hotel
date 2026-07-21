@@ -1020,7 +1020,9 @@ textarea{resize:vertical;min-height:68px;}
           <option value="">Tất cả bộ phận</option>
         </select>
         <button id="btn-cat-bophan" onclick="openCatManager('bophan')" title="Quản lý Bộ phận (Giám đốc)" style="display:none;align-items:center;padding:5px 9px;border-radius:8px;border:1.5px solid var(--border);background:#fff;cursor:pointer;font-size:12px;">⚙ Bộ phận</button>
-        <input type="month" id="dx-f-month" value="2026-07" style="width:140px;" onchange="renderDxTable()">
+        <input type="date" id="dx-from" style="width:140px;" onchange="renderDxTable()" title="Từ ngày">
+        <span style="color:var(--text-muted);">→</span>
+        <input type="date" id="dx-to" style="width:140px;" onchange="renderDxTable()" title="Đến ngày">
         <span id="dx-result-count" style="font-size:12px;color:var(--text-muted);margin-left:4px;"></span>
       </div>
       <div class="card">
@@ -3078,7 +3080,7 @@ function exportExcel(section){
     name='DeXuat_MuaHang';
     headers=['Mã ĐX','Bộ phận','Người đề xuất','Ngày','Ưu tiên','Trạng thái','Tên hàng','NCC','SL','ĐVT','Đơn giá','Thành tiền'];
     const BPL={'buong-phong':'Buồng phòng','nha-hang':'Nhà hàng','bep':'Bếp','le-tan':'Lễ tân','ky-thuat':'Kỹ thuật','sale':'Sale','hr':'HR'};
-    DX_DATA.forEach(d=>dxItems(d).forEach(it=>rows.push([d.id,BPL[d.bophan]||d.bophan,d.nguoi||'',d.ngay,d.priority||'Thường',d.status,it.ten,it.ncc||'',it.sl,it.dvt||'',it.dongia||0,(parseFloat(it.sl)||0)*(parseFloat(it.dongia)||0)])));
+    DX_DATA.forEach(d=>dxItems(d).forEach(it=>rows.push([d.code||d.id,BPL[d.bophan]||d.bophan,d.nguoi||'',d.ngay,d.priority||'Thường',d.status,it.ten,it.ncc||'',it.sl,it.dvt||'',it.dongia||0,(parseFloat(it.sl)||0)*(parseFloat(it.dongia)||0)])));
   } else if(S==='nhan-su'){
     name='NhanSu_Luong';
     headers=['Tháng','Loại','Mô tả','Số tiền','Người','Ghi chú'];
@@ -5084,17 +5086,18 @@ function renderDxTable(){
   try{ syncMobNotif(); }catch(e){}   // cập nhật badge số đề xuất chờ duyệt (không phụ thuộc bộ lọc/early-return)
   const fStatus=document.getElementById('dx-f-status')?.value||'';
   const fBp=document.getElementById('dx-f-bp')?.value||'';
-  const fMonth=document.getElementById('dx-f-month')?.value||'';
-  const [fy,fm]=fMonth?fMonth.split('-').map(Number):[0,0];
+  const fFrom=document.getElementById('dx-from')?.value||'';   // yyyy-mm-dd (rỗng = tất cả)
+  const fTo=document.getElementById('dx-to')?.value||'';
 
   let items=DX_DATA.filter(d=>{
     if(fStatus&&!d.status.includes(fStatus)) return false;
     if(fBp&&d.bophan!==fBp) return false;
-    if(fm){const p=(d.ngay||'').split('/');if(parseInt(p[1])!==fm||parseInt(p[2])!==fy) return false;}
+    if(fFrom||fTo){ const iso=vnToIso(d.ngay); if(fFrom&&iso<fFrom) return false; if(fTo&&iso>fTo) return false; }
     // Phân quyền: truong-bp chỉ xem đề xuất của (các) bộ phận mình phụ trách
     if(currentUser?.role==='truong-bp'&&!userBophans(currentUser).includes(d.bophan)) return false;
     return true;
   });
+  const rc=document.getElementById('dx-result-count'); if(rc) rc.textContent=items.length+' đề xuất';
 
   const BP_LABEL={'buong-phong':'Buồng phòng','nha-hang':'Nhà hàng','bep':'Bếp','le-tan':'Lễ tân','ky-thuat':'Kỹ thuật','sale':'Sale','hr':'HR','van-phong':'VP'};
   const PRI_COLOR={'Thường':'badge-navy','Khẩn cấp':'badge-yellow','Rất khẩn cấp':'badge-red'};
@@ -5128,7 +5131,7 @@ function renderDxTable(){
     if(canDeleteDx(d)) btns.push(`<button class="btn btn-danger btn-sm" onclick="deleteDx('${d.id}')" title="Xoá">🗑</button>`);
     const action=`<div style="display:flex;gap:4px;flex-wrap:wrap;">${btns.join('')}</div>`;
     return`<tr>
-      <td style="font-size:11px;color:var(--text-muted);">${esc(d.id)||'—'}</td>
+      <td style="font-weight:700;color:var(--navy);">${esc(d.code||d.id)||'—'}</td>
       <td style="min-width:230px;">${itemList||'—'}</td>
       <td><span class="badge badge-navy" style="font-size:10px;">${esc(BP_LABEL[d.bophan]||d.bophan)||'—'}</span></td>
       <td>${esc(d.nguoi||currentUser?.fullname)||'—'}</td>
@@ -5175,11 +5178,13 @@ function submitDx(){
     showToast('✅ Đã cập nhật đề xuất',2500,'success');
     return;
   }
+  const today=new Date().toLocaleDateString('vi-VN');
+  const code=String(DX_DATA.filter(d=>d.ngay===today).length+1).padStart(2,'0');   // mã ngắn 2 chữ số, reset mỗi ngày
   const newDx={
-    id:'DX'+Date.now(), bophan, priority,
+    id:'DX'+Date.now(), code, bophan, priority,
     nguoi:currentUser?.fullname||'',
     email:currentUser?.email||'',            // email người tạo — để lọc noti về đúng người
-    ngay:new Date().toLocaleDateString('vi-VN'),
+    ngay:today,
     // Trưởng BP tạo đề xuất = tự duyệt bước BP → bắt đầu ở bước chờ Kế toán.
     status:'cho-duyet-ketoan', flow:[true,false,false],
     ghichu:'', items,
@@ -5218,7 +5223,7 @@ function deleteDx(id){
   const d=DX_DATA.find(x=>x.id===id); if(!d) return;
   if(!canDeleteDx(d)){ showToast('Không có quyền xoá đề xuất này.',2500,'error'); return; }
   const warn = d.status==='da-duyet' ? '\n\n⚠️ Phiếu đã duyệt — Kho & Ghi Chi đã tạo sẽ KHÔNG tự hoàn lại.' : '';
-  if(!confirm(`Xoá đề xuất ${d.id}?${warn}`)) return;
+  if(!confirm(`Xoá đề xuất ${d.code||d.id}?${warn}`)) return;
   const idx=DX_DATA.findIndex(x=>x.id===id);
   if(idx>-1) DX_DATA.splice(idx,1);
   renderDxTable(); syncNow();
@@ -5228,7 +5233,7 @@ function deleteDx(id){
 function openDxDetail(id){
   const d=DX_DATA.find(x=>x.id===id); if(!d) return;
   const BP_LABEL={'buong-phong':'Buồng phòng','nha-hang':'Nhà hàng','bep':'Bếp','le-tan':'Lễ tân','ky-thuat':'Kỹ thuật','sale':'Sale','hr':'HR','van-phong':'VP'};
-  document.getElementById('dxd-title').textContent=`📄 Chi Tiết Đề Xuất ${d.id}`;
+  document.getElementById('dxd-title').textContent=`📄 Chi Tiết Đề Xuất ${d.code||d.id}`;
   const its=dxItems(d);
   const header=`<div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin-bottom:12px;font-size:13px;">
     <div><span style="color:var(--text-muted);">Bộ phận:</span> <strong>${esc(BP_LABEL[d.bophan]||d.bophan)||'—'}</strong></div>
