@@ -1053,6 +1053,7 @@ textarea{resize:vertical;min-height:68px;}
             <option value="">Tất cả trạng thái</option>
             <option value="cho-duyet">Chờ duyệt</option>
             <option value="da-duyet">Đã duyệt</option>
+            <option value="hoan-thanh">Hoàn thành</option>
             <option value="tu-choi">Từ chối</option>
           </select>
           <select id="tr-f-bp" onchange="renderTrList()" style="font-size:12px;padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;"></select>
@@ -2304,6 +2305,22 @@ textarea{resize:vertical;min-height:68px;}
     <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
       <button class="btn btn-ghost" onclick="closeModal('modal-tr')">Huỷ</button>
       <button class="btn btn-gold" id="tr-submit-btn" onclick="saveTr()">📤 Gửi yêu cầu</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL THỰC HIỆN TRANSFER (kế toán chọn kho nguồn → cập nhật kho) -->
+<div class="modal-overlay" id="modal-tr-fulfill">
+  <div class="modal modal-lg">
+    <div class="modal-header"><span class="modal-title" id="tr-ff-title">✅ Thực Hiện Transfer</span><button class="close-btn" onclick="closeModal('modal-tr-fulfill')">✕</button></div>
+    <div id="tr-ff-info" style="font-size:13px;color:var(--text-muted);margin-bottom:12px;padding:10px 12px;background:var(--cream);border-radius:8px;"></div>
+    <div class="table-wrap wide"><table><thead><tr>
+      <th>Tên món</th><th>Số lượng</th><th>Chuyển từ kho</th><th>Chuyển về kho</th>
+    </tr></thead><tbody id="tr-ff-body"></tbody></table></div>
+    <div style="font-size:11px;color:var(--text-muted);margin-top:8px;">Bấm Hoàn thành sẽ trừ kho nguồn và cộng kho bộ phận yêu cầu cho từng món.</div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
+      <button class="btn btn-ghost" onclick="closeModal('modal-tr-fulfill')">Đóng</button>
+      <button class="btn btn-gold" id="tr-ff-done-btn" onclick="confirmTrFulfill()">✅ Hoàn thành</button>
     </div>
   </div>
 </div>
@@ -6310,14 +6327,30 @@ function renderDashDx() {
 const DEPT_TO_KHO={'buong-phong':'hk','nha-hang':'nha-hang','bep':'bep','ky-thuat':'ky-thuat','le-tan':'le-tan','van-phong':'van-phong'};
 function trDeptKho(dept){ return DEPT_TO_KHO[dept]||''; }
 // Số dư kho hiện tại của 1 mặt hàng trong kho của bộ phận yêu cầu
-function trBalance(dept,ten,dvt){
-  const k=trDeptKho(dept); if(!k||!ten) return 0;
-  return KHO_DATA.filter(it=>it.bophan===k && it.ten===ten && (!dvt||it.dvt===dvt)).reduce((s,it)=>s+calcKyStats(it).con,0);
+// Số dư hiện tại của 1 mặt hàng (khớp tên + ĐVT) trong 1 kho cụ thể (mã kho: kt/bep/nha-hang/hk/...)
+function khoBalance(khoCode,ten,dvt){
+  if(!khoCode||!ten) return 0;
+  return KHO_DATA.filter(it=>it.bophan===khoCode && it.ten===ten && (!dvt||(it.dvt||'')===dvt)).reduce((s,it)=>s+calcKyStats(it).con,0);
+}
+function trBalance(dept,ten,dvt){ return khoBalance(trDeptKho(dept),ten,dvt); }
+// Chuyển 1 mặt hàng giữa 2 kho: trừ kho nguồn (transfer-out), cộng kho đích (transfer-in). Khớp theo tên+ĐVT.
+function khoTransferItem(ten,dvt,sl,srcKho,destKho,note,nguoi){
+  sl=parseFloat(sl)||0; if(!ten||sl<=0||!srcKho||!destKho||srcKho===destKho) return;
+  const ngay=new Date().toLocaleDateString('vi-VN');
+  const match=x=>x.ten===ten && (!dvt||(x.dvt||'')===dvt);
+  // Kho nguồn: chọn dòng có số dư cao nhất; chưa có thì tạo (tồn 0 → số dư âm để dễ thấy cần bù)
+  let src=KHO_DATA.filter(x=>x.bophan===srcKho && match(x)).sort((a,b)=>calcKyStats(b).con-calcKyStats(a).con)[0];
+  if(!src){ src={id:'KH'+Date.now()+Math.floor(Math.random()*1000),ma:'KTO-'+Date.now().toString().slice(-4)+Math.floor(Math.random()*90+10),ten,dvt:dvt||'Cái',bophan:srcKho,vitri:(typeof KHO_VITRI_LIST!=='undefined'?KHO_VITRI_LIST[0]:'VP'),ton_dau:0,img:'📦',ghichu:'',lichSu:[]}; KHO_DATA.push(src); }
+  src.lichSu.push({ngay,loai:'transfer-out',sl,tu:srcKho,den:destKho,lydo:note,nguoi});
+  // Kho đích: tìm dòng khớp; chưa có thì tạo mới
+  let dest=KHO_DATA.find(x=>x.bophan===destKho && match(x));
+  if(dest){ dest.lichSu.push({ngay,loai:'transfer-in',sl,tu:srcKho,den:destKho,lydo:note,nguoi}); }
+  else{ KHO_DATA.push({id:'KH'+Date.now()+Math.floor(Math.random()*1000),ma:src.ma,ten,dvt:dvt||'Cái',bophan:destKho,vitri:(typeof KHO_VITRI_LIST!=='undefined'?KHO_VITRI_LIST[0]:'VP'),ton_dau:0,img:src.img||'📦',ghichu:'',lichSu:[{ngay,loai:'transfer-in',sl,tu:srcKho,den:destKho,lydo:note,nguoi}]}); }
 }
 let editingTrId=null;
 function trStatusBadge(s){
-  const L={'cho-duyet':'Chờ duyệt','da-duyet':'Đã duyệt','tu-choi':'Từ chối'};
-  const C={'cho-duyet':'badge-yellow','da-duyet':'badge-green','tu-choi':'badge-red'};
+  const L={'cho-duyet':'Chờ duyệt','da-duyet':'Đã duyệt','hoan-thanh':'Hoàn thành','tu-choi':'Từ chối'};
+  const C={'cho-duyet':'badge-yellow','da-duyet':'badge-blue','hoan-thanh':'badge-green','tu-choi':'badge-red'};
   return `<span class="badge ${C[s]||'badge-navy'}" style="font-size:10px;white-space:nowrap;">${L[s]||s||'—'}</span>`;
 }
 function canApproveTr(d){ const r=currentUser?.role; return (r==='ketoan'||r==='giamdoc') && d.status==='cho-duyet'; }
@@ -6431,7 +6464,52 @@ function saveTr(){
   renderTrTab(); syncNow();
   showToast('✅ Đã lưu yêu cầu transfer',2000,'success');
 }
-function confirmTrApprove(id){ const d=TR_DATA.find(x=>x.id===id); if(!d||!canApproveTr(d)) return; d.status='da-duyet'; renderTrTab(); syncNow(); showToast('✅ Đã duyệt yêu cầu',2000,'success'); }
+function confirmTrApprove(id){ const d=TR_DATA.find(x=>x.id===id); if(!d||!canApproveTr(d)) return; d.status='da-duyet'; renderTrTab(); syncNow(); showToast('✅ Đã duyệt — chọn kho nguồn để thực hiện transfer',2500,'success'); openTrFulfill(id); }
+// ---- Thực hiện transfer (kế toán chọn kho nguồn, đích = kho bộ phận yêu cầu) → cập nhật kho ----
+let fulfillingTrId=null;
+function openTrFulfill(id){
+  const d=TR_DATA.find(x=>x.id===id); if(!d) return;
+  const r=currentUser?.role;
+  if(r!=='ketoan'&&r!=='giamdoc'){ showToast('Chỉ Kế toán/Giám đốc thực hiện transfer',2500,'error'); return; }
+  const destKho=trDeptKho(d.bophan);
+  if(!destKho){ showToast('Bộ phận "'+(BP_LABELS[d.bophan]||d.bophan)+'" chưa có kho để nhận transfer',3500,'error'); return; }
+  fulfillingTrId=id;
+  const done=d.status==='hoan-thanh';
+  document.getElementById('tr-ff-title').textContent = done?'📄 Chi Tiết Transfer':'✅ Thực Hiện Transfer';
+  document.getElementById('tr-ff-info').innerHTML=`Yêu cầu <strong>${esc(d.code||d.id)}</strong> · Bộ phận: <strong>${esc(BP_LABELS[d.bophan]||d.bophan)}</strong> · Chuyển về: <strong>${KHO_BP_LABELS[destKho]}</strong>`;
+  const khoKeys=Object.keys(KHO_BP_LABELS);
+  document.getElementById('tr-ff-body').innerHTML=(d.items||[]).map((it,i)=>{
+    const src=(done&&d.fulfill&&d.fulfill[i])?d.fulfill[i].src:'kt';
+    return `<tr>
+      <td style="font-weight:500;">${esc(it.ten)}</td>
+      <td style="text-align:center;">${esc(it.sl)} ${esc(it.dvt||'')}</td>
+      <td><select class="tr-ff-src" ${done?'disabled':''} style="font-size:12px;padding:5px 8px;border:1.5px solid var(--border);border-radius:7px;">${khoKeys.map(k=>`<option value="${k}" ${k===src?'selected':''}>${KHO_BP_LABELS[k]}</option>`).join('')}</select></td>
+      <td><span class="badge badge-navy" style="font-size:11px;">${KHO_BP_LABELS[destKho]}</span></td>
+    </tr>`;
+  }).join('');
+  const btn=document.getElementById('tr-ff-done-btn'); if(btn) btn.style.display=done?'none':'';
+  openModal('modal-tr-fulfill');
+}
+function confirmTrFulfill(){
+  const d=TR_DATA.find(x=>x.id===fulfillingTrId); if(!d) return;
+  if(d.status==='hoan-thanh'){ closeModal('modal-tr-fulfill'); return; }
+  const destKho=trDeptKho(d.bophan);
+  if(!destKho){ showToast('Bộ phận chưa có kho nhận',3000,'error'); return; }
+  const srcSels=[...document.querySelectorAll('#tr-ff-body .tr-ff-src')];
+  const nguoi=currentUser?.fullname||'Kế toán';
+  const fulfill=[];
+  (d.items||[]).forEach((it,i)=>{
+    const srcKho=srcSels[i]?.value||'kt';
+    const note=`Transfer YC ${d.code||d.id}: ${KHO_BP_LABELS[srcKho]} → ${KHO_BP_LABELS[destKho]}`;
+    khoTransferItem(it.ten,it.dvt,it.sl,srcKho,destKho,note,nguoi);
+    fulfill.push({src:srcKho,dest:destKho,sl:it.sl});
+  });
+  d.status='hoan-thanh'; d.fulfill=fulfill; d.fulfilledBy=nguoi; d.fulfilledAt=new Date().toLocaleDateString('vi-VN');
+  closeModal('modal-tr-fulfill');
+  renderTrTab(); try{ renderKhoTab(); }catch(e){}
+  syncNow();
+  showToast('✅ Đã hoàn thành transfer & cập nhật kho',2500,'success');
+}
 function rejectTr(id){ const d=TR_DATA.find(x=>x.id===id); if(!d||!canApproveTr(d)) return; d.status='tu-choi'; renderTrTab(); syncNow(); showToast('Đã từ chối yêu cầu',2000,'info'); }
 function deleteTr(id){ const d=TR_DATA.find(x=>x.id===id); if(!d) return; if(!canDeleteTr(d)){ showToast('Bạn không có quyền xoá',2500,'error'); return; } if(!confirm(`Xoá yêu cầu transfer ${d.code||d.id}?`)) return; TR_DATA=TR_DATA.filter(x=>x.id!==id); renderTrTab(); syncNow(); }
 
@@ -6445,7 +6523,8 @@ function switchTrTab(tab, el){
 function trItemsHtml(d){
   return (d.items||[]).map(it=>{
     const con=trBalance(d.bophan,it.ten,it.dvt);
-    return `<div style="padding:2px 0;"><span style="font-weight:600;">${esc(it.ten)||'—'}</span> ×${esc(it.sl)||0} ${esc(it.dvt)||''} · <span style="color:var(--text-muted);">số dư kho: ${con}</span></div>`;
+    const conKT=khoBalance('kt',it.ten,it.dvt);
+    return `<div style="padding:2px 0;"><span style="font-weight:600;">${esc(it.ten)||'—'}</span> ×${esc(it.sl)||0} ${esc(it.dvt)||''} · <span style="color:var(--text-muted);">dư kho BP: <strong>${con}</strong> · dư kho KT: <strong>${conKT}</strong></span></div>`;
   }).join('')||'—';
 }
 function trVisibleFor(d){
@@ -6463,6 +6542,9 @@ function renderTrList(){
   tb.innerHTML=rows.length? rows.map(d=>{
     const btns=[];
     if(canApproveTr(d)){ btns.push(`<button class="btn btn-success btn-sm" onclick="confirmTrApprove('${d.id}')" title="Duyệt">✓</button>`); btns.push(`<button class="btn btn-danger btn-sm" onclick="rejectTr('${d.id}')" title="Từ chối">✗</button>`); }
+    const isKtGd=currentUser?.role==='ketoan'||currentUser?.role==='giamdoc';
+    if(isKtGd && d.status==='da-duyet') btns.push(`<button class="btn btn-gold btn-sm" onclick="openTrFulfill('${d.id}')" title="Thực hiện transfer">▶ Thực hiện</button>`);
+    if(isKtGd && d.status==='hoan-thanh') btns.push(`<button class="btn btn-ghost btn-sm" onclick="openTrFulfill('${d.id}')" title="Xem chi tiết">📄</button>`);
     if(canEditTr(d)) btns.push(`<button class="btn btn-ghost btn-sm" onclick="editTr('${d.id}')" title="Sửa">✏</button>`);
     if(canDeleteTr(d)) btns.push(`<button class="btn btn-danger btn-sm" onclick="deleteTr('${d.id}')" title="Xoá">🗑</button>`);
     return `<tr>
