@@ -111,7 +111,7 @@ function lsSave(){
 function _lsSaveRaw(){
   try{
     const data={
-      thu:THU_DATA,chi:CHI_DATA,dx:DX_DATA,ncc:NCC_DATA,kho:KHO_DATA,yc:YC_DATA,ycDeleted:YC_DELETED,
+      thu:THU_DATA,chi:CHI_DATA,dx:DX_DATA,ncc:NCC_DATA,kho:KHO_DATA,yc:YC_DATA,ycDeleted:YC_DELETED,transferReq:TR_DATA,
       hvLinen:HV_LINEN,hvRewash:HV_REWASH_DATA,hvCols:HV_REWASH_COLS,
       wsData:WS_DATA_BY_DATE,roomStatus:ROOM_STATUS_BY_DATE,
       amData:AM_DATA_BY_DATE,mbData:MB_DATE_DATA,nsLuong:NS_LUONG,sxData:SX_DATA,
@@ -132,6 +132,7 @@ function lsLoad(){
     if(d.kho?.length)    KHO_DATA=d.kho;
     if(d.yc?.length)     YC_DATA=d.yc;
     if(d.ycDeleted?.length) YC_DELETED=d.ycDeleted;
+    if(d.transferReq?.length) TR_DATA=d.transferReq;
     if(d.hvLinen)        HV_LINEN=d.hvLinen;
     if(d.hvRewash)       HV_REWASH_DATA=d.hvRewash;
     if(d.hvCols)         HV_REWASH_COLS=d.hvCols;
@@ -765,6 +766,7 @@ textarea{resize:vertical;min-height:68px;}
     <div class="nav-item" onclick="showPage('nhan-su',this)" data-perm="ketoan,giamdoc"><span class="icon">👔</span> Nhân Sự & Lương</div>
     <div class="nav-section">Mua Hàng</div>
     <div class="nav-item" onclick="showPage('de-xuat',this)" data-perm="all"><span class="icon">🛒</span> Đề xuất Mua hàng<span class="notif-dot" id="notif-dx">3</span></div>
+    <div class="nav-item" onclick="showPage('yeu-cau-transfer',this)" data-perm="all"><span class="icon">🔄</span> Yêu cầu Transfer</div>
     <div class="nav-item" onclick="showPage('nha-cung-cap',this)" data-perm="ketoan,giamdoc"><span class="icon">🏪</span> Nhà Cung Cấp</div>
     <div class="nav-section" data-perm="ketoan,giamdoc,truong-bp">Kho</div>
     <div class="nav-item" onclick="showPage('kho',this)" data-perm="ketoan,giamdoc,truong-bp"><span class="icon">🏭</span> Quản Lý Kho</div>
@@ -1032,6 +1034,53 @@ textarea{resize:vertical;min-height:68px;}
           <tbody id="dx-tbody"></tbody>
         </table>
         </div>
+      </div>
+    </div>
+
+    <!-- YÊU CẦU TRANSFER -->
+    <div class="page" id="page-yeu-cau-transfer">
+      <div class="section-header"><span class="section-title">🔄 Yêu Cầu Transfer</span></div>
+      <!-- Sub-tabs -->
+      <div style="display:flex;gap:6px;margin-bottom:16px;">
+        <div class="bp-tab active" id="tr-subtab-ds" onclick="switchTrTab('ds',this)" style="font-size:12px;padding:6px 16px;">📋 Yêu cầu (hôm nay)</div>
+        <div class="bp-tab"        id="tr-subtab-ls" onclick="switchTrTab('ls',this)" style="font-size:12px;padding:6px 16px;">🕓 Lịch sử yêu cầu</div>
+      </div>
+
+      <!-- SHEET 1: DANH SÁCH (ngày hiện hành) -->
+      <div id="tr-panel-ds">
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap;">
+          <select id="tr-f-status" onchange="renderTrList()" style="font-size:12px;padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;">
+            <option value="">Tất cả trạng thái</option>
+            <option value="cho-duyet">Chờ duyệt</option>
+            <option value="da-duyet">Đã duyệt</option>
+            <option value="tu-choi">Từ chối</option>
+          </select>
+          <select id="tr-f-bp" onchange="renderTrList()" style="font-size:12px;padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;"></select>
+          <button class="btn btn-gold btn-sm" onclick="openTrModal()">+ Tạo yêu cầu</button>
+          <span id="tr-result-count" style="font-size:12px;color:var(--text-muted);margin-left:4px;"></span>
+        </div>
+        <div class="card"><div class="table-wrap wide">
+          <table><thead><tr>
+            <th>Mã</th><th>Bộ phận</th><th>Người YC</th><th>Danh sách mặt hàng</th><th>Ngày</th><th>Trạng thái</th><th>Hành động</th>
+          </tr></thead><tbody id="tr-tbody"></tbody></table>
+        </div></div>
+      </div>
+
+      <!-- SHEET 2: LỊCH SỬ -->
+      <div id="tr-panel-ls" style="display:none;">
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap;">
+          <input type="date" id="tr-h-from" style="width:140px;" onchange="renderTrHistory()" title="Từ ngày">
+          <span style="color:var(--text-muted);">→</span>
+          <input type="date" id="tr-h-to" style="width:140px;" onchange="renderTrHistory()" title="Đến ngày">
+          <select id="tr-h-bp" onchange="renderTrHistory()" style="font-size:12px;padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;"></select>
+          <button class="btn btn-excel btn-sm" onclick="exportExcel('transfer')">📊 Xuất Excel</button>
+          <span id="tr-hist-count" style="font-size:12px;color:var(--text-muted);margin-left:4px;"></span>
+        </div>
+        <div class="card"><div class="table-wrap wide">
+          <table><thead><tr>
+            <th>Ngày</th><th>Mã</th><th>Bộ phận</th><th>Người YC</th><th>Danh sách mặt hàng</th><th>Trạng thái</th>
+          </tr></thead><tbody id="tr-hist-body"></tbody></table>
+        </div></div>
       </div>
     </div>
 
@@ -2237,6 +2286,26 @@ textarea{resize:vertical;min-height:68px;}
   </div>
 </div>
 
+<!-- MODAL TẠO/SỬA YÊU CẦU TRANSFER -->
+<div class="modal-overlay" id="modal-tr">
+  <div class="modal modal-lg">
+    <div class="modal-header"><span class="modal-title" id="tr-modal-title">🔄 Tạo Yêu Cầu Transfer</span><button class="close-btn" onclick="closeModal('modal-tr')">✕</button></div>
+    <div class="form-row">
+      <div class="form-group"><label>Bộ phận yêu cầu <span style="color:var(--red);">*</span></label>
+        <select id="tr-bophan" onchange="trRefreshBalances()"></select>
+      </div>
+    </div>
+    <div style="font-size:11.5px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin:6px 0 8px;">Danh sách mặt hàng cần transfer</div>
+    <div id="tr-items"></div>
+    <button class="btn btn-ghost btn-sm" onclick="trAddRow()" style="margin-top:6px;">+ Thêm hàng</button>
+    <div style="font-size:11px;color:var(--text-muted);margin-top:8px;">Số dư là tồn kho hiện tại của mặt hàng đó trong kho của bộ phận yêu cầu (tự đồng bộ).</div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
+      <button class="btn btn-ghost" onclick="closeModal('modal-tr')">Huỷ</button>
+      <button class="btn btn-gold" id="tr-submit-btn" onclick="saveTr()">📤 Gửi yêu cầu</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL THÊM/SỬA MẶT HÀNG -->
 <div class="modal-overlay" id="modal-add-item">
   <div class="modal">
@@ -2422,7 +2491,7 @@ function fillCatSelect(id, key, opts={}){
 const CAT_SELECTS = {
   ncc:    [['ncc-f-dm',{allLabel:'Tất cả danh mục'}], ['ncc-danhmuc',{allLabel:'— Chọn —'}]],
   thu:    [['thu-f-dm',{allLabel:'Tất cả danh mục'}], ['thu-danhmuc',{}]],
-  bophan: [['dx-bophan',{}], ['chi-bophan',{}], ['thu-bophan',{}], ['dx-f-bp',{allLabel:'Tất cả bộ phận'}], ['chi-f-bp',{allLabel:'Tất cả bộ phận'}]],
+  bophan: [['dx-bophan',{}], ['chi-bophan',{}], ['thu-bophan',{}], ['dx-f-bp',{allLabel:'Tất cả bộ phận'}], ['chi-f-bp',{allLabel:'Tất cả bộ phận'}], ['tr-bophan',{allLabel:'— Chọn bộ phận —'}], ['tr-f-bp',{allLabel:'Tất cả bộ phận'}], ['tr-h-bp',{allLabel:'Tất cả bộ phận'}]],
 };
 function refreshCatSelects(key){
   if(key==='ncc'||key==='thu') catMergeUsed();
@@ -2620,9 +2689,9 @@ const ROLE_PERM_DESC = {
 
 // Mặc định tab theo role (nếu user không custom)
 const DEFAULT_TABS = {
-  giamdoc:    ['dashboard','thu-chi','tab-thu','tab-chi','cong-no','nhan-su','kho','kho-kt','kho-bep','kho-nha-hang','kho-hk','kho-ky-thuat','kho-van-phong','kho-le-tan','kho-xuat','kho-nhap','kho-huy','buong-phong','de-xuat','nha-cung-cap','danh-muc','bao-cao','quan-ly-tk','cai-dat'],
-  ketoan:     ['thu-chi','tab-thu','tab-chi','cong-no','nhan-su','kho','kho-kt','kho-xuat','kho-nhap','de-xuat','nha-cung-cap','danh-muc','bao-cao'],
-  'truong-bp':['de-xuat','kho','buong-phong'],
+  giamdoc:    ['dashboard','thu-chi','tab-thu','tab-chi','cong-no','nhan-su','kho','kho-kt','kho-bep','kho-nha-hang','kho-hk','kho-ky-thuat','kho-van-phong','kho-le-tan','kho-xuat','kho-nhap','kho-huy','buong-phong','de-xuat','yeu-cau-transfer','nha-cung-cap','danh-muc','bao-cao','quan-ly-tk','cai-dat'],
+  ketoan:     ['thu-chi','tab-thu','tab-chi','cong-no','nhan-su','kho','kho-kt','kho-xuat','kho-nhap','de-xuat','yeu-cau-transfer','nha-cung-cap','danh-muc','bao-cao'],
+  'truong-bp':['de-xuat','yeu-cau-transfer','kho','buong-phong'],
   hr:         ['nhan-su'],
 };
 
@@ -2885,6 +2954,7 @@ const AU_TAB_GROUPS = [
     group: '🛒 Mua Hàng',
     tabs: [
       {id:'de-xuat',      label:'Đề xuất MH'},
+      {id:'yeu-cau-transfer', label:'Yêu cầu Transfer'},
       {id:'nha-cung-cap', label:'NCC'},
       {id:'danh-muc',     label:'Danh Mục'},
     ]
@@ -3102,6 +3172,15 @@ function exportExcel(section){
     name='YeuCau_DaXoa';
     headers=['Ngày xoá','Giờ xoá','Phòng','Loại YC','Chi tiết đồ','Thời điểm YC','Ghi chú','Người tiếp nhận','Lý do xoá','Người xoá'];
     rows=(YC_DELETED||[]).map(yc=>[yc.del_ngay||'',yc.del_gio||'',yc.phong||'',yc.loaiLabel||yc.loai||'',(yc.items||[]).map(i=>`${i.ten}×${i.sl}`).join(', '),`${yc.gio||''} ${yc.ngay||''}`.trim(),yc.ghichu||'',yc.nguoi||'',yc.del_reason||'',yc.del_by||'']);
+  } else if(S==='transfer'){
+    name='YeuCau_Transfer';
+    headers=['Ngày','Mã','Bộ phận','Người YC','Tên hàng','ĐVT','SL','Số dư kho','Trạng thái'];
+    const from=document.getElementById('tr-h-from')?.value||'';
+    const to=document.getElementById('tr-h-to')?.value||'';
+    const fB=document.getElementById('tr-h-bp')?.value||'';
+    const stL={'cho-duyet':'Chờ duyệt','da-duyet':'Đã duyệt','tu-choi':'Từ chối'};
+    (TR_DATA||[]).filter(d=>{ if(fB&&d.bophan!==fB) return false; if(from||to){ const iso=vnToIso(d.ngay); if(from&&iso<from) return false; if(to&&iso>to) return false; } return true; })
+      .forEach(d=>(d.items||[]).forEach(it=>rows.push([d.ngay,d.code||d.id,BP_LABELS[d.bophan]||d.bophan,d.nguoi||'',it.ten,it.dvt||'',it.sl,trBalance(d.bophan,it.ten,it.dvt),stL[d.status]||d.status])));
   } else return;
   writeSheet(name, headers, rows);
 }
@@ -3831,6 +3910,7 @@ let SX_DATA=[
 ];
 let YC_DATA=[];
 let YC_DELETED=[];   // Yêu cầu đã xoá (kèm lý do) — đồng bộ đa thiết bị
+let TR_DATA=[];      // Yêu cầu Transfer (chuyển kho) — đồng bộ đa thiết bị
 let currentBpTab='worksheet',wsFilter='A',mbView='date',hvView='linen',ycItemCount=0;
 
 function switchBpTab(tab,el){
@@ -6147,7 +6227,7 @@ function exportKhoExcel(){ exportExcel('kho'); return; /* dùng exportExcel th�
   const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='Kho_QueenAnn.csv';a.click();
 }
 
-const PAGE_TITLES={dashboard:'Dashboard Tài Chính','thu-chi':'Quản Lý Thu Chi','tab-thu':'Ghi Thu','tab-chi':'Ghi Chi','cong-no':'Theo Dõi Công Nợ','nhan-su':'Nhân Sự & Lương','kho':'Quản Lý Kho','buong-phong':'Buồng Phòng','de-xuat':'Đề Xuất Mua Hàng','nha-cung-cap':'Nhà Cung Cấp','danh-muc':'Danh Mục Hàng Hoá','bao-cao':'Báo Cáo Tài Chính','quan-ly-tk':'Quản Lý Tài Khoản','cai-dat':'Cài Đặt Hệ Thống'};
+const PAGE_TITLES={dashboard:'Dashboard Tài Chính','thu-chi':'Quản Lý Thu Chi','tab-thu':'Ghi Thu','tab-chi':'Ghi Chi','cong-no':'Theo Dõi Công Nợ','nhan-su':'Nhân Sự & Lương','kho':'Quản Lý Kho','buong-phong':'Buồng Phòng','de-xuat':'Đề Xuất Mua Hàng','yeu-cau-transfer':'Yêu Cầu Transfer','nha-cung-cap':'Nhà Cung Cấp','danh-muc':'Danh Mục Hàng Hoá','bao-cao':'Báo Cáo Tài Chính','quan-ly-tk':'Quản Lý Tài Khoản','cai-dat':'Cài Đặt Hệ Thống'};
 function showPage(id,el){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById('page-'+id).classList.add('active');
@@ -6157,6 +6237,7 @@ function showPage(id,el){
   if(id==='danh-muc') renderCatalog();
   if(id==='quan-ly-tk') renderUsersTable();
   if(id==='de-xuat') renderDxTable();
+  if(id==='yeu-cau-transfer') renderTrTab();
   if(id==='tab-thu') renderThuTab();
   if(id==='tab-chi') renderChiTab();
   if(id==='thu-chi') syncThuChiSummary();
@@ -6201,6 +6282,171 @@ function renderDashDx() {
     <td>${statusBadge(d.status)}</td>
   </tr>`;}).join('');
 }
+// ==================== YÊU CẦU TRANSFER ====================
+const DEPT_TO_KHO={'buong-phong':'hk','nha-hang':'nha-hang','bep':'bep','ky-thuat':'ky-thuat','le-tan':'le-tan','van-phong':'van-phong'};
+function trDeptKho(dept){ return DEPT_TO_KHO[dept]||''; }
+// Số dư kho hiện tại của 1 mặt hàng trong kho của bộ phận yêu cầu
+function trBalance(dept,ten,dvt){
+  const k=trDeptKho(dept); if(!k||!ten) return 0;
+  return KHO_DATA.filter(it=>it.bophan===k && it.ten===ten && (!dvt||it.dvt===dvt)).reduce((s,it)=>s+calcKyStats(it).con,0);
+}
+let editingTrId=null;
+function trStatusBadge(s){
+  const L={'cho-duyet':'Chờ duyệt','da-duyet':'Đã duyệt','tu-choi':'Từ chối'};
+  const C={'cho-duyet':'badge-yellow','da-duyet':'badge-green','tu-choi':'badge-red'};
+  return `<span class="badge ${C[s]||'badge-navy'}" style="font-size:10px;white-space:nowrap;">${L[s]||s||'—'}</span>`;
+}
+function canApproveTr(d){ const r=currentUser?.role; return (r==='ketoan'||r==='giamdoc') && d.status==='cho-duyet'; }
+function canEditTr(d){
+  const r=currentUser?.role;
+  if(r==='giamdoc') return true;
+  return d.status==='cho-duyet' && (d.email===currentUser?.email || (r==='truong-bp'&&userBophans(currentUser).includes(d.bophan)));
+}
+function canDeleteTr(d){ return canEditTr(d); }
+
+// ---- Dòng mặt hàng trong modal ----
+function trItemOptions(sel){
+  return '<option value="">— Chọn mặt hàng —</option>'+(catalogItems||[]).slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(it=>`<option value="${it.id}" data-ten="${esc(it.name)}" data-dvt="${esc(it.dvt||'')}" ${it.id===sel?'selected':''}>${esc(it.name)}${it.code?' ('+esc(it.code)+')':''}</option>`).join('');
+}
+function trRowHtml(row){
+  row=row||{};
+  return `<div class="tr-item-row" style="display:grid;grid-template-columns:1.7fr .7fr .7fr .9fr 34px;gap:8px;align-items:end;margin-bottom:8px;padding:10px;background:var(--cream);border:1px solid var(--border);border-radius:8px;">
+    <div class="form-group" style="margin:0;"><label style="font-size:10px;">Tên hàng <span style="color:var(--red);">*</span></label><select class="trr-ten" onchange="trRowPick(this)">${trItemOptions(row.itemId)}</select></div>
+    <div class="form-group" style="margin:0;"><label style="font-size:10px;">ĐVT</label><input class="trr-dvt" value="${esc(row.dvt||'')}" readonly style="background:#f4f4f4;"></div>
+    <div class="form-group" style="margin:0;"><label style="font-size:10px;">Số lượng</label><input type="number" class="trr-sl" min="1" value="${row.sl||1}"></div>
+    <div class="form-group" style="margin:0;"><label style="font-size:10px;">Số dư kho</label><input class="trr-con" value="" readonly style="background:#f4f4f4;font-weight:600;"></div>
+    <button class="btn btn-ghost btn-sm" type="button" onclick="trRemoveRow(this)" title="Xoá dòng" style="height:38px;padding:0;">🗑</button>
+  </div>`;
+}
+function trAddRow(row){ const box=document.getElementById('tr-items'); if(box){ box.insertAdjacentHTML('beforeend', trRowHtml(row)); const last=box.lastElementChild?.querySelector('.trr-ten'); if(last) trRowPick(last); } }
+function trRemoveRow(btn){ const r=btn.closest('.tr-item-row'); if(r) r.remove(); }
+function trRowPick(sel){
+  const row=sel.closest('.tr-item-row'); if(!row) return;
+  const opt=sel.selectedOptions[0];
+  const ten=opt?(opt.getAttribute('data-ten')||''):'';
+  const dvt=opt?(opt.getAttribute('data-dvt')||''):'';
+  const dvtEl=row.querySelector('.trr-dvt'); if(dvtEl) dvtEl.value=dvt;
+  const dept=document.getElementById('tr-bophan')?.value||'';
+  const conEl=row.querySelector('.trr-con'); if(conEl) conEl.value= ten? trBalance(dept,ten,dvt) : '';
+}
+function trRefreshBalances(){ document.querySelectorAll('#tr-items .tr-item-row .trr-ten').forEach(sel=>trRowPick(sel)); }
+
+function openTrModal(){
+  editingTrId=null;
+  document.getElementById('tr-modal-title').textContent='🔄 Tạo Yêu Cầu Transfer';
+  document.getElementById('tr-submit-btn').textContent='📤 Gửi yêu cầu';
+  try{ fillCatSelect('tr-bophan','bophan',{allLabel:'— Chọn bộ phận —'}); }catch(e){}
+  const bp=document.getElementById('tr-bophan');
+  if(bp && currentUser?.role==='truong-bp') bp.value=userBophans(currentUser)[0]||'';
+  document.getElementById('tr-items').innerHTML='';
+  trAddRow();
+  openModal('modal-tr');
+}
+function editTr(id){
+  const d=TR_DATA.find(x=>x.id===id); if(!d) return;
+  if(!canEditTr(d)){ showToast('Bạn không có quyền sửa yêu cầu này',2500,'error'); return; }
+  editingTrId=id;
+  document.getElementById('tr-modal-title').textContent='✏️ Sửa Yêu Cầu Transfer';
+  document.getElementById('tr-submit-btn').textContent='💾 Cập nhật';
+  try{ fillCatSelect('tr-bophan','bophan',{allLabel:'— Chọn bộ phận —'}); }catch(e){}
+  document.getElementById('tr-bophan').value=d.bophan||'';
+  const box=document.getElementById('tr-items'); box.innerHTML='';
+  (d.items||[]).forEach(it=>trAddRow(it));
+  if(!d.items||!d.items.length) trAddRow();
+  openModal('modal-tr');
+}
+function saveTr(){
+  const bophan=document.getElementById('tr-bophan')?.value||'';
+  if(!bophan){ showToast('Vui lòng chọn bộ phận yêu cầu!',2500,'error'); return; }
+  const items=[];
+  document.querySelectorAll('#tr-items .tr-item-row').forEach(r=>{
+    const sel=r.querySelector('.trr-ten'); const itemId=sel?.value||'';
+    const sl=parseFloat(r.querySelector('.trr-sl')?.value)||0;
+    if(!itemId||sl<=0) return;
+    const cat=catalogItems.find(c=>c.id===itemId);
+    items.push({itemId, ten:cat?cat.name:(sel.selectedOptions[0]?.getAttribute('data-ten')||''), dvt:cat?cat.dvt:(r.querySelector('.trr-dvt')?.value||''), sl});
+  });
+  if(!items.length){ showToast('Vui lòng thêm ít nhất 1 mặt hàng (SL > 0)!',2500,'error'); return; }
+  if(editingTrId){
+    const d=TR_DATA.find(x=>x.id===editingTrId);
+    if(d){ d.bophan=bophan; d.items=items; }
+    editingTrId=null;
+  } else {
+    const today=new Date().toLocaleDateString('vi-VN');
+    const code=String(TR_DATA.filter(d=>d.ngay===today).length+1).padStart(2,'0');
+    TR_DATA.unshift({id:'TR'+Date.now(), code, bophan, nguoi:currentUser?.fullname||'', email:currentUser?.email||'', ngay:today, status:'cho-duyet', items, ghichu:''});
+  }
+  closeModal('modal-tr');
+  renderTrTab(); syncNow();
+  showToast('✅ Đã lưu yêu cầu transfer',2000,'success');
+}
+function confirmTrApprove(id){ const d=TR_DATA.find(x=>x.id===id); if(!d||!canApproveTr(d)) return; d.status='da-duyet'; renderTrTab(); syncNow(); showToast('✅ Đã duyệt yêu cầu',2000,'success'); }
+function rejectTr(id){ const d=TR_DATA.find(x=>x.id===id); if(!d||!canApproveTr(d)) return; d.status='tu-choi'; renderTrTab(); syncNow(); showToast('Đã từ chối yêu cầu',2000,'info'); }
+function deleteTr(id){ const d=TR_DATA.find(x=>x.id===id); if(!d) return; if(!canDeleteTr(d)){ showToast('Bạn không có quyền xoá',2500,'error'); return; } if(!confirm(`Xoá yêu cầu transfer ${d.code||d.id}?`)) return; TR_DATA=TR_DATA.filter(x=>x.id!==id); renderTrTab(); syncNow(); }
+
+function switchTrTab(tab, el){
+  document.querySelectorAll('#page-yeu-cau-transfer .bp-tab').forEach(t=>t.classList.remove('active'));
+  if(el) el.classList.add('active');
+  document.getElementById('tr-panel-ds').style.display=tab==='ds'?'block':'none';
+  document.getElementById('tr-panel-ls').style.display=tab==='ls'?'block':'none';
+  if(tab==='ls') renderTrHistory(); else renderTrList();
+}
+function trItemsHtml(d){
+  return (d.items||[]).map(it=>{
+    const con=trBalance(d.bophan,it.ten,it.dvt);
+    return `<div style="padding:2px 0;"><span style="font-weight:600;">${esc(it.ten)||'—'}</span> ×${esc(it.sl)||0} ${esc(it.dvt)||''} · <span style="color:var(--text-muted);">số dư kho: ${con}</span></div>`;
+  }).join('')||'—';
+}
+function trVisibleFor(d){
+  if(currentUser?.role==='truong-bp') return userBophans(currentUser).includes(d.bophan);
+  return true;   // ketoan/giamdoc thấy hết
+}
+function renderTrTab(){ try{ renderTrList(); }catch(e){} const ls=document.getElementById('tr-panel-ls'); if(ls&&ls.style.display!=='none'){ try{ renderTrHistory(); }catch(e){} } }
+function renderTrList(){
+  const tb=document.getElementById('tr-tbody'); if(!tb) return;
+  const today=new Date().toLocaleDateString('vi-VN');
+  const fS=document.getElementById('tr-f-status')?.value||'';
+  const fB=document.getElementById('tr-f-bp')?.value||'';
+  const rows=TR_DATA.filter(d=> d.ngay===today && trVisibleFor(d) && (!fS||d.status===fS) && (!fB||d.bophan===fB));
+  const rc=document.getElementById('tr-result-count'); if(rc) rc.textContent=rows.length+' yêu cầu';
+  tb.innerHTML=rows.length? rows.map(d=>{
+    const btns=[];
+    if(canApproveTr(d)){ btns.push(`<button class="btn btn-success btn-sm" onclick="confirmTrApprove('${d.id}')" title="Duyệt">✓</button>`); btns.push(`<button class="btn btn-danger btn-sm" onclick="rejectTr('${d.id}')" title="Từ chối">✗</button>`); }
+    if(canEditTr(d)) btns.push(`<button class="btn btn-ghost btn-sm" onclick="editTr('${d.id}')" title="Sửa">✏</button>`);
+    if(canDeleteTr(d)) btns.push(`<button class="btn btn-danger btn-sm" onclick="deleteTr('${d.id}')" title="Xoá">🗑</button>`);
+    return `<tr>
+      <td style="font-weight:700;color:var(--navy);">${esc(d.code||d.id)}</td>
+      <td><span class="badge badge-navy" style="font-size:10px;">${esc(BP_LABELS[d.bophan]||d.bophan)||'—'}</span></td>
+      <td>${esc(d.nguoi)||'—'}</td>
+      <td style="min-width:230px;">${trItemsHtml(d)}</td>
+      <td>${esc(d.ngay)||'—'}</td>
+      <td>${trStatusBadge(d.status)}</td>
+      <td><div style="display:flex;gap:4px;flex-wrap:wrap;">${btns.join('')}</div></td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted);">Hôm nay chưa có yêu cầu transfer nào</td></tr>`;
+}
+function renderTrHistory(){
+  const tb=document.getElementById('tr-hist-body'); if(!tb) return;
+  const from=document.getElementById('tr-h-from')?.value||'';
+  const to=document.getElementById('tr-h-to')?.value||'';
+  const fB=document.getElementById('tr-h-bp')?.value||'';
+  const rows=TR_DATA.filter(d=>{
+    if(!trVisibleFor(d)) return false;
+    if(fB&&d.bophan!==fB) return false;
+    if(from||to){ const iso=vnToIso(d.ngay); if(from&&iso<from) return false; if(to&&iso>to) return false; }
+    return true;
+  }).slice().sort((a,b)=>{ const pa=vnToIso(a.ngay), pb=vnToIso(b.ngay); return pb<pa?-1:pb>pa?1:0; });
+  const rc=document.getElementById('tr-hist-count'); if(rc) rc.textContent=rows.length+' yêu cầu';
+  tb.innerHTML=rows.length? rows.map(d=>`<tr>
+      <td style="font-size:12px;font-weight:600;color:var(--navy);">${esc(d.ngay)||'—'}</td>
+      <td style="font-weight:700;">${esc(d.code||d.id)}</td>
+      <td><span class="badge badge-navy" style="font-size:10px;">${esc(BP_LABELS[d.bophan]||d.bophan)||'—'}</span></td>
+      <td>${esc(d.nguoi)||'—'}</td>
+      <td style="min-width:230px;">${trItemsHtml(d)}</td>
+      <td>${trStatusBadge(d.status)}</td>
+    </tr>`).join('') : `<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted);">Không có yêu cầu nào phù hợp</td></tr>`;
+}
+
 function calcChiModal(){
   const don_gia=parseFloat(document.getElementById('chi-dongia').value)||0;
   const sl=parseFloat(document.getElementById('chi-sl').value)||0;
@@ -6604,6 +6850,7 @@ const COLLECTIONS = {
   kho:       { read:()=>_byIdDump(KHO_DATA),  write:r=>{KHO_DATA=r.map(x=>x.obj);},  render:()=>{try{renderKhoTab();}catch(e){}} },
   yc:        { read:()=>_byIdDump(YC_DATA),   write:r=>{YC_DATA=r.map(x=>x.obj);},   render:()=>{try{renderYeuCau();}catch(e){}} },
   ycDeleted: { read:()=>_byIdDump(YC_DELETED),write:r=>{YC_DELETED=r.map(x=>x.obj);},render:()=>{try{renderYcDeleted();}catch(e){}} },
+  transferReq:{ read:()=>_byIdDump(TR_DATA), write:r=>{TR_DATA=r.map(x=>x.obj);}, render:()=>{try{renderTrTab();}catch(e){}} },
   nsLuong:   { read:()=>_byIdDump(NS_LUONG),  write:r=>{NS_LUONG=r.map(x=>x.obj);},  render:()=>{try{renderNsLuong();}catch(e){} try{updateNsKpi();}catch(e){}} },
   bhxh:      { read:()=>_byIdDump(NS_BHXH),   write:r=>{NS_BHXH=r.map(x=>x.obj);},   render:()=>{try{renderNsBhxh();}catch(e){} try{updateNsKpi();}catch(e){}} },
   tncn:      { read:()=>_byIdDump(NS_TNCN),   write:r=>{NS_TNCN=r.map(x=>x.obj);},   render:()=>{try{renderNsTncn();}catch(e){} try{updateNsKpi();}catch(e){}} },
@@ -6663,7 +6910,7 @@ const WRITE_MATRIX = {
   thu:['giamdoc','ketoan'], chi:['giamdoc','ketoan'],
   ncc:['giamdoc','ketoan'], catalog:['giamdoc','ketoan'],
   nsLuong:['giamdoc','hr'], bhxh:['giamdoc','hr'], tncn:['giamdoc','hr'], cats:['giamdoc'],
-  dx:['giamdoc','ketoan','truong-bp','hr'], kho:['giamdoc','ketoan','truong-bp','hr'], yc:['giamdoc','ketoan','truong-bp','hr'], ycDeleted:['giamdoc','ketoan','truong-bp','hr'],
+  dx:['giamdoc','ketoan','truong-bp','hr'], kho:['giamdoc','ketoan','truong-bp','hr'], yc:['giamdoc','ketoan','truong-bp','hr'], ycDeleted:['giamdoc','ketoan','truong-bp','hr'], transferReq:['giamdoc','ketoan','truong-bp','hr'],
   wsData:['giamdoc','truong-bp'], roomStatus:['giamdoc','truong-bp'], amData:['giamdoc','truong-bp'],
   mbData:['giamdoc','truong-bp'], hvLinen:['giamdoc','truong-bp'], hvRewash:['giamdoc','truong-bp'],
   hvCols:['giamdoc','truong-bp'], sx:['giamdoc','truong-bp'],
