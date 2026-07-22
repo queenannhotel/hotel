@@ -1821,8 +1821,10 @@ textarea{resize:vertical;min-height:68px;}
   <div class="modal modal-lg">
     <div class="modal-header"><span class="modal-title" id="kho-item-title">📦 Thêm Mặt Hàng Kho</span><button class="close-btn" onclick="closeModal('modal-kho-item')">✕</button></div>
     <div class="form-row">
-      <div class="form-group"><label>Mã hàng <span style="color:var(--red)">*</span></label><input id="ki-ma" placeholder="VD: KH-001"></div>
-      <div class="form-group"><label>Tên hàng <span style="color:var(--red)">*</span></label><input id="ki-ten" placeholder="VD: Xà phòng tắm 80g"></div>
+      <div class="form-group"><label>Mã hàng <span style="color:var(--text-muted);font-weight:400;font-size:11px;">— tự tạo nếu bỏ trống</span></label><input id="ki-ma" placeholder="Tự tạo nếu bỏ trống"></div>
+      <div class="form-group"><label>Tên hàng <span style="color:var(--red)">*</span></label>
+        <div class="select-wrap"><input id="ki-ten" autocomplete="off" placeholder="Gõ tên — chọn từ danh mục" oninput="kiTenInput(this)" onfocus="kiTenInput(this)" onblur="setTimeout(()=>kiCloseDd(this),200)"><div class="dropdown-list"></div></div>
+      </div>
     </div>
     <div class="form-row">
       <div class="form-group"><label>ĐVT</label><input id="ki-dvt" placeholder="Cái / Hộp / Kg..."></div>
@@ -2318,7 +2320,7 @@ textarea{resize:vertical;min-height:68px;}
       <div class="form-group"><label>Tên mặt hàng <span style="color:var(--red);">*</span></label><input id="ai-name" placeholder="VD: Ga trải giường cotton"></div>
     </div>
     <div class="form-row">
-      <div class="form-group"><label>Đơn vị tính</label><select id="ai-dvt"><option>bộ</option><option>cái</option><option>kg</option><option>lít</option><option>hộp</option><option>thùng</option><option>m²</option><option>cuộn</option><option>lần</option><option>đợt</option><option>tờ</option><option>gói</option><option>vỉ</option><option>can</option><option>đôi</option><option>túi</option><option>lon</option><option>chai</option></select></div>
+      <div class="form-group"><label>Đơn vị tính</label><select id="ai-dvt"><option>bộ</option><option>cái</option><option>kg</option><option>lít</option><option>hộp</option><option>thùng</option><option>m²</option><option>cuộn</option><option>lần</option><option>đợt</option><option>tờ</option><option>gói</option><option>vỉ</option><option>can</option><option>đôi</option><option>túi</option><option>lon</option><option>chai</option><option>cây</option><option>xấp</option><option>sợi</option><option>ram</option></select></div>
       <div class="form-group"><label>Bộ phận sử dụng <span style="color:var(--text-muted);font-weight:400;font-size:11px;">— chọn nhiều</span></label><div id="ai-bophan-list" style="display:flex;flex-wrap:wrap;gap:6px 14px;padding:8px 0;"></div></div>
     </div>
     <!-- NCC & GIÁ theo từng nhà cung cấp -->
@@ -6140,10 +6142,28 @@ function editKhoItem(id){
   if(it.img) imgPickerSet('ki', it.img);
   openModal('modal-kho-item');
 }
+// Kho: gõ tên hàng → gợi ý từ Danh mục hàng hoá (đồng bộ tên + ĐVT)
+function kiTenInput(inp){
+  const dd=inp.closest('.select-wrap')?.querySelector('.dropdown-list'); if(!dd) return;
+  const q=(inp.value||'').trim().toLowerCase();
+  const list=(catalogItems||[]).filter(it=>!q||(it.name||'').toLowerCase().includes(q)||(it.code||'').toLowerCase().includes(q));
+  if(!list.length){ dd.innerHTML='<div class="dropdown-item" style="color:var(--text-muted);">Không có trong danh mục — có thể gõ tên tự do</div>'; dd.classList.add('open'); return; }
+  dd.innerHTML=list.slice(0,60).map(it=>`<div class="dropdown-item" onmousedown="kiSelectItem('${esc(it.id)}')"><span style="font-weight:600;">${esc(it.name)}</span> <span style="color:var(--text-muted);font-size:11px;">${esc(it.code||'')} · ${esc(it.dvt||'')}</span></div>`).join('');
+  dd.classList.add('open');
+}
+function kiSelectItem(id){
+  const it=(catalogItems||[]).find(x=>x.id===id); if(!it) return;
+  document.getElementById('ki-ten').value=it.name||'';
+  if(it.dvt) document.getElementById('ki-dvt').value=it.dvt;
+  const maEl=document.getElementById('ki-ma'); if(it.code && !maEl.value.trim()) maEl.value=it.code;   // gợi ý mã từ danh mục nếu chưa nhập
+  const dd=document.querySelector('#modal-kho-item .dropdown-list'); if(dd) dd.classList.remove('open');
+}
+function kiCloseDd(inp){ const dd=inp.closest('.select-wrap')?.querySelector('.dropdown-list'); if(dd) dd.classList.remove('open'); }
 function saveKhoItem(){
-  const ma=document.getElementById('ki-ma').value.trim();
+  let ma=document.getElementById('ki-ma').value.trim();
   const ten=document.getElementById('ki-ten').value.trim();
-  if(!ma||!ten){showToast('Vui lòng nhập mã và tên hàng!',2500,'error');return;}
+  if(!ten){showToast('Vui lòng nhập tên hàng!',2500,'error');return;}
+  if(!ma) ma='KH-'+Date.now().toString().slice(-5)+Math.floor(Math.random()*90+10);   // mã không bắt buộc — tự tạo
   const data={ma,ten,dvt:document.getElementById('ki-dvt').value.trim()||'Cái',bophan:document.getElementById('ki-bophan').value,vitri:document.getElementById('ki-vitri').value,ton_dau:parseFloat(document.getElementById('ki-ton').value)||0,img:document.getElementById('ki-img').value.trim()||'📦',ghichu:document.getElementById('ki-ghichu').value.trim()};
   if(editingKhoId){
     const idx=KHO_DATA.findIndex(x=>x.id===editingKhoId);
@@ -6868,6 +6888,8 @@ function setSyncStatus(state){
   if(!dot||!txt) return;
   const M={ ok:['#2E7D5B','Đã đồng bộ'], sync:['#B7860A','Đang lưu…'], err:['#C0392B','Mất kết nối'], off:['#9ca3af','Chưa bật đồng bộ'] };
   const m=M[state]||M.off; dot.style.background=m[0]; txt.textContent=m[1];
+  const badge=txt.closest('button')||txt.parentElement;
+  if(badge){ badge.title = state==='err' ? ('Lỗi đồng bộ: '+(_lastSyncErr||'mất kết nối')) : ''; badge.style.cursor = state==='err'?'help':''; badge.onclick = state==='err' ? (()=>_notifySyncErr(true)) : null; }
 }
 
 // ----- Registry: mỗi collection <-> biến in-memory. read()=>[{id,obj}]; write(rows)=>dựng lại -----
@@ -6974,10 +6996,17 @@ async function flushToCloud(){
           if(error) throw error;
           chunk.forEach(u=>{ lastSnapshot[name]=lastSnapshot[name]||{}; if(u.deleted) delete lastSnapshot[name][u.id]; else lastSnapshot[name][u.id]=JSON.stringify(u.data); });
         }
-      }catch(e){ anyErr=true; console.error('flush nhóm',name,e); /* giữ snapshot nhóm này -> thử lại sau */ }
+      }catch(e){ anyErr=true; _lastSyncErr=(e&&(e.message||e.hint||e.details||e.error_description))||String(e); _lastSyncErrColl=name; console.error('flush nhóm',name,e); /* giữ snapshot nhóm này -> thử lại sau */ }
     }
     if(anyChange) setSyncStatus(anyErr?'err':'ok');
+    if(anyErr) _notifySyncErr();
   }finally{ _flushing=false; }
+}
+// Hiện lỗi đồng bộ thật (RLS/quyền/kết nối) để chẩn đoán — không spam (tối đa 1 lần / 30s)
+let _lastSyncErr='', _lastSyncErrColl='', _lastSyncErrToast=0;
+function _notifySyncErr(force){
+  const now=Date.now(); if(!force && now-_lastSyncErrToast<30000) return; _lastSyncErrToast=now;
+  showToast('❌ Chưa đẩy được lên máy chủ ('+(_lastSyncErrColl||'?')+'): '+(_lastSyncErr||'lỗi kết nối')+'. Dữ liệu đang lưu tạm trên máy này.',6500,'error');
 }
 
 // ----- REALTIME: áp thay đổi từ máy khác vào bộ nhớ, cập nhật snapshot để không đẩy dội lại -----
