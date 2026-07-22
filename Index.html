@@ -2298,7 +2298,12 @@ textarea{resize:vertical;min-height:68px;}
         <select id="tr-bophan" onchange="trRefreshBalances()"></select>
       </div>
     </div>
-    <div style="font-size:11.5px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin:6px 0 8px;">Danh sách mặt hàng cần transfer</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin:6px 0 8px;">
+      <div style="font-size:11.5px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);">Danh sách mặt hàng cần transfer</div>
+      <select id="tr-dx-pick" onchange="trLoadFromDx(this.value)" title="Nạp mặt hàng từ 1 phiếu đề xuất đã duyệt" style="font-size:12px;padding:5px 10px;border:1.5px solid var(--gold);border-radius:8px;background:var(--gold-pale);color:var(--navy);max-width:260px;">
+        <option value="">📋 Chọn phiếu đề xuất...</option>
+      </select>
+    </div>
     <div id="tr-items"></div>
     <button class="btn btn-ghost btn-sm" onclick="trAddRow()" style="margin-top:6px;">+ Thêm hàng</button>
     <div style="font-size:11px;color:var(--text-muted);margin-top:8px;">Số dư là tồn kho hiện tại của mặt hàng đó trong kho của bộ phận yêu cầu (tự đồng bộ).</div>
@@ -6421,7 +6426,31 @@ function openTrModal(){
   if(bp && currentUser?.role==='truong-bp') bp.value=userBophans(currentUser)[0]||'';
   document.getElementById('tr-items').innerHTML='';
   trAddRow();
+  trFillDxPick();
   openModal('modal-tr');
+}
+// Danh sách phiếu đề xuất ĐÃ DUYỆT để nạp nhanh mặt hàng vào yêu cầu transfer
+function trFillDxPick(){
+  const sel=document.getElementById('tr-dx-pick'); if(!sel) return;
+  const approved=(DX_DATA||[]).filter(d=>d.status==='da-duyet')
+    .slice().sort((a,b)=>{const pa=vnToIso(a.ngay)||'',pb=vnToIso(b.ngay)||'';return pb<pa?-1:pb>pa?1:0;});
+  sel.innerHTML='<option value="">📋 Chọn phiếu đề xuất...</option>'+approved.map(d=>`<option value="${d.id}">Phiếu ${esc(d.code||d.id)} · ${esc(d.ngay||'')} · ${esc(BP_LABELS[d.bophan]||d.bophan||'')}</option>`).join('');
+  sel.value='';
+}
+// Nạp mặt hàng từ 1 phiếu đề xuất đã duyệt → tự đổ xuống danh sách mặt hàng transfer
+function trLoadFromDx(dxId){
+  const sel=document.getElementById('tr-dx-pick');
+  if(!dxId) return;
+  const d=(DX_DATA||[]).find(x=>x.id===dxId); if(!d) return;
+  const items=dxItems(d);
+  const bp=document.getElementById('tr-bophan');
+  if(bp && d.bophan && [...bp.options].some(o=>o.value===d.bophan)) bp.value=d.bophan;   // bộ phận yêu cầu = bộ phận phiếu ĐX
+  const box=document.getElementById('tr-items'); box.innerHTML='';
+  items.forEach(it=>trAddRow({itemId:it.itemId||'', ten:it.ten||'', dvt:it.dvt||'', sl:parseFloat(it.sl)||1}));
+  if(!items.length) trAddRow();
+  trRefreshBalances();
+  if(sel) sel.value='';   // cho phép chọn phiếu khác lần nữa
+  showToast('✅ Đã nạp '+items.length+' mặt hàng từ phiếu '+(d.code||d.id),2200,'success');
 }
 function editTr(id){
   const d=TR_DATA.find(x=>x.id===id); if(!d) return;
@@ -6434,6 +6463,7 @@ function editTr(id){
   const box=document.getElementById('tr-items'); box.innerHTML='';
   (d.items||[]).forEach(it=>trAddRow(it));
   if(!d.items||!d.items.length) trAddRow();
+  trFillDxPick();
   openModal('modal-tr');
 }
 function saveTr(){
