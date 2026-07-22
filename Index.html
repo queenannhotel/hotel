@@ -882,11 +882,11 @@ textarea{resize:vertical;min-height:68px;}
         <button class="btn btn-ghost btn-sm" onclick="tcSetThisMonth()" title="Về tháng hiện tại">Tháng này</button>
       </div>
       <div class="kpi-row" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));">
-        <div style="background:var(--green-bg);border-radius:12px;padding:14px 18px;border:1px solid #b6dfd1;">
+        <div id="tc-box-tong-thu" style="background:var(--green-bg);border-radius:12px;padding:14px 18px;border:1px solid #b6dfd1;">
           <div id="tc-label-thu" style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Tổng Thu</div>
           <div class="amount-pos" style="font-size:18px;font-weight:700;" id="tc-tong-thu">—</div>
         </div>
-        <div style="background:var(--red-bg);border-radius:12px;padding:14px 18px;border:1px solid #f5c6c0;">
+        <div id="tc-box-tong-chi" style="background:var(--red-bg);border-radius:12px;padding:14px 18px;border:1px solid #f5c6c0;">
           <div id="tc-label-chi" style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Tổng Chi</div>
           <div class="amount-neg" style="font-size:18px;font-weight:700;" id="tc-tong-chi">—</div>
         </div>
@@ -3412,6 +3412,10 @@ function syncThuChiSummary() {
 
   const duEl=document.getElementById('tc-so-du');
   if(duEl) duEl.style.color = soDu<0?'var(--red)':'var(--yellow)';
+
+  // Kế toán chỉ xem tiền mặt: ẩn ô Tổng Thu & Tổng Chi
+  const isKt = currentUser?.role==='ketoan';
+  ['tc-box-tong-thu','tc-box-tong-chi'].forEach(id=>{ const e=document.getElementById(id); if(e) e.style.display=isKt?'none':''; });
 
   // Render bảng tổng hợp (cùng khoảng ngày + bộ lọc)
   const allRows = [
@@ -6304,32 +6308,56 @@ function canEditTr(d){
 }
 function canDeleteTr(d){ return canEditTr(d); }
 
-// ---- Dòng mặt hàng trong modal ----
-function trItemOptions(sel){
-  return '<option value="">— Chọn mặt hàng —</option>'+(catalogItems||[]).slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(it=>`<option value="${it.id}" data-ten="${esc(it.name)}" data-dvt="${esc(it.dvt||'')}" ${it.id===sel?'selected':''}>${esc(it.name)}${it.code?' ('+esc(it.code)+')':''}</option>`).join('');
-}
+// ---- Dòng mặt hàng trong modal (gõ tên → dropdown chọn) ----
 function trRowHtml(row){
   row=row||{};
-  return `<div class="tr-item-row" style="display:grid;grid-template-columns:1.7fr .7fr .7fr .9fr 34px;gap:8px;align-items:end;margin-bottom:8px;padding:10px;background:var(--cream);border:1px solid var(--border);border-radius:8px;">
-    <div class="form-group" style="margin:0;"><label style="font-size:10px;">Tên hàng <span style="color:var(--red);">*</span></label><select class="trr-ten" onchange="trRowPick(this)">${trItemOptions(row.itemId)}</select></div>
-    <div class="form-group" style="margin:0;"><label style="font-size:10px;">ĐVT</label><input class="trr-dvt" value="${esc(row.dvt||'')}" readonly style="background:#f4f4f4;"></div>
-    <div class="form-group" style="margin:0;"><label style="font-size:10px;">Số lượng</label><input type="number" class="trr-sl" min="1" value="${row.sl||1}"></div>
-    <div class="form-group" style="margin:0;"><label style="font-size:10px;">Số dư kho</label><input class="trr-con" value="" readonly style="background:#f4f4f4;font-weight:600;"></div>
+  return `<div class="tr-item-row" data-item-id="${esc(row.itemId||'')}" style="display:grid;grid-template-columns:minmax(0,1fr) 58px 60px 62px 30px;gap:6px;align-items:end;margin-bottom:8px;padding:10px;background:var(--cream);border:1px solid var(--border);border-radius:8px;">
+    <div class="form-group" style="margin:0;min-width:0;"><label style="font-size:10px;">Tên hàng <span style="color:var(--red);">*</span></label>
+      <div class="select-wrap"><input class="trr-ten" autocomplete="off" placeholder="Gõ tên món..." value="${esc(row.ten||'')}" oninput="trTenInput(this)" onfocus="trTenInput(this)" onblur="setTimeout(()=>trCloseDd(this),200)" style="min-width:0;"><div class="dropdown-list trr-ten-dd"></div></div></div>
+    <div class="form-group" style="margin:0;min-width:0;"><label style="font-size:10px;">ĐVT</label><input class="trr-dvt" value="${esc(row.dvt||'')}" readonly style="background:#f4f4f4;min-width:0;"></div>
+    <div class="form-group" style="margin:0;min-width:0;"><label style="font-size:10px;">SL</label><input type="number" class="trr-sl" min="1" value="${row.sl||1}" style="min-width:0;"></div>
+    <div class="form-group" style="margin:0;min-width:0;"><label style="font-size:10px;">Số dư</label><input class="trr-con" value="" readonly style="background:#f4f4f4;font-weight:600;min-width:0;"></div>
     <button class="btn btn-ghost btn-sm" type="button" onclick="trRemoveRow(this)" title="Xoá dòng" style="height:38px;padding:0;">🗑</button>
   </div>`;
 }
-function trAddRow(row){ const box=document.getElementById('tr-items'); if(box){ box.insertAdjacentHTML('beforeend', trRowHtml(row)); const last=box.lastElementChild?.querySelector('.trr-ten'); if(last) trRowPick(last); } }
-function trRemoveRow(btn){ const r=btn.closest('.tr-item-row'); if(r) r.remove(); }
-function trRowPick(sel){
-  const row=sel.closest('.tr-item-row'); if(!row) return;
-  const opt=sel.selectedOptions[0];
-  const ten=opt?(opt.getAttribute('data-ten')||''):'';
-  const dvt=opt?(opt.getAttribute('data-dvt')||''):'';
-  const dvtEl=row.querySelector('.trr-dvt'); if(dvtEl) dvtEl.value=dvt;
-  const dept=document.getElementById('tr-bophan')?.value||'';
-  const conEl=row.querySelector('.trr-con'); if(conEl) conEl.value= ten? trBalance(dept,ten,dvt) : '';
+function trAddRow(row){
+  const box=document.getElementById('tr-items'); if(!box) return;
+  box.insertAdjacentHTML('beforeend', trRowHtml(row));
+  const last=box.lastElementChild;
+  if(last && row && row.ten){ const dept=document.getElementById('tr-bophan')?.value||''; const con=last.querySelector('.trr-con'); if(con) con.value=trBalance(dept,row.ten,row.dvt); }
 }
-function trRefreshBalances(){ document.querySelectorAll('#tr-items .tr-item-row .trr-ten').forEach(sel=>trRowPick(sel)); }
+function trRemoveRow(btn){ const r=btn.closest('.tr-item-row'); if(r) r.remove(); }
+// Gõ tên món → hiện dropdown mặt hàng khớp (đồng bộ Danh mục hàng hoá)
+function trTenInput(inp){
+  const row=inp.closest('.tr-item-row'); if(!row) return;
+  const dd=inp.closest('.select-wrap')?.querySelector('.dropdown-list'); if(!dd) return;
+  row.dataset.itemId='';   // gõ lại → bỏ liên kết đã chọn
+  const q=(inp.value||'').trim().toLowerCase();
+  const list=(catalogItems||[]).filter(it=>!q||(it.name||'').toLowerCase().includes(q)||(it.code||'').toLowerCase().includes(q));
+  if(!list.length){ dd.innerHTML='<div class="dropdown-item" style="color:var(--text-muted);">Không có mặt hàng phù hợp</div>'; dd.classList.add('open'); return; }
+  dd.innerHTML=list.slice(0,60).map(it=>`<div class="dropdown-item" onmousedown="trSelectItem(this,'${esc(it.id)}')"><span style="font-weight:600;">${esc(it.name)}</span> <span style="color:var(--text-muted);font-size:11px;">${esc(it.code||'')} · ${esc(it.dvt||'')}</span></div>`).join('');
+  dd.classList.add('open');
+}
+function trSelectItem(el,id){
+  const row=el.closest('.tr-item-row'); if(!row) return;
+  const it=(catalogItems||[]).find(x=>x.id===id); if(!it) return;
+  row.dataset.itemId=id;
+  const inp=row.querySelector('.trr-ten'); if(inp) inp.value=it.name||'';
+  const dvtEl=row.querySelector('.trr-dvt'); if(dvtEl) dvtEl.value=it.dvt||'';
+  const dept=document.getElementById('tr-bophan')?.value||'';
+  const conEl=row.querySelector('.trr-con'); if(conEl) conEl.value=trBalance(dept,it.name,it.dvt);
+  const dd=row.querySelector('.dropdown-list'); if(dd) dd.classList.remove('open');
+}
+function trCloseDd(inp){ const dd=inp.closest('.select-wrap')?.querySelector('.dropdown-list'); if(dd) dd.classList.remove('open'); }
+function trRefreshBalances(){
+  const dept=document.getElementById('tr-bophan')?.value||'';
+  document.querySelectorAll('#tr-items .tr-item-row').forEach(row=>{
+    const id=row.dataset.itemId; const it=id?(catalogItems||[]).find(x=>x.id===id):null;
+    const ten=it?it.name:(row.querySelector('.trr-ten')?.value||'');
+    const dvt=it?it.dvt:(row.querySelector('.trr-dvt')?.value||'');
+    const conEl=row.querySelector('.trr-con'); if(conEl) conEl.value= ten? trBalance(dept,ten,dvt) : '';
+  });
+}
 
 function openTrModal(){
   editingTrId=null;
@@ -6360,11 +6388,14 @@ function saveTr(){
   if(!bophan){ showToast('Vui lòng chọn bộ phận yêu cầu!',2500,'error'); return; }
   const items=[];
   document.querySelectorAll('#tr-items .tr-item-row').forEach(r=>{
-    const sel=r.querySelector('.trr-ten'); const itemId=sel?.value||'';
+    const inp=r.querySelector('.trr-ten'); const nameTyped=(inp?.value||'').trim();
+    let itemId=r.dataset.itemId||'';
+    let cat=itemId?catalogItems.find(c=>c.id===itemId):null;
+    if(!cat && nameTyped){ cat=catalogItems.find(c=>(c.name||'').trim().toLowerCase()===nameTyped.toLowerCase()); if(cat) itemId=cat.id; }
     const sl=parseFloat(r.querySelector('.trr-sl')?.value)||0;
-    if(!itemId||sl<=0) return;
-    const cat=catalogItems.find(c=>c.id===itemId);
-    items.push({itemId, ten:cat?cat.name:(sel.selectedOptions[0]?.getAttribute('data-ten')||''), dvt:cat?cat.dvt:(r.querySelector('.trr-dvt')?.value||''), sl});
+    const ten=cat?cat.name:nameTyped;
+    if(!ten||sl<=0) return;
+    items.push({itemId, ten, dvt:cat?cat.dvt:(r.querySelector('.trr-dvt')?.value||''), sl});
   });
   if(!items.length){ showToast('Vui lòng thêm ít nhất 1 mặt hàng (SL > 0)!',2500,'error'); return; }
   if(editingTrId){
