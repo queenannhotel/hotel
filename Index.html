@@ -995,8 +995,9 @@ textarea{resize:vertical;min-height:68px;}
           <table id="tbl-pt"><thead><tr><th>Khách hàng</th><th>Mô tả</th><th>Số tiền</th><th>Ngày</th><th>Tình trạng</th></tr></thead>
           <tbody id="tbl-pt-body"></tbody></table></div>
         <div class="card"><div class="card-header"><div class="card-title">⬆ Phải Trả (NCC)</div></div>
+          <div class="table-wrap">
           <table id="tbl-ptr"><thead><tr><th>Ngày PC</th><th>Số PC</th><th>Nhà cung cấp</th><th>Tổng tiền</th><th>Hạn TT</th><th>Nguồn</th><th>Tình trạng</th></tr></thead>
-          <tbody id="tbl-ptr-body"></tbody></table>
+          <tbody id="tbl-ptr-body"></tbody></table></div>
         </div>
       </div>
     </div>
@@ -3524,17 +3525,16 @@ function renderCongNoPtr() {
     const tong=recs.reduce((s,r)=>s+(parseFloat(r.tong)||0),0);
     const ncc=[...new Set(recs.map(r=>r.ten_ncc).filter(n=>n&&n!=='—'))].join(', ')||'—';
     const spc=first.so_phieu_chi||'—';
-    const nguonBadge=first.nguon==='de-xuat'
-      ? `<span class="badge badge-blue" style="font-size:9px;">Đề xuất</span>`
-      : `<span class="badge badge-navy" style="font-size:9px;">Thủ công</span>`;
+    // Nguồn = bộ phận đề xuất
+    const bp=[...new Set(recs.map(r=>r.bophan).filter(Boolean))].join(', ')||'—';
     const paid=first.cn_status==='da';
     return `<tr style="background:var(--gold-pale);${paid?'opacity:.6;':''}">
-      <td style="font-size:12px;">${esc(first.ngay)||'—'}</td>
+      <td style="font-size:12px;white-space:nowrap;">${esc(first.ngay)||'—'}</td>
       <td style="font-weight:600;">${esc(spc)}</td>
       <td style="font-weight:500;">${esc(ncc)}</td>
-      <td class="amount-neg" style="font-weight:700;">${fmt(tong)}</td>
-      <td><input type="date" class="inline-input" value="${esc(first.han_tt||'')}" onchange="updateCongNoGroupField('${esc(g.key)}','han_tt',this.value)" style="width:140px;font-size:11px;"></td>
-      <td>${nguonBadge}</td>
+      <td class="amount-neg" style="font-weight:700;white-space:nowrap;">${fmt(tong)}</td>
+      <td><input type="date" class="inline-input" value="${esc(first.han_tt||'')}" onchange="updateCongNoGroupField('${esc(g.key)}','han_tt',this.value)" style="width:112px;font-size:11px;padding:4px 6px;"></td>
+      <td><span class="badge badge-navy" style="font-size:9px;">${esc(bp)}</span></td>
       <td>${cnStatusSelect(first.cn_status,`updateCongNoGroupStatus('${esc(g.key)}',this.value)`)}</td>
     </tr>`;
   });
