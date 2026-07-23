@@ -945,7 +945,7 @@ textarea{resize:vertical;min-height:68px;}
             <span id="thu-count" style="font-size:12px;color:var(--text-muted);margin-left:4px;"></span>
           </div>
         </div>
-        <div class="table-wrap wide"><table><thead><tr><th>STT</th><th>Ngày</th><th>Danh mục</th><th>Mô tả</th><th>Bộ phận</th><th>Số tiền</th><th>Phương thức TT</th><th>Người thu</th><th>Ghi chú</th><th></th></tr></thead>
+        <div class="table-wrap wide"><table><thead><tr><th>STT</th><th>Ngày</th><th>Danh mục</th><th>Bộ phận</th><th>Số tiền tổng (VND)</th><th>Người thu</th><th>Ghi chú</th><th></th></tr></thead>
         <tbody id="tbl-thu-body"></tbody></table></div>
       </div>
     </div>
@@ -2161,16 +2161,7 @@ textarea{resize:vertical;min-height:68px;}
     <div class="modal-header"><span class="modal-title">💰 Ghi Khoản Thu Mới</span><button class="close-btn" onclick="closeModal('modal-thu')">✕</button></div>
     <div class="form-row">
       <div class="form-group"><label>Ngày thu</label><input type="date" id="thu-ngay" value="2026-07-06"></div>
-      <div class="form-group"><label>Số tiền <span style="color:var(--red);">*</span></label>
-        <div style="display:flex;gap:7px;">
-          <input type="number" id="thu-sotien" placeholder="VD: 12500000" style="flex:1;">
-          <select id="thu-currency" style="width:92px;">
-            <option value="VND">VND</option><option value="USD">USD</option><option value="EUR">EUR</option>
-            <option value="RUB">RUB</option><option value="JPY">JPY</option><option value="CNY">CNY</option>
-            <option value="GBP">GBP</option><option value="KRW">KRW</option><option value="AUD">AUD</option>
-          </select>
-        </div>
-      </div>
+      <div class="form-group"><label>Người thu</label><input id="thu-nguoi" placeholder="Tên nhân viên thu tiền"></div>
     </div>
     <div class="form-row">
       <div class="form-group">
@@ -2188,16 +2179,14 @@ textarea{resize:vertical;min-height:68px;}
         </div>
       </div>
     </div>
-    <div class="form-row">
-      <div class="form-group"><label>Phương thức thanh toán</label>
-        <select id="thu-pttt">
-          <option value="TM">💵 TM — Tiền mặt</option>
-          <option value="CK">🏦 CK — Chuyển khoản</option>
-          <option value="Cà thẻ">💳 Cà thẻ</option>
-          <option value="Công nợ">📋 Công nợ</option>
-        </select>
-      </div>
-      <div class="form-group"><label>Người thu</label><input id="thu-nguoi" placeholder="Tên nhân viên thu tiền"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin:6px 0 8px;">
+      <label style="margin:0;">Số tiền <span style="color:var(--red);">*</span> <span style="font-size:10px;color:var(--text-muted);text-transform:none;font-weight:400;">— thêm dòng cho số tiền / ngoại tệ / PTTT khác</span></label>
+      <button class="btn btn-ghost btn-sm" onclick="thuAddLine()" type="button">＋ Thêm dòng</button>
+    </div>
+    <div id="thu-lines"></div>
+    <div id="thu-total-wrap" style="display:flex;justify-content:space-between;align-items:center;background:var(--gold-pale);border:1px solid rgba(201,168,76,.35);border-radius:8px;padding:8px 14px;margin:4px 0 10px;">
+      <span style="font-size:12px;color:var(--text-muted);">Tổng (VND)</span>
+      <span id="thu-total" style="font-size:16px;font-weight:700;color:var(--yellow);">—</span>
     </div>
     <div class="form-row full"><div class="form-group"><label>Mô tả</label><textarea id="thu-mota" placeholder="Ghi chú nội dung khoản thu..."></textarea></div></div>
     <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
@@ -3262,19 +3251,21 @@ function renderThuTab() {
   const countEl = document.getElementById('thu-count'); if(countEl) countEl.textContent = rows.length+' bản ghi';
   const ptttBadge = {TM:'badge-tm',CK:'badge-ck','Cà thẻ':'badge-the','Công nợ':'badge-cong-no'};
   document.getElementById('tbl-thu-body').innerHTML = rows.length
-    ? rows.map((r,i)=>`<tr>
+    ? rows.map((r,i)=>{
+        const lines=thuLines(r);
+        // breakdown từng dòng tiền (PTTT + số tiền, kèm mã ngoại tệ nếu khác VND)
+        const breakdown=lines.map(l=>`<span class="badge ${ptttBadge[l.pttt]||'badge-navy'}" style="font-size:9px;margin:1px;">${esc(l.pttt)} ${l.currency&&l.currency!=='VND'?(l.sotien||0).toLocaleString('vi-VN')+' '+esc(l.currency):fmt(l.sotien)}</span>`).join('');
+        return `<tr>
         <td style="color:var(--text-muted);font-size:11px;">${i+1}</td>
         <td style="font-size:12px;">${esc(r.ngay)}</td>
         <td><span class="badge badge-navy">${esc(r.danhmuc)}</span></td>
-        <td>${esc(r.mota)}</td>
         <td style="font-size:12px;">${esc(r.bophan)}</td>
-        <td class="amount-pos" style="font-weight:700;">${r.currency&&r.currency!=='VND'?(r.sotien||0).toLocaleString('vi-VN')+' '+esc(r.currency):fmt(r.sotien)}</td>
-        <td><span class="badge ${ptttBadge[r.pttt]||'badge-navy'}">${esc(r.pttt)}</span></td>
+        <td class="amount-pos" style="font-weight:700;">${fmt(thuVnd(r))}<div style="margin-top:2px;">${breakdown}</div></td>
         <td style="font-size:12px;">${esc(r.nguoi)}</td>
-        <td style="font-size:11px;color:var(--text-muted);">${esc(r.ghichu)||'—'}</td>
+        <td style="font-size:11px;color:var(--text-muted);">${esc(r.ghichu||r.mota)||'—'}</td>
         <td><button class="btn btn-ghost btn-sm" onclick="editThu('${r.id}')" title="Sửa">✏</button></td>
-      </tr>`).join('')
-    : `<tr><td colspan="10" style="text-align:center;padding:28px;color:var(--text-muted);">Không có bản ghi thu nào</td></tr>`;
+      </tr>`;}).join('')
+    : `<tr><td colspan="8" style="text-align:center;padding:28px;color:var(--text-muted);">Không có bản ghi thu nào</td></tr>`;
   syncThuChiSummary();
 }
 
@@ -3743,19 +3734,52 @@ function finalizeDxApproved(dx){
 }
 
 // ==================== MODAL GHI THU (cập nhật PTTT) ====================
+// ----- Các dòng tiền trong 1 phiếu thu (số tiền · ngoại tệ · PTTT) -----
+function thuLineHtml(sotien,currency,pttt){
+  const curOpts=['VND','USD','EUR','RUB','JPY','CNY','GBP','KRW','AUD'];
+  const ptOpts=[['TM','💵 TM'],['CK','🏦 CK'],['Cà thẻ','💳 Cà thẻ'],['Công nợ','📋 Công nợ']];
+  return `<div class="thu-line" style="display:grid;grid-template-columns:1fr 84px 108px 30px;gap:6px;align-items:center;margin-bottom:6px;">
+    <input type="number" class="thul-sotien" min="0" placeholder="Số tiền" value="${sotien!=null?sotien:''}" oninput="thuUpdateTotal()">
+    <select class="thul-cur" onchange="thuUpdateTotal()">${curOpts.map(c=>`<option value="${c}" ${c===(currency||'VND')?'selected':''}>${c}</option>`).join('')}</select>
+    <select class="thul-pttt">${ptOpts.map(([v,l])=>`<option value="${v}" ${v===(pttt||'TM')?'selected':''}>${l}</option>`).join('')}</select>
+    <button class="btn btn-ghost btn-sm" type="button" onclick="thuRemoveLine(this)" title="Xoá dòng" style="height:34px;padding:0;">🗑</button>
+  </div>`;
+}
+function thuAddLine(sotien,currency,pttt){ const box=document.getElementById('thu-lines'); if(box) box.insertAdjacentHTML('beforeend',thuLineHtml(sotien,currency,pttt)); }
+function thuRemoveLine(btn){
+  const box=document.getElementById('thu-lines'); const row=btn.closest('.thu-line'); if(!box||!row) return;
+  if(box.querySelectorAll('.thu-line').length<=1){ showToast('Cần ít nhất 1 dòng tiền',2000,'info'); return; }
+  row.remove(); thuUpdateTotal();
+}
+function thuReadLines(){
+  return [...document.querySelectorAll('#thu-lines .thu-line')].map(r=>({
+    sotien: parseFloat(r.querySelector('.thul-sotien')?.value)||0,
+    currency: r.querySelector('.thul-cur')?.value||'VND',
+    pttt: r.querySelector('.thul-pttt')?.value||'TM',
+  })).filter(l=>l.sotien>0);
+}
+function thuUpdateTotal(){
+  const vnd=thuReadLines().filter(l=>l.currency==='VND').reduce((s,l)=>s+l.sotien,0);
+  const el=document.getElementById('thu-total'); if(el) el.textContent=vnd?fmt(vnd):'—';
+}
+// Các dòng tiền của 1 bản ghi (fallback bản ghi cũ 1 dòng).
+function thuLines(r){ return (Array.isArray(r.lines)&&r.lines.length) ? r.lines : [{sotien:r.sotien||0,currency:r.currency||'VND',pttt:r.pttt||'TM'}]; }
+
 function saveThu() {
   const ngay   = document.getElementById('thu-ngay').value;
-  const sotien = parseFloat(document.getElementById('thu-sotien').value)||0;
-  const currency = document.getElementById('thu-currency')?.value || 'VND';
   const dm     = document.getElementById('thu-danhmuc').value;
   const bp     = document.getElementById('thu-bophan').value;
-  const pttt   = document.getElementById('thu-pttt').value;
   const nguoi  = document.getElementById('thu-nguoi').value.trim();
   const mota   = document.getElementById('thu-mota').value.trim();
-  if(!sotien||sotien<=0){ showToast('Vui lòng nhập số tiền!',2500,'error'); return; }
+  const lines  = thuReadLines();
+  if(!lines.length){ showToast('Vui lòng nhập ít nhất 1 dòng số tiền!',2500,'error'); return; }
+  // Tổng VND = Σ các dòng VND (ngoại tệ lưu riêng, không quy đổi). PTTT top-level: ưu tiên 'Công nợ'.
+  const tongVnd = lines.filter(l=>l.currency==='VND').reduce((s,l)=>s+l.sotien,0);
+  const pttt = (lines.find(l=>l.pttt==='Công nợ')?'Công nợ':(lines[0].pttt||'TM'));
   const fields = {
     ngay: ngay.split('-').reverse().join('/'),
-    danhmuc: dm, mota: mota||dm, bophan: bp, sotien, currency, pttt,
+    danhmuc: dm, mota: mota||dm, bophan: bp,
+    lines, sotien: tongVnd, currency: 'VND', pttt,
     nguoi: nguoi || currentUser?.fullname || 'Kế toán',
   };
   if(editingThuId){
@@ -3772,20 +3796,31 @@ function saveThu() {
   syncNow();
 }
 let editingThuId=null;
-function openThuModalNew(){ editingThuId=null; openModal('modal-thu'); }
+function thuResetLines(lines){
+  const box=document.getElementById('thu-lines'); if(box) box.innerHTML='';
+  (lines&&lines.length?lines:[{}]).forEach(l=>thuAddLine(l.sotien,l.currency,l.pttt));
+  thuUpdateTotal();
+}
+function openThuModalNew(){
+  editingThuId=null;
+  document.querySelector('#modal-thu .modal-title').textContent='💰 Ghi Khoản Thu Mới';
+  populateThuDropdowns();
+  ['thu-nguoi','thu-mota'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+  const dn=document.getElementById('thu-ngay'); if(dn) dn.value=new Date().toISOString().slice(0,10);
+  thuResetLines([{}]);
+  openModal('modal-thu');
+}
 function editThu(id){
   const r=THU_DATA.find(x=>x.id===id); if(!r) return;
   editingThuId=id;
   document.querySelector('#modal-thu .modal-title').textContent='✏️ Sửa Khoản Thu';
   document.getElementById('thu-ngay').value=(r.ngay||'').split('/').reverse().join('-');
-  document.getElementById('thu-sotien').value=r.sotien||'';
-  const cur=document.getElementById('thu-currency'); if(cur) cur.value=r.currency||'VND';
   populateThuDropdowns();
   document.getElementById('thu-danhmuc').value=r.danhmuc||'';
   document.getElementById('thu-bophan').value=r.bophan||'';
-  document.getElementById('thu-pttt').value=r.pttt||'TM';
   document.getElementById('thu-nguoi').value=r.nguoi||'';
   document.getElementById('thu-mota').value=r.mota||'';
+  thuResetLines(thuLines(r));
   openModal('modal-thu');
 }
 
@@ -6890,14 +6925,14 @@ function openModal(id){
       updateBophanVisibility();
     }
   }
-  if(id==='modal-thu' && !editingThuId){   // chỉ reset khi Ghi MỚI, không phá dữ liệu khi Sửa
+  if(id==='modal-thu' && !editingThuId && !document.querySelector('#thu-lines .thu-line')){
+    // Chỉ khởi tạo khi Ghi MỚI và chưa có dòng nào (openThuModalNew đã set sẵn thì bỏ qua)
     document.querySelector('#modal-thu .modal-title').textContent='💰 Ghi Khoản Thu Mới';
     populateThuDropdowns();
     document.getElementById('thu-ngay').value=new Date().toISOString().slice(0,10);
-    document.getElementById('thu-sotien').value='';
-    const cur=document.getElementById('thu-currency'); if(cur) cur.value='VND';
     document.getElementById('thu-nguoi').value='';
     document.getElementById('thu-mota').value='';
+    thuResetLines([{}]);
   }
   if(id==='modal-chi'){
     // Populate NCC dropdown
