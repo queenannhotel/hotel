@@ -2248,6 +2248,19 @@ textarea{resize:vertical;min-height:68px;}
   </div>
 </div>
 
+<!-- MODAL TÁCH PHIẾU CHI (SPLIT) -->
+<div class="modal-overlay" id="modal-chi-split">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title">✂️ Tách Phiếu Chi</span><button class="close-btn" onclick="closeModal('modal-chi-split')">✕</button></div>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">Tick chọn các mặt hàng muốn tách ra thành 1 phiếu chi mới. Các mặt hàng còn lại giữ ở phiếu hiện tại.</p>
+    <div id="chi-split-list" style="max-height:340px;overflow:auto;"></div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
+      <button class="btn btn-ghost" onclick="closeModal('modal-chi-split')">Huỷ</button>
+      <button class="btn btn-primary" onclick="confirmChiSplit()">✂️ Tách</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL TẠO ĐỀ XUẤT -->
 <div class="modal-overlay" id="modal-de-xuat">
   <div class="modal modal-lg">
@@ -3295,8 +3308,10 @@ function renderChiTab() {
     const dxCount=[...new Set(recs.map(r=>r.dx_id).filter(Boolean))].length;
     const open=chiExpanded.has(g.key);
     const mergeBtn=isMerged
-      ? `<button class="btn btn-ghost btn-sm" onclick="unmergeChi('${esc(g.merge_id)}')" title="Tách phiếu chi">Tách</button>`
+      ? `<button class="btn btn-ghost btn-sm" onclick="unmergeChi('${esc(g.merge_id)}')" title="Bỏ gộp phiếu chi">Tách</button>`
       : `<button class="btn btn-ghost btn-sm" onclick="openChiMerge('${esc(g.key)}')" title="Gộp phiếu chi">MERGE</button>`;
+    const splitBtn=recs.length>=2
+      ? `<button class="btn btn-ghost btn-sm" onclick="openChiSplit('${esc(g.key)}')" title="Tách mặt hàng ra phiếu chi mới">Split</button>` : '';
     const groupRow=`<tr class="chi-group-row" style="cursor:pointer;background:var(--cream);" onclick="toggleChiExpand('${esc(g.key)}')">
       <td style="text-align:center;font-size:13px;color:var(--navy);">${open?'▾':'▸'}</td>
       <td style="font-size:12px;">${esc(first.ngay)}</td>
@@ -3325,7 +3340,7 @@ function renderChiTab() {
           <option value="hoan-thanh"   ${st==='hoan-thanh'?'selected':''}>Hoàn thành</option>
         </select>
       </td>
-      <td onclick="event.stopPropagation()">${mergeBtn}</td>
+      <td onclick="event.stopPropagation()"><div style="display:flex;gap:4px;flex-wrap:wrap;">${mergeBtn}${splitBtn}</div></td>
     </tr>`;
     const detailRows=recs.map(r=>{
       const kho=r.kho||'kt';
@@ -3357,7 +3372,7 @@ function renderChiTab() {
   renderCongNoPtr();
 }
 // Khoá gom nhóm Chi: ưu tiên merge_id (đã gộp), rồi dx_id (theo đơn), fallback id (chi thủ công).
-function chiGroupKey(r){ return r.merge_id || r.dx_id || r.id; }
+function chiGroupKey(r){ return r.merge_id || r.split_id || r.dx_id || r.id; }
 let chiExpanded=new Set();
 function toggleChiExpand(key){ if(chiExpanded.has(key)) chiExpanded.delete(key); else chiExpanded.add(key); renderChiTab(); }
 // Ghi 1 field cho MỌI bản ghi Chi trong cùng nhóm (đơn / phiếu gộp).
@@ -3418,7 +3433,7 @@ function confirmChiMerge(){
   const mid=baseRecs[0]?.merge_id||('MG'+Date.now());
   // Gán merge_id cho base + các nhóm được chọn.
   baseRecs.forEach(r=>{ r.merge_id=mid; });
-  keys.forEach(k=>CHI_DATA.filter(r=>chiGroupKey(r)===k||r.dx_id===k).forEach(r=>{ r.merge_id=mid; }));
+  keys.forEach(k=>CHI_DATA.filter(r=>chiGroupKey(r)===k).forEach(r=>{ r.merge_id=mid; }));
   chiExpanded.add(mid);
   closeModal('modal-chi-merge');
   renderChiTab(); syncNow();
@@ -3430,6 +3445,29 @@ function unmergeChi(mid){
   chiExpanded.delete(mid);
   renderChiTab(); syncNow();
   showToast('Đã tách phiếu chi',2000,'info');
+}
+// ----- SPLIT: tách bớt mặt hàng của 1 đơn ra thành phiếu chi mới -----
+let chiSplitBase=null;
+function openChiSplit(baseKey){
+  chiSplitBase=baseKey;
+  const recs=CHI_DATA.filter(r=>chiGroupKey(r)===baseKey);
+  const box=document.getElementById('chi-split-list');
+  box.innerHTML = recs.map(r=>`<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;">
+      <input type="checkbox" class="chi-split-chk" value="${esc(r.id)}">
+      <span><strong>${esc(r.ten_hang)}</strong> <span style="color:var(--text-muted);font-size:12px;">${esc(r.dvt||'')} · ×${esc(r.sl)} · ${fmt(r.tong)}</span></span></label>`).join('');
+  openModal('modal-chi-split');
+}
+function confirmChiSplit(){
+  const ids=[...document.querySelectorAll('.chi-split-chk:checked')].map(c=>c.value);
+  const total=CHI_DATA.filter(r=>chiGroupKey(r)===chiSplitBase).length;
+  if(!ids.length){ showToast('Chọn ít nhất 1 mặt hàng để tách',2200,'info'); return; }
+  if(ids.length>=total){ showToast('Phải để lại ít nhất 1 mặt hàng ở phiếu cũ',2600,'error'); return; }
+  const sid='SP'+Date.now();
+  CHI_DATA.filter(r=>ids.includes(r.id)).forEach(r=>{ r.split_id=sid; r.merge_id=''; });   // tách khỏi phiếu gộp (nếu có) sang phiếu mới
+  chiExpanded.add(sid);
+  closeModal('modal-chi-split');
+  renderChiTab(); syncNow();
+  showToast('✅ Đã tách '+ids.length+' mặt hàng ra phiếu chi mới',2400,'success');
 }
 
 function updateChiField(id, field, val) {
