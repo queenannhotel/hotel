@@ -2289,6 +2289,7 @@ textarea{resize:vertical;min-height:68px;}
         </select>
       </div>
       <div class="form-group"><label>Mức độ ưu tiên</label><select id="dx-priority"><option>Thường</option><option>Khẩn cấp</option><option>Rất khẩn cấp</option></select></div>
+      <div class="form-group"><label>Ngày tạo</label><input type="date" id="dx-ngay"></div>
     </div>
     <!-- Danh sách mặt hàng (nhiều dòng / 1 đề xuất) -->
     <div style="display:flex;justify-content:space-between;align-items:center;margin:6px 0 8px;">
@@ -5472,10 +5473,13 @@ function submitDx(){
     });
   });
   if(!items.length){ showToast('Vui lòng nhập ít nhất 1 mặt hàng (tên + số lượng)!',2800,'error'); return; }
+  // Ngày tạo (cho phép chọn ngày cũ); rỗng → hôm nay
+  const dxNgayIso=document.getElementById('dx-ngay')?.value||'';
+  const ngay = dxNgayIso ? dxNgayIso.split('-').reverse().join('/') : new Date().toLocaleDateString('vi-VN');
   if(editingDxId){
-    // Cập nhật phiếu đang sửa — giữ nguyên trạng thái/luồng/người/ngày.
+    // Cập nhật phiếu đang sửa — giữ nguyên trạng thái/luồng/người; cho cập nhật ngày tạo.
     const dx=DX_DATA.find(x=>x.id===editingDxId);
-    if(dx){ dx.bophan=bophan; dx.priority=priority; dx.items=items; }
+    if(dx){ dx.bophan=bophan; dx.priority=priority; dx.items=items; dx.ngay=ngay; }
     editingDxId=null;
     closeModal('modal-de-xuat');
     renderDxTable();
@@ -5483,13 +5487,12 @@ function submitDx(){
     showToast('✅ Đã cập nhật đề xuất',2500,'success');
     return;
   }
-  const today=new Date().toLocaleDateString('vi-VN');
-  const code=String(DX_DATA.filter(d=>d.ngay===today).length+1).padStart(2,'0');   // mã ngắn 2 chữ số, reset mỗi ngày
+  const code=String(DX_DATA.filter(d=>d.ngay===ngay).length+1).padStart(2,'0');   // mã ngắn 2 chữ số, reset theo ngày tạo
   const newDx={
     id:'DX'+Date.now(), code, bophan, priority,
     nguoi:currentUser?.fullname||'',
     email:currentUser?.email||'',            // email người tạo — để lọc noti về đúng người
-    ngay:today,
+    ngay,
     // Trưởng BP tạo đề xuất = tự duyệt bước BP → bắt đầu ở bước chờ Kế toán.
     status:'cho-duyet-ketoan', flow:[true,false,false],
     ghichu:'', items,
@@ -5509,6 +5512,7 @@ function editDx(id){
   editingDxId=id;
   const bp=document.getElementById('dx-bophan'); if(bp) bp.value=d.bophan||'';
   const pr=document.getElementById('dx-priority'); if(pr) pr.value=d.priority||'Thường';
+  const dn=document.getElementById('dx-ngay'); if(dn) dn.value=vnToIso(d.ngay)||'';
   const box=document.getElementById('dx-items'); if(box) box.innerHTML='';
   dxFillDatalists&&dxFillDatalists();
   dxItems(d).forEach(it=>{
@@ -6862,6 +6866,7 @@ function openDeXuatModal(){
   const bp=document.getElementById('dx-bophan');
   if(bp) bp.value=(currentUser?.role==='truong-bp')?(userBophans(currentUser)[0]||''):'';
   const pr=document.getElementById('dx-priority'); if(pr) pr.value='Thường';
+  const dn=document.getElementById('dx-ngay'); if(dn) dn.value=new Date().toISOString().slice(0,10);
   const box=document.getElementById('dx-items'); if(box) box.innerHTML='';
   dxAddRow();
   const wrap=document.getElementById('dx-total-wrap'); if(wrap) wrap.style.display='none';
