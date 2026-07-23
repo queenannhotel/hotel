@@ -971,9 +971,8 @@ textarea{resize:vertical;min-height:68px;}
         </div>
         <div class="table-wrap xwide">
           <table><thead><tr>
-            <th>STT</th><th>Ngày</th><th>Tên hàng</th><th>Đơn giá (đ)</th><th>Số lượng</th><th>Tổng tiền (đ)</th>
-            <th>Bộ phận</th><th>Tên NCC</th><th>Hóa đơn</th><th>PTTT</th>
-            <th>Số phiếu chi</th><th>Số TK</th><th>Trạng thái</th>
+            <th style="width:28px;"></th><th>Ngày</th><th>Tên NCC</th><th>Tổng tiền (đ)</th>
+            <th>Hóa đơn</th><th>PTTT</th><th>Số phiếu chi</th><th>Số TK</th><th>Trạng thái</th><th></th>
           </tr></thead>
           <tbody id="tbl-chi-body"></tbody>
           </table>
@@ -2236,6 +2235,19 @@ textarea{resize:vertical;min-height:68px;}
   </div>
 </div>
 
+<!-- MODAL GỘP PHIẾU CHI (MERGE) -->
+<div class="modal-overlay" id="modal-chi-merge">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title">🔗 Gộp Phiếu Chi</span><button class="close-btn" onclick="closeModal('modal-chi-merge')">✕</button></div>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">Chọn các đơn muốn gộp cùng phiếu chi hiện tại thành 1 phiếu chi duy nhất (1 dòng tổng).</p>
+    <div id="chi-merge-list" style="max-height:340px;overflow:auto;"></div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
+      <button class="btn btn-ghost" onclick="closeModal('modal-chi-merge')">Huỷ</button>
+      <button class="btn btn-primary" onclick="confirmChiMerge()">🔗 Gộp</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL TẠO ĐỀ XUẤT -->
 <div class="modal-overlay" id="modal-de-xuat">
   <div class="modal modal-lg">
@@ -3265,48 +3277,159 @@ function renderChiTab() {
   const hdBadge={'KO VAT':'badge-vat-ko','VAT-chưa nhận':'badge-vat-chua','VAT-đã nhận':'badge-vat-da'};
   const statusMap={'dang-len-don':['status-dang-len','Đang lên đơn'],'dang-giao':['status-dang-giao','Đang giao'],'hoan-thanh':['status-hoan-thanh','Hoàn thành']};
 
-  document.getElementById('tbl-chi-body').innerHTML = rows.length
-    ? rows.map((r,i)=>{
-        const [stCls,stTxt]=statusMap[r.tinh_trang]||['badge-navy','—'];
-        const nguonBadge=r.nguon==='de-xuat'?`<span class="badge badge-blue" style="font-size:9px;margin-left:4px;">ĐX</span>`:'';
-        return `<tr data-chi-id="${r.id}">
-          <td style="color:var(--text-muted);font-size:11px;">${i+1}</td>
-          <td style="font-size:12px;">${r.ngay}</td>
-          <td><div style="font-weight:500;">${r.ten_hang}${nguonBadge}</div><div style="font-size:10px;color:var(--text-muted);">${r.dvt}</div></td>
-          <td class="amount-neg" style="font-weight:600;">${fmt(r.don_gia)}</td>
-          <td style="font-weight:600;text-align:center;">${r.sl}</td>
-          <td style="font-weight:700;color:var(--red);">${fmt(r.tong)}</td>
-          <td><span class="badge badge-navy" style="font-size:10px;">${r.bophan}</span></td>
-          <td style="font-size:12px;">${r.ten_ncc||'—'}</td>
-          <td>
-            <select class="inline-select" onchange="updateChiField('${r.id}','hoa_don',this.value)" style="min-width:130px;">
-              <option value="KO VAT"        ${r.hoa_don==='KO VAT'?'selected':''}>KO VAT</option>
-              <option value="VAT-chưa nhận" ${r.hoa_don==='VAT-chưa nhận'?'selected':''}>VAT — Chưa nhận</option>
-              <option value="VAT-đã nhận"   ${r.hoa_don==='VAT-đã nhận'?'selected':''}>VAT — Đã nhận</option>
-            </select>
-          </td>
-          <td>
-            <select class="inline-select" onchange="updateChiField('${r.id}','pttt',this.value)">
-              <option ${r.pttt==='TM'?'selected':''}>TM</option>
-              <option ${r.pttt==='CK'?'selected':''}>CK</option>
-              <option ${r.pttt==='Công nợ'?'selected':''}>Công nợ</option>
-            </select>
-          </td>
-          <td><input class="inline-input" value="${r.so_phieu_chi||''}" placeholder="PC-xxxx" onchange="updateChiField('${r.id}','so_phieu_chi',this.value)" style="width:90px;"></td>
-          <td><input class="inline-input" value="${r.so_tk||''}" placeholder="Số TK..." onchange="updateChiField('${r.id}','so_tk',this.value)" style="width:110px;"></td>
-          <td>
-            <select class="inline-select" onchange="updateChiStatus('${r.id}',this.value)" style="border-color:${r.tinh_trang==='hoan-thanh'?'var(--green)':r.tinh_trang==='dang-giao'?'var(--yellow)':'var(--border)'};">
-              <option value="dang-len-don" ${r.tinh_trang==='dang-len-don'?'selected':''}>Đang lên đơn</option>
-              <option value="dang-giao"    ${r.tinh_trang==='dang-giao'?'selected':''}>Đang giao</option>
-              <option value="hoan-thanh"   ${r.tinh_trang==='hoan-thanh'?'selected':''}>Hoàn thành</option>
-            </select>
-          </td>
-        </tr>`;
-      }).join('')
-    : `<tr><td colspan="13" style="text-align:center;padding:28px;color:var(--text-muted);">Không có bản ghi chi nào</td></tr>`;
+  // Gom theo phiếu đề xuất (hoặc merge_id nếu đã gộp). Chi thủ công (không dx_id) → 1 nhóm theo id.
+  const groups=[]; const gmap={};
+  rows.forEach(r=>{
+    const key=chiGroupKey(r);
+    let g=gmap[key];
+    if(!g){ g={key,recs:[],merge_id:r.merge_id||''}; gmap[key]=g; groups.push(g); }
+    g.recs.push(r);
+  });
+  const khoOpts=Object.keys(KHO_BP_LABELS);
+  const html=groups.map(g=>{
+    const recs=g.recs, first=recs[0];
+    const tong=recs.reduce((s,r)=>s+(parseFloat(r.tong)||0),0);
+    const nccLabel=[...new Set(recs.map(r=>r.ten_ncc).filter(n=>n&&n!=='—'))].join(', ')||'—';
+    const hoa_don=first.hoa_don, pttt=first.pttt, st=first.tinh_trang;
+    const isMerged=!!g.merge_id;
+    const dxCount=[...new Set(recs.map(r=>r.dx_id).filter(Boolean))].length;
+    const open=chiExpanded.has(g.key);
+    const mergeBtn=isMerged
+      ? `<button class="btn btn-ghost btn-sm" onclick="unmergeChi('${esc(g.merge_id)}')" title="Tách phiếu chi">Tách</button>`
+      : `<button class="btn btn-ghost btn-sm" onclick="openChiMerge('${esc(g.key)}')" title="Gộp phiếu chi">MERGE</button>`;
+    const groupRow=`<tr class="chi-group-row" style="cursor:pointer;background:var(--cream);" onclick="toggleChiExpand('${esc(g.key)}')">
+      <td style="text-align:center;font-size:13px;color:var(--navy);">${open?'▾':'▸'}</td>
+      <td style="font-size:12px;">${esc(first.ngay)}</td>
+      <td style="font-weight:600;">${esc(nccLabel)}${isMerged?` <span class="badge badge-blue" style="font-size:9px;">GỘP ${dxCount}</span>`:''}</td>
+      <td style="font-weight:700;color:var(--red);">${fmt(tong)}</td>
+      <td onclick="event.stopPropagation()">
+        <select class="inline-select" onchange="updateChiGroupField('${esc(g.key)}','hoa_don',this.value)" style="min-width:130px;">
+          <option value="KO VAT"        ${hoa_don==='KO VAT'?'selected':''}>KO VAT</option>
+          <option value="VAT-chưa nhận" ${hoa_don==='VAT-chưa nhận'?'selected':''}>VAT — Chưa nhận</option>
+          <option value="VAT-đã nhận"   ${hoa_don==='VAT-đã nhận'?'selected':''}>VAT — Đã nhận</option>
+        </select>
+      </td>
+      <td onclick="event.stopPropagation()">
+        <select class="inline-select" onchange="updateChiGroupField('${esc(g.key)}','pttt',this.value)">
+          <option ${pttt==='TM'?'selected':''}>TM</option>
+          <option ${pttt==='CK'?'selected':''}>CK</option>
+          <option ${pttt==='Công nợ'?'selected':''}>Công nợ</option>
+        </select>
+      </td>
+      <td onclick="event.stopPropagation()"><input class="inline-input" value="${esc(first.so_phieu_chi||'')}" placeholder="PC-xxxx" onchange="updateChiGroupField('${esc(g.key)}','so_phieu_chi',this.value)" style="width:90px;"></td>
+      <td onclick="event.stopPropagation()"><input class="inline-input" value="${esc(first.so_tk||'')}" placeholder="Số TK..." onchange="updateChiGroupField('${esc(g.key)}','so_tk',this.value)" style="width:110px;"></td>
+      <td onclick="event.stopPropagation()">
+        <select class="inline-select" onchange="updateChiGroupStatus('${esc(g.key)}',this.value)" style="border-color:${st==='hoan-thanh'?'var(--green)':st==='dang-giao'?'var(--yellow)':'var(--border)'};">
+          <option value="dang-len-don" ${st==='dang-len-don'?'selected':''}>Đang lên đơn</option>
+          <option value="dang-giao"    ${st==='dang-giao'?'selected':''}>Đang giao</option>
+          <option value="hoan-thanh"   ${st==='hoan-thanh'?'selected':''}>Hoàn thành</option>
+        </select>
+      </td>
+      <td onclick="event.stopPropagation()">${mergeBtn}</td>
+    </tr>`;
+    const detailRows=recs.map(r=>{
+      const kho=r.kho||'kt';
+      const khoSel=`<select class="inline-select" onchange="chiSetItemKho('${esc(r.id)}',this.value)" style="min-width:120px;">${khoOpts.map(k=>`<option value="${k}" ${kho===k?'selected':''}>${esc(KHO_BP_LABELS[k])}</option>`).join('')}</select>`;
+      return `<tr>
+        <td style="font-size:11px;color:var(--text-muted);white-space:nowrap;">${esc(r.ngay)}</td>
+        <td><span style="font-weight:500;">${esc(r.ten_hang)}</span> <span style="color:var(--text-muted);font-size:11px;">${esc(r.dvt||'')}</span></td>
+        <td class="amount-neg">${fmt(r.don_gia)}</td>
+        <td style="text-align:center;">${esc(r.sl)}</td>
+        <td style="font-weight:600;color:var(--red);">${fmt(r.tong)}</td>
+        <td><span class="badge badge-navy" style="font-size:10px;">${esc(r.bophan||'—')}</span></td>
+        <td>${khoSel}</td>
+      </tr>`;
+    }).join('');
+    const detailWrap=`<tr class="chi-detail-row" style="display:${open?'':'none'};"><td colspan="10" style="padding:0;background:var(--bg);">
+      <div style="padding:8px 12px;">
+        <table style="width:100%;"><thead><tr style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;">
+          <th style="text-align:left;">Ngày</th><th style="text-align:left;">Mặt hàng · ĐVT</th><th style="text-align:left;">Đơn giá</th><th style="text-align:center;">SL</th><th style="text-align:left;">Tổng tiền</th><th style="text-align:left;">Bộ phận</th><th style="text-align:left;">Kho</th>
+        </tr></thead><tbody>${detailRows}</tbody></table>
+      </div>
+    </td></tr>`;
+    return groupRow+detailWrap;
+  }).join('');
+  document.getElementById('tbl-chi-body').innerHTML = groups.length
+    ? html
+    : `<tr><td colspan="10" style="text-align:center;padding:28px;color:var(--text-muted);">Không có bản ghi chi nào</td></tr>`;
 
   syncThuChiSummary();
   renderCongNoPtr();
+}
+// Khoá gom nhóm Chi: ưu tiên merge_id (đã gộp), rồi dx_id (theo đơn), fallback id (chi thủ công).
+function chiGroupKey(r){ return r.merge_id || r.dx_id || r.id; }
+let chiExpanded=new Set();
+function toggleChiExpand(key){ if(chiExpanded.has(key)) chiExpanded.delete(key); else chiExpanded.add(key); renderChiTab(); }
+// Ghi 1 field cho MỌI bản ghi Chi trong cùng nhóm (đơn / phiếu gộp).
+function updateChiGroupField(key,field,val){
+  CHI_DATA.filter(r=>chiGroupKey(r)===key).forEach(r=>{
+    r[field]=val;
+    if(field==='hoa_don'||field==='pttt') r._chi_manual=true;   // giữ chỉnh tay, không auto-sync theo NCC
+  });
+  if(field==='pttt'){ renderCongNoPtr(); syncThuChiSummary(); }
+  syncNow();
+}
+function updateChiGroupStatus(key,val){
+  CHI_DATA.filter(r=>chiGroupKey(r)===key).forEach(r=>{ r.tinh_trang=val; });
+  syncThuChiSummary();
+  renderChiTab();
+}
+// Chọn kho cho 1 mặt hàng ở Chi → CHUYỂN TỒN thật từ kho hiện tại sang kho được chọn.
+function chiSetItemKho(id,khoCode){
+  const r=CHI_DATA.find(x=>x.id===id); if(!r) return;
+  const from=r.kho||'kt';
+  if(from===khoCode){ r.kho=khoCode; return; }
+  khoTransferItem(r.ten_hang, r.dvt, parseFloat(r.sl)||0, from, khoCode, `Phân bổ kho từ Chi (ĐX ${r.dx_id||''})`, currentUser?.fullname||'Kế toán');
+  r.kho=khoCode;
+  syncNow();
+  showToast(`✅ Đã chuyển ${r.ten_hang} sang ${KHO_BP_LABELS[khoCode]||khoCode}`,2200,'success');
+}
+// ----- MERGE: gộp nhiều đơn thành 1 phiếu chi (1 dòng tổng) -----
+let chiMergeBase=null;
+function openChiMerge(baseKey){
+  chiMergeBase=baseKey;
+  const baseRecs=CHI_DATA.filter(r=>chiGroupKey(r)===baseKey);
+  const baseMid=baseRecs[0]?.merge_id||'';
+  // Ứng viên: các nhóm theo dx_id, KHÁC nhóm base, chưa thuộc merge_id khác (cho phép gộp đơn lẻ).
+  const seen=new Set(); const cands=[];
+  CHI_DATA.forEach(r=>{
+    const k=chiGroupKey(r);
+    if(k===baseKey||seen.has(k)) return;
+    if(r.merge_id && r.merge_id!==baseMid) return;   // đã gộp vào phiếu khác → bỏ qua
+    seen.add(k);
+    const recs=CHI_DATA.filter(x=>chiGroupKey(x)===k);
+    const tong=recs.reduce((s,x)=>s+(parseFloat(x.tong)||0),0);
+    const ncc=[...new Set(recs.map(x=>x.ten_ncc).filter(n=>n&&n!=='—'))].join(', ')||'—';
+    const dx=DX_DATA.find(d=>d.id===recs[0].dx_id);
+    const label=`${dx?(dx.code||dx.id):(recs[0].dx_id||'Thủ công')} · ${ncc} · ${fmt(tong)}`;
+    cands.push({key:k,label});
+  });
+  const box=document.getElementById('chi-merge-list');
+  box.innerHTML = cands.length
+    ? cands.map(c=>`<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;">
+        <input type="checkbox" class="chi-merge-chk" value="${esc(c.key)}"><span>${esc(c.label)}</span></label>`).join('')
+    : '<div style="color:var(--text-muted);padding:12px;">Không có phiếu nào khác để gộp.</div>';
+  openModal('modal-chi-merge');
+}
+function confirmChiMerge(){
+  const keys=[...document.querySelectorAll('.chi-merge-chk:checked')].map(c=>c.value);
+  if(!keys.length){ showToast('Chọn ít nhất 1 phiếu để gộp',2200,'info'); return; }
+  const baseRecs=CHI_DATA.filter(r=>chiGroupKey(r)===chiMergeBase);
+  const mid=baseRecs[0]?.merge_id||('MG'+Date.now());
+  // Gán merge_id cho base + các nhóm được chọn.
+  baseRecs.forEach(r=>{ r.merge_id=mid; });
+  keys.forEach(k=>CHI_DATA.filter(r=>chiGroupKey(r)===k||r.dx_id===k).forEach(r=>{ r.merge_id=mid; }));
+  chiExpanded.add(mid);
+  closeModal('modal-chi-merge');
+  renderChiTab(); syncNow();
+  showToast('✅ Đã gộp phiếu chi',2200,'success');
+}
+function unmergeChi(mid){
+  if(!mid) return;
+  CHI_DATA.filter(r=>r.merge_id===mid).forEach(r=>{ r.merge_id=''; });
+  chiExpanded.delete(mid);
+  renderChiTab(); syncNow();
+  showToast('Đã tách phiếu chi',2000,'info');
 }
 
 function updateChiField(id, field, val) {
@@ -3493,7 +3616,7 @@ function pushDxToChi(dx) {
     const nccRec = (NCC_DATA||[]).find(n=>(n.ten||'').trim().toLowerCase()===(tenNcc||'').trim().toLowerCase());
     const { hoa_don: defHoaDon, pttt: defPttt } = nccChiDefaults(nccRec);
     const sl = parseFloat(it.sl)||1;
-    const don_gia = parseFloat(it.dongia)||0;
+    const don_gia = dxItemPrice(it);   // ưu tiên đơn giá hiện tại (giá thực), fallback đơn giá dự kiến
     CHI_DATA.unshift({
       id:'C'+Date.now()+idx,
       ngay,
@@ -3520,7 +3643,7 @@ function pushDxToChi(dx) {
 function recordPurchaseHistory(dx){
   const ngay=new Date().toLocaleDateString('vi-VN');
   dxItems(dx).forEach(it=>{
-    const price=parseFloat(it.dongia)||0; if(price<=0) return;
+    const price=dxItemPrice(it); if(price<=0) return;   // giá thực (đơn giá hiện tại nếu có)
     const cat=(catalogItems||[]).find(c=> it.itemId ? c.id===it.itemId : (c.name||'').trim().toLowerCase()===(it.ten||'').trim().toLowerCase());
     if(!cat) return;
     if(!Array.isArray(cat.suppliers)) cat.suppliers=[];
@@ -5012,7 +5135,7 @@ function dxItems(d){
   if(d && Array.isArray(d.items) && d.items.length) return d.items;
   return [{ten:d?.ten||'',ncc:d?.ncc||'',sl:parseFloat(d?.sl)||0,dvt:d?.dvt||'',dongia:parseFloat(d?.dongia)||0,lydo:d?.lydo||''}];
 }
-function dxTotal(d){ return dxItems(d).reduce((s,it)=>s+(parseFloat(it.sl)||0)*(parseFloat(it.dongia)||0),0); }
+function dxTotal(d){ return dxItems(d).reduce((s,it)=>s+(parseFloat(it.sl)||0)*dxItemPrice(it),0); }
 // Tìm mặt hàng danh mục ứng với 1 dòng đề xuất (ưu tiên itemId, fallback theo tên).
 function dxCatItem(it){
   const cat=(typeof catalogItems!=='undefined'?catalogItems:[]);
@@ -5056,8 +5179,10 @@ function canEditDx(d){
   if(!d || !(d.status||'').startsWith('cho-duyet')) return false;
   const role=currentUser?.role;
   return role==='giamdoc' || d.nguoi===currentUser?.fullname || (role==='truong-bp'&&userBophans(currentUser).includes(d.bophan))
-      || (role==='ketoan' && d.status==='cho-duyet-ketoan');   // kế toán chỉnh đơn giá ở bước của mình
+      || (role==='ketoan' && (d.status==='cho-duyet-ketoan'||d.status==='cho-duyet-gd'));   // kế toán chỉnh sửa trước khi Giám đốc duyệt
 }
+// Đơn giá thực dùng để tính tiền: ưu tiên "đơn giá hiện tại" (kế toán điền khi giá lệch), fallback đơn giá dự kiến.
+function dxItemPrice(it){ const ht=parseFloat(it&&it.dongiaHT)||0; return ht>0?ht:(parseFloat(it&&it.dongia)||0); }
 function canDeleteDx(d){
   const role=currentUser?.role;
   if(role==='giamdoc') return true;
@@ -5065,7 +5190,7 @@ function canDeleteDx(d){
 }
 // ----- Form: các dòng hàng động -----
 function dxRowHtml(){
-  return `<div class="dx-item-row" data-item-id="" style="display:grid;grid-template-columns:1.7fr 1.3fr .6fr .6fr .9fr 1.3fr 34px;gap:8px;align-items:end;margin-bottom:8px;padding:10px;background:var(--cream);border:1px solid var(--border);border-radius:8px;">
+  return `<div class="dx-item-row" data-item-id="" style="display:grid;grid-template-columns:1.7fr 1.3fr .6fr .6fr .9fr .9fr 1.3fr 34px;gap:8px;align-items:end;margin-bottom:8px;padding:10px;background:var(--cream);border:1px solid var(--border);border-radius:8px;">
     <div class="form-group" style="margin:0;"><label style="font-size:10px;">Tên hàng <span style="color:var(--red);">*</span></label>
       <div class="select-wrap"><input class="dxr-ten" autocomplete="off" placeholder="Gõ để tìm mặt hàng..." oninput="dxTenInput(this)" onfocus="dxTenInput(this)" onblur="setTimeout(()=>dxCloseDd(this),200)"><div class="dropdown-list dxr-ten-dd"></div></div>
     </div>
@@ -5075,6 +5200,7 @@ function dxRowHtml(){
     <div class="form-group" style="margin:0;"><label style="font-size:10px;">SL <span style="color:var(--red);">*</span></label><input type="number" class="dxr-sl" min="1" value="1" oninput="dxUpdateTotal()"></div>
     <div class="form-group" style="margin:0;"><label style="font-size:10px;">ĐVT</label><input type="text" class="dxr-dvt" placeholder="đvt"></div>
     <div class="form-group" style="margin:0;"><label style="font-size:10px;">Đơn giá dự kiến</label><input type="number" class="dxr-dongia" min="0" placeholder="0" oninput="dxUpdateTotal()"></div>
+    <div class="form-group" style="margin:0;"><label style="font-size:10px;">Đơn giá hiện tại</label><input type="number" class="dxr-dongiaht" min="0" placeholder="(nếu lệch)" oninput="dxUpdateTotal()"></div>
     <div class="form-group" style="margin:0;"><label style="font-size:10px;">Lý do / Mục đích</label><input type="text" class="dxr-lydo" placeholder="Lý do"></div>
     <button class="btn btn-ghost btn-sm" type="button" onclick="dxRemoveRow(this)" title="Xoá dòng" style="height:38px;padding:0;">🗑</button>
     <div class="dxr-hint" style="grid-column:1 / -1;font-size:11px;color:var(--green);display:none;"></div>
@@ -5171,7 +5297,9 @@ function dxPickNccPrice(el, name){
 function dxUpdateTotal(){
   let tong=0;
   document.querySelectorAll('#dx-items .dx-item-row').forEach(r=>{
-    tong+=(parseFloat(r.querySelector('.dxr-sl')?.value)||0)*(parseFloat(r.querySelector('.dxr-dongia')?.value)||0);
+    const ht=parseFloat(r.querySelector('.dxr-dongiaht')?.value)||0;
+    const gia=ht>0?ht:(parseFloat(r.querySelector('.dxr-dongia')?.value)||0);   // ưu tiên đơn giá hiện tại
+    tong+=(parseFloat(r.querySelector('.dxr-sl')?.value)||0)*gia;
   });
   const val=document.getElementById('dx-total-val'), wrap=document.getElementById('dx-total-wrap');
   if(val) val.textContent=tong?fmt(tong):'—';
@@ -5271,6 +5399,7 @@ function submitDx(){
       sl,
       dvt:(r.querySelector('.dxr-dvt')?.value||'').trim(),
       dongia:parseFloat(r.querySelector('.dxr-dongia')?.value)||0,
+      dongiaHT:parseFloat(r.querySelector('.dxr-dongiaht')?.value)||0,   // đơn giá hiện tại (kế toán điền khi lệch)
       lydo:(r.querySelector('.dxr-lydo')?.value||'').trim(),
     });
   });
@@ -5320,7 +5449,7 @@ function editDx(id){
     row.dataset.itemId=it.itemId||'';
     const set=(sel,v)=>{ const el=row.querySelector(sel); if(el) el.value=v; };
     set('.dxr-ten',it.ten||''); set('.dxr-ncc',it.ncc||''); set('.dxr-sl',it.sl||1);
-    set('.dxr-dvt',it.dvt||''); set('.dxr-dongia',it.dongia||''); set('.dxr-lydo',it.lydo||'');
+    set('.dxr-dvt',it.dvt||''); set('.dxr-dongia',it.dongia||''); set('.dxr-dongiaht',it.dongiaHT||''); set('.dxr-lydo',it.lydo||'');
   });
   dxUpdateTotal&&dxUpdateTotal();
   const title=document.getElementById('dx-modal-title'); if(title) title.textContent='✏️ Sửa Đề Xuất Mua Hàng';
@@ -5354,6 +5483,7 @@ function openDxDetail(id){
   const rows=its.map(it=>{
     const min=dxItemMinPrice(it.ten,it.itemId), cur=dxItemCurPrice(it);
     const sl=parseFloat(it.sl)||0, dg=parseFloat(it.dongia)||0;
+    const dgHT=parseFloat(it.dongiaHT)||0, dgEff=dxItemPrice(it);   // giá thực để tính thành tiền
     const cat=dxCatItem(it);
     const hist=(cat?itemPriceHistory(cat):[]).slice().reverse();
     const histHtml = hist.length
@@ -5362,10 +5492,11 @@ function openDxDetail(id){
     return `<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px;">
       <div style="font-weight:600;margin-bottom:6px;">${esc(it.ten)||'—'} <span style="color:var(--text-muted);font-weight:400;font-size:12px;">×${sl} ${esc(it.dvt)||''}${it.ncc?' · '+esc(it.ncc):''}</span></div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:6px;font-size:12px;margin-bottom:8px;">
-        <div><span style="color:var(--text-muted);">Đơn giá đề xuất:</span> <strong>${fmt(dg)}</strong></div>
-        <div><span style="color:var(--text-muted);">Thành tiền:</span> <strong>${fmt(sl*dg)}</strong></div>
+        <div><span style="color:var(--text-muted);">Đơn giá dự kiến:</span> <strong>${fmt(dg)}</strong></div>
+        <div><span style="color:var(--text-muted);">Đơn giá hiện tại:</span> <strong style="color:var(--yellow);">${dgHT>0?fmt(dgHT):'—'}</strong></div>
+        <div><span style="color:var(--text-muted);">Thành tiền:</span> <strong>${fmt(sl*dgEff)}</strong></div>
         <div><span style="color:var(--text-muted);">Giá TN năm:</span> <strong style="color:var(--green);">${fmt(min)}</strong></div>
-        <div><span style="color:var(--text-muted);">Giá hiện tại:</span> <strong style="color:var(--navy);">${fmt(cur)}</strong></div>
+        <div><span style="color:var(--text-muted);">Giá hiện tại (NCC):</span> <strong style="color:var(--navy);">${fmt(cur)}</strong></div>
       </div>
       ${it.lydo?`<div style="font-size:12px;margin-bottom:8px;"><span style="color:var(--text-muted);">Lý do:</span> ${esc(it.lydo)}</div>`:''}
       <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:4px;">📋 Lịch sử mua</div>
@@ -5749,9 +5880,19 @@ function updateDashboardKPI(){
   const recent=document.getElementById('db-recent-tx');
   if(recent){
     const parseD=s=>{const p=(s||'').split('/');return new Date(+p[2]||0,(+p[1]||1)-1,+p[0]||1).getTime();};
+    // CHI gom theo ĐƠN (phiếu đề xuất) — mỗi đơn 1 giao dịch: tên NCC · tổng tiền cả đơn.
+    const chiGroups={};
+    CHI_DATA.forEach(r=>{
+      const key=r.dx_id||r.id;   // chi thủ công (không có dx_id) → tự thành 1 đơn
+      const g=chiGroups[key]||(chiGroups[key]={tong:0,ngay:r.ngay,nccs:[]});
+      g.tong+=chiAmt(r);
+      if(parseD(r.ngay)>parseD(g.ngay)) g.ngay=r.ngay;
+      const ncc=(r.ten_ncc&&r.ten_ncc!=='—')?r.ten_ncc:'';
+      if(ncc&&!g.nccs.includes(ncc)) g.nccs.push(ncc);
+    });
     const all=[
       ...THU_DATA.map(r=>({mota:r.mota||r.danhmuc||'Thu',loai:'thu',amt:r.currency&&r.currency!=='VND'?(r.sotien||0).toLocaleString('vi-VN')+' '+r.currency:fmt(r.sotien),ngay:r.ngay})),
-      ...CHI_DATA.map(r=>({mota:r.ten_hang||r.mota||'Chi',loai:'chi',amt:fmt(chiAmt(r)),ngay:r.ngay})),
+      ...Object.values(chiGroups).map(g=>({mota:g.nccs.join(', ')||'Chi',loai:'chi',amt:fmt(g.tong),ngay:g.ngay})),
     ].sort((a,b)=>parseD(b.ngay)-parseD(a.ngay)).slice(0,5);
     recent.innerHTML = all.length
       ? all.map(r=>`<tr><td style="font-size:12px;">${esc(r.mota)}</td><td><span class="badge ${r.loai==='thu'?'badge-green':'badge-red'}" style="font-size:10px;">${r.loai==='thu'?'Thu':'Chi'}</span></td><td class="${r.loai==='thu'?'amount-pos':'amount-neg'}" style="font-weight:600;">${r.amt}</td></tr>`).join('')
@@ -6319,10 +6460,8 @@ function renderDashDx() {
   }
   const BP_LABEL={'buong-phong':'Buồng phòng','nha-hang':'Nhà hàng','bep':'Bếp','le-tan':'Lễ tân','ky-thuat':'Kỹ thuật','sale':'Sale','hr':'HR','van-phong':'VP'};
   tbody.innerHTML=items.slice(0,5).map(d=>{
-    const its=dxItems(d);
-    const label=its.length>1?`${esc(its[0].ten)} +${its.length-1} mặt hàng`:esc(its[0]?.ten||'—');
     return `<tr>
-    <td style="font-weight:500;">${label}</td>
+    <td style="font-weight:700;color:var(--navy);">${esc(d.code||d.id)||'—'}</td>
     <td><span class="badge badge-navy" style="font-size:10px;">${esc(BP_LABEL[d.bophan]||d.bophan_label||d.bophan||'')}</span></td>
     <td style="font-weight:600;">${fmt(dxTotal(d))}</td>
     <td>${statusBadge(d.status)}</td>
