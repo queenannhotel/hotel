@@ -3354,6 +3354,7 @@ function renderChiTab() {
         <table style="width:100%;"><thead><tr style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;">
           <th style="text-align:left;">Ngày</th><th style="text-align:left;">Mặt hàng · ĐVT</th><th style="text-align:left;">Đơn giá</th><th style="text-align:center;">SL</th><th style="text-align:left;">Tổng tiền</th><th style="text-align:left;">Bộ phận</th><th style="text-align:left;">Kho</th>
         </tr></thead><tbody>${detailRows}</tbody></table>
+        ${canDelChi?`<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px;">${isMerged?`<button class="btn btn-ghost btn-sm" onclick="unmergeChi('${esc(g.merge_id)}')">Tách phiếu</button>`:''}<button class="btn btn-danger btn-sm" onclick="deleteChiGroup('${esc(g.key)}')">🗑 Xoá phiếu chi này</button></div>`:''}
       </div>
     </td></tr>`;
     return groupRow+detailWrap;
