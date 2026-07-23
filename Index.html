@@ -382,6 +382,8 @@ textarea{resize:vertical;min-height:68px;}
 .modal-overlay.open{display:flex;}
 .modal{background:var(--white);border-radius:16px;width:640px;max-width:96vw;max-height:92vh;overflow-y:auto;box-shadow:var(--shadow-lg);padding:26px;}
 .modal-lg{width:800px;}
+.dx-item-row .form-group{min-width:0;}
+.dx-item-row .form-group input{min-width:0;width:100%;box-sizing:border-box;}
 .modal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid var(--border);}
 .modal-title{font-family:'Playfair Display',serif;font-size:17px;color:var(--navy);}
 .close-btn{background:none;border:none;font-size:17px;cursor:pointer;color:var(--text-muted);padding:4px;border-radius:4px;}
@@ -5228,7 +5230,7 @@ function canDeleteDx(d){
 }
 // ----- Form: các dòng hàng động -----
 function dxRowHtml(){
-  return `<div class="dx-item-row" data-item-id="" style="display:grid;grid-template-columns:1.7fr 1.3fr .6fr .6fr .9fr .9fr 1.3fr 34px;gap:8px;align-items:end;margin-bottom:8px;padding:10px;background:var(--cream);border:1px solid var(--border);border-radius:8px;">
+  return `<div class="dx-item-row" data-item-id="" style="display:grid;grid-template-columns:1.5fr 1.2fr 46px 54px 82px 82px 1fr 30px;gap:6px;align-items:end;margin-bottom:8px;padding:8px;background:var(--cream);border:1px solid var(--border);border-radius:8px;">
     <div class="form-group" style="margin:0;"><label style="font-size:10px;">Tên hàng <span style="color:var(--red);">*</span></label>
       <div class="select-wrap"><input class="dxr-ten" autocomplete="off" placeholder="Gõ để tìm mặt hàng..." oninput="dxTenInput(this)" onfocus="dxTenInput(this)" onblur="setTimeout(()=>dxCloseDd(this),200)"><div class="dropdown-list dxr-ten-dd"></div></div>
     </div>
@@ -5389,8 +5391,10 @@ function renderDxTable(){
     const pri=d.priority||'Thường';
     const itemList=its.map(it=>{
       const min=dxItemMinPrice(it.ten, it.itemId);
-      const cur=dxItemCurPrice(it);
-      const priceTags=[min?`<span style="color:var(--green);">giá TN năm: ${fmt(min)}</span>`:'', cur?`<span style="color:var(--navy);">giá HT: ${fmt(cur)}</span>`:''].filter(Boolean).join(' · ');
+      const entered=parseFloat(it.dongiaHT)||0;            // đơn giá hiện tại kế toán nhập
+      const cur=entered>0?entered:dxItemCurPrice(it);      // ưu tiên giá nhập; chưa nhập → giá NCC
+      const htTag=cur?`<span style="color:var(--navy);${entered>0?'font-weight:700;':''}">giá HT: ${fmt(cur)}</span>`:'';
+      const priceTags=[min?`<span style="color:var(--green);">giá TN năm: ${fmt(min)}</span>`:'', htTag].filter(Boolean).join(' · ');
       return `<div style="padding:2px 0;"><span style="font-weight:600;">${esc(it.ten)||'—'}</span> ×${esc(it.sl)||0} ${esc(it.dvt)||''}${it.ncc?` · <span style="color:var(--text-muted);">${esc(it.ncc)}</span>`:''}${priceTags?`<div style="font-size:11px;">${priceTags}</div>`:''}</div>`;
     }).join('');
     const canApr=canApproveDx(d);
