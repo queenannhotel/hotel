@@ -3303,6 +3303,9 @@ function renderChiTab() {
       : `<button class="btn btn-ghost btn-sm" onclick="openChiMerge('${esc(g.key)}')" title="Gộp phiếu chi">MERGE</button>`;
     const splitBtn=recs.length>=2
       ? `<button class="btn btn-ghost btn-sm" onclick="openChiSplit('${esc(g.key)}')" title="Tách mặt hàng ra phiếu chi mới">Split</button>` : '';
+    const canDelChi=currentUser?.role==='giamdoc'||currentUser?.role==='ketoan';
+    const delBtn=canDelChi
+      ? `<button class="btn btn-danger btn-sm" onclick="deleteChiGroup('${esc(g.key)}')" title="Xoá phiếu chi">🗑</button>` : '';
     const groupRow=`<tr class="chi-group-row" style="cursor:pointer;background:var(--cream);" onclick="toggleChiExpand('${esc(g.key)}')">
       <td style="text-align:center;font-size:13px;color:var(--navy);">${open?'▾':'▸'}</td>
       <td style="font-size:12px;">${esc(first.ngay)}</td>
@@ -3331,7 +3334,7 @@ function renderChiTab() {
           <option value="hoan-thanh"   ${st==='hoan-thanh'?'selected':''}>Hoàn thành</option>
         </select>
       </td>
-      <td onclick="event.stopPropagation()"><div style="display:flex;gap:4px;flex-wrap:wrap;">${mergeBtn}${splitBtn}</div></td>
+      <td onclick="event.stopPropagation()"><div style="display:flex;gap:4px;flex-wrap:wrap;">${mergeBtn}${splitBtn}${delBtn}</div></td>
     </tr>`;
     const detailRows=recs.map(r=>{
       const kho=r.kho||'kt';
@@ -3436,6 +3439,20 @@ function unmergeChi(mid){
   chiExpanded.delete(mid);
   renderChiTab(); syncNow();
   showToast('Đã tách phiếu chi',2000,'info');
+}
+// Xoá 1 phiếu chi (mọi bản ghi trong nhóm) — dọn bản ghi mồ côi / phiếu chi thủ công sai.
+function deleteChiGroup(key){
+  if(!(currentUser?.role==='giamdoc'||currentUser?.role==='ketoan')){ showToast('Không có quyền xoá.',2200,'error'); return; }
+  const recs=CHI_DATA.filter(r=>chiGroupKey(r)===key);
+  if(!recs.length) return;
+  const tong=recs.reduce((s,r)=>s+(parseFloat(r.tong)||0),0);
+  if(!confirm(`Xoá phiếu chi này (${recs.length} mặt hàng · ${fmt(tong)})?`)) return;
+  for(let i=CHI_DATA.length-1;i>=0;i--){ if(chiGroupKey(CHI_DATA[i])===key) CHI_DATA.splice(i,1); }
+  chiExpanded.delete(key);
+  renderChiTab();
+  try{ syncThuChiSummary(); renderCongNoPtr(); }catch(e){}
+  syncNow();
+  showToast('Đã xoá phiếu chi',2000,'info');
 }
 // ----- SPLIT: tách bớt mặt hàng của 1 đơn ra thành phiếu chi mới -----
 let chiSplitBase=null;
@@ -3650,7 +3667,7 @@ function nccChiDefaults(nccRec){
 function pushDxToChi(dx) {
   if(!dx) return;
   const bpLabel = (typeof BP_LABELS!=='undefined' && BP_LABELS[dx.bophan]) || dx.bophan_label || dx.bophan || '';
-  const ngay = new Date().toLocaleDateString('vi-VN');
+  const ngay = dx.ngay || new Date().toLocaleDateString('vi-VN');   // kế thừa đúng ngày của đề xuất
   dxItems(dx).forEach((it, idx)=>{
     const chiId = `${dx.id}-${idx}`;
     if(CHI_DATA.find(c=>c.dx_item_id===chiId)) return;      // đã tạo rồi
@@ -5556,12 +5573,18 @@ function editDx(id){
 function deleteDx(id){
   const d=DX_DATA.find(x=>x.id===id); if(!d) return;
   if(!canDeleteDx(d)){ showToast('Không có quyền xoá đề xuất này.',2500,'error'); return; }
-  const warn = d.status==='da-duyet' ? '\n\n⚠️ Phiếu đã duyệt — Kho & Ghi Chi đã tạo sẽ KHÔNG tự hoàn lại.' : '';
+  const warn = d.status==='da-duyet' ? '\n\n⚠️ Phiếu đã duyệt — các khoản Ghi Chi liên quan cũng sẽ bị xoá. (Kho nhập KHÔNG tự hoàn lại.)' : '';
   if(!confirm(`Xoá đề xuất ${d.code||d.id}?${warn}`)) return;
   const idx=DX_DATA.findIndex(x=>x.id===id);
   if(idx>-1) DX_DATA.splice(idx,1);
-  renderDxTable(); syncNow();
-  showToast('Đã xoá đề xuất',2000,'info');
+  // Xoá luôn các bản ghi Ghi Chi được tạo từ phiếu này (liên kết theo dx_id)
+  let removedChi=0;
+  for(let i=CHI_DATA.length-1;i>=0;i--){ if(CHI_DATA[i].dx_id===id){ CHI_DATA.splice(i,1); removedChi++; } }
+  renderDxTable();
+  try{ renderChiTab(); }catch(e){}
+  try{ syncThuChiSummary(); renderCongNoPtr(); }catch(e){}
+  syncNow();
+  showToast(`Đã xoá đề xuất${removedChi?` + ${removedChi} khoản chi liên quan`:''}`,2200,'info');
 }
 // Modal chi tiết 1 phiếu đề xuất (đủ thông tin + lịch sử mua từng mặt hàng).
 function openDxDetail(id){
