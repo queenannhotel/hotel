@@ -967,7 +967,10 @@ textarea{resize:vertical;min-height:68px;}
             <select id="chi-f-status" onchange="renderChiTab()" style="font-size:12px;padding:6px 10px;"><option value="">Tất cả trạng thái</option><option value="dang-len-don">Đang lên đơn</option><option value="dang-giao">Đang giao</option><option value="hoan-thanh">Hoàn thành</option></select>
             <select id="chi-f-bp" onchange="renderChiTab()" style="font-size:12px;padding:6px 10px;"><option value="">Tất cả bộ phận</option><option value="buong-phong">Buồng phòng</option><option value="nha-hang">Nhà hàng</option><option value="bep">Bếp</option><option value="sale">Sale</option><option value="ky-thuat">Kỹ thuật</option><option value="le-tan">Lễ tân</option><option value="hr">HR</option></select>
             <select id="chi-f-pttt" onchange="renderChiTab()" style="font-size:12px;padding:6px 10px;"><option value="">Tất cả PTTT</option><option value="TM">TM</option><option value="CK">CK</option><option value="Công nợ">Công nợ</option></select>
-            <input type="month" id="chi-f-thang" value="2026-07" onchange="renderChiTab()" style="width:130px;font-size:12px;padding:6px 10px;">
+            <span style="font-size:12px;color:var(--text-muted);">Từ</span>
+            <input type="date" id="chi-from" onchange="renderChiTab()" style="width:140px;font-size:12px;padding:6px 10px;" title="Từ ngày">
+            <span style="font-size:12px;color:var(--text-muted);">→</span>
+            <input type="date" id="chi-to" onchange="renderChiTab()" style="width:140px;font-size:12px;padding:6px 10px;" title="Đến ngày">
             <span id="chi-count" style="font-size:12px;color:var(--text-muted);margin-left:4px;"></span>
           </div>
         </div>
@@ -992,7 +995,7 @@ textarea{resize:vertical;min-height:68px;}
           <table id="tbl-pt"><thead><tr><th>Khách hàng</th><th>Mô tả</th><th>Số tiền</th><th>Ngày</th><th>Tình trạng</th></tr></thead>
           <tbody id="tbl-pt-body"></tbody></table></div>
         <div class="card"><div class="card-header"><div class="card-title">⬆ Phải Trả (NCC)</div></div>
-          <table><thead><tr><th>Nhà cung cấp</th><th>Nội dung</th><th>Số tiền</th><th>Hạn TT</th><th>Nguồn</th><th>Tình trạng</th></tr></thead>
+          <table id="tbl-ptr"><thead><tr><th>Ngày PC</th><th>Số PC</th><th>Nhà cung cấp</th><th>Tổng tiền</th><th>Hạn TT</th><th>Nguồn</th><th>Tình trạng</th></tr></thead>
           <tbody id="tbl-ptr-body"></tbody></table>
         </div>
       </div>
@@ -3279,10 +3282,13 @@ function renderChiTab() {
   const fStatus = document.getElementById('chi-f-status')?.value||'';
   const fBp     = document.getElementById('chi-f-bp')?.value||'';
   const fPttt   = document.getElementById('chi-f-pttt')?.value||'';
+  const fFrom   = document.getElementById('chi-from')?.value||'';   // yyyy-mm-dd (rỗng = tất cả)
+  const fTo     = document.getElementById('chi-to')?.value||'';
   let rows = CHI_DATA.filter(r =>
     (!fStatus||r.tinh_trang===fStatus) &&
     (!fBp||r.bophan===BP_LABELS[fBp]||r.bophan===fBp) &&
-    (!fPttt||r.pttt===fPttt)
+    (!fPttt||r.pttt===fPttt) &&
+    (()=>{ if(!fFrom&&!fTo) return true; const iso=vnToIso(r.ngay); if(fFrom&&iso<fFrom) return false; if(fTo&&iso>fTo) return false; return true; })()
   );
   // Sort: dang-len-don → dang-giao → hoan-thanh
   rows.sort((a,b)=>(CHI_STATUS_ORDER[a.tinh_trang]??99)-(CHI_STATUS_ORDER[b.tinh_trang]??99));
@@ -3506,27 +3512,47 @@ function updateChiStatus(id, newStatus) {
 // CN_PHAI_TRA_STATIC: công nợ cố định (không từ chi)
 const CN_PHAI_TRA_STATIC = [];
 function renderCongNoPtr() {
-  const fromChi = CHI_DATA.filter(r=>r.pttt==='Công nợ');
-  const rows = [
-    ...CN_PHAI_TRA_STATIC.map(r=>`<tr>
-      <td style="font-weight:500;">${r.ncc}</td><td>${r.noidung}</td>
-      <td class="amount-neg" style="font-weight:600;">${fmt(r.sotien)}</td>
-      <td style="font-size:12px;">${r.han}</td>
-      <td>—</td>
-      <td><span class="badge ${r.tinhtrang==='Quá hạn'?'badge-red':'badge-green'}">${r.tinhtrang}</span></td>
-    </tr>`),
-    ...fromChi.map(r=>`<tr style="background:var(--gold-pale);">
-      <td style="font-weight:500;">${r.ten_ncc||'—'}</td>
-      <td>${r.ten_hang} <span class="badge badge-blue" style="font-size:9px;">ĐX</span></td>
-      <td class="amount-neg" style="font-weight:600;">${fmt(r.tong)}</td>
-      <td style="font-size:12px;">—</td>
-      <td><span class="badge badge-navy" style="font-size:10px;">${r.bophan}</span></td>
-      <td>${cnStatusSelect(r.cn_status,`updateChiCnStatus('${r.id}',this.value)`)}</td>
-    </tr>`),
-  ];
+  // Gom các khoản Chi công nợ theo từng PHIẾU CHI (đơn / merge / split) — mỗi phiếu 1 dòng.
+  const groups=[]; const gmap={};
+  CHI_DATA.filter(r=>r.pttt==='Công nợ').forEach(r=>{
+    const key=chiGroupKey(r);
+    let g=gmap[key]; if(!g){ g={key,recs:[]}; gmap[key]=g; groups.push(g); }
+    g.recs.push(r);
+  });
+  const rows = groups.map(g=>{
+    const recs=g.recs, first=recs[0];
+    const tong=recs.reduce((s,r)=>s+(parseFloat(r.tong)||0),0);
+    const ncc=[...new Set(recs.map(r=>r.ten_ncc).filter(n=>n&&n!=='—'))].join(', ')||'—';
+    const spc=first.so_phieu_chi||'—';
+    const nguonBadge=first.nguon==='de-xuat'
+      ? `<span class="badge badge-blue" style="font-size:9px;">Đề xuất</span>`
+      : `<span class="badge badge-navy" style="font-size:9px;">Thủ công</span>`;
+    const paid=first.cn_status==='da';
+    return `<tr style="background:var(--gold-pale);${paid?'opacity:.6;':''}">
+      <td style="font-size:12px;">${esc(first.ngay)||'—'}</td>
+      <td style="font-weight:600;">${esc(spc)}</td>
+      <td style="font-weight:500;">${esc(ncc)}</td>
+      <td class="amount-neg" style="font-weight:700;">${fmt(tong)}</td>
+      <td><input type="date" class="inline-input" value="${esc(first.han_tt||'')}" onchange="updateCongNoGroupField('${esc(g.key)}','han_tt',this.value)" style="width:140px;font-size:11px;"></td>
+      <td>${nguonBadge}</td>
+      <td>${cnStatusSelect(first.cn_status,`updateCongNoGroupStatus('${esc(g.key)}',this.value)`)}</td>
+    </tr>`;
+  });
   const tbody=document.getElementById('tbl-ptr-body');
-  if(tbody) tbody.innerHTML=rows.join('')||`<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-muted);">Không có công nợ phải trả</td></tr>`;
+  if(tbody) tbody.innerHTML=rows.join('')||`<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--text-muted);">Không có công nợ phải trả</td></tr>`;
   renderCongNoPthu();
+}
+// Ghi 1 field (vd Hạn TT) cho mọi bản ghi Chi công nợ trong cùng phiếu chi.
+function updateCongNoGroupField(key,field,val){
+  CHI_DATA.filter(r=>chiGroupKey(r)===key && r.pttt==='Công nợ').forEach(r=>{ r[field]=val; });
+  syncNow();
+}
+// Đổi tình trạng thanh toán cho cả phiếu chi công nợ.
+function updateCongNoGroupStatus(key,val){
+  CHI_DATA.filter(r=>chiGroupKey(r)===key && r.pttt==='Công nợ').forEach(r=>{ r.cn_status=val; });
+  syncNow();
+  renderCongNoPtr();
+  try{ syncThuChiSummary(); }catch(e){}
 }
 // Dropdown Tình trạng công nợ (Chưa thanh toán / Đã thanh toán)
 function cnStatusSelect(val, onchange){
