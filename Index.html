@@ -2800,6 +2800,7 @@ async function enterApp(session){
   // Cờ dx._done chống tạo trùng khi đăng nhập lại.
   if(currentUser.role==='ketoan'||currentUser.role==='giamdoc'){
     DX_DATA.filter(d=>d.status==='da-duyet' && !d._done).forEach(dx=> finalizeDxApproved(dx));
+    try{ if(migrateChiKho()) syncNow(); }catch(e){}   // đồng bộ lại kho theo mô hình Chi↔Kho mới
   }
   try{ syncChiNccDefaults(); }catch(e){}   // căn Hoá đơn/PTTT các bản Chi cũ theo NCC
   updateNsKpi();
@@ -3366,6 +3367,26 @@ function renderChiTab() {
   syncThuChiSummary();
   renderCongNoPtr();
 }
+// Đồng bộ lại dữ liệu cũ khi đổi mô hình (idempotent): gỡ dấu vết nhập-kho-từ-ĐX + phân-bổ-từ-Chi cũ,
+// rồi đẩy lại các phiếu Chi ĐÃ HOÀN THÀNH về kho gắn. Chạy 1 lần mỗi phiên (ketoan/giamdoc).
+function migrateChiKho(){
+  let changed=false;
+  (KHO_DATA||[]).forEach(it=>{
+    if(!Array.isArray(it.lichSu)) return;
+    const before=it.lichSu.length;
+    it.lichSu=it.lichSu.filter(h=>{
+      const l=h.lydo||'';
+      if(h.loai==='nhap' && l.indexOf('Nhập từ MH (ĐX:')===0) return false;              // pushDxToKho cũ
+      if((h.loai==='transfer-in'||h.loai==='transfer-out') && l.indexOf('Phân bổ kho từ Chi')===0) return false;  // chiSetItemKho cũ
+      return true;
+    });
+    if(it.lichSu.length!==before) changed=true;
+  });
+  // reset cờ rồi đẩy lại phiếu Chi đã hoàn thành (dedup theo ref_chi trong addChiKhoEntry)
+  (CHI_DATA||[]).forEach(r=>{ r.kho_pushed=false; r.kho_pushed_to=null; });
+  (CHI_DATA||[]).forEach(r=>{ if(r.tinh_trang==='hoan-thanh'){ syncChiKho(r); changed=true; } });
+  return changed;
+}
 // Khoá gom nhóm Chi: ưu tiên merge_id (đã gộp), rồi dx_id (theo đơn), fallback id (chi thủ công).
 function chiGroupKey(r){ return r.merge_id || r.split_id || r.dx_id || r.id; }
 let chiExpanded=new Set();
@@ -3380,19 +3401,47 @@ function updateChiGroupField(key,field,val){
   syncNow();
 }
 function updateChiGroupStatus(key,val){
-  CHI_DATA.filter(r=>chiGroupKey(r)===key).forEach(r=>{ r.tinh_trang=val; });
+  CHI_DATA.filter(r=>chiGroupKey(r)===key).forEach(r=>{ r.tinh_trang=val; syncChiKho(r); });   // hoàn thành→nhập kho, bỏ→rút
   syncThuChiSummary();
+  try{ renderKhoTab(); }catch(e){}
   renderChiTab();
+  syncNow();
 }
-// Chọn kho cho 1 mặt hàng ở Chi → CHUYỂN TỒN thật từ kho hiện tại sang kho được chọn.
+// Chọn kho đích cho 1 mặt hàng ở Chi. Hàng chỉ vào kho khi phiếu chi "Hoàn thành".
 function chiSetItemKho(id,khoCode){
   const r=CHI_DATA.find(x=>x.id===id); if(!r) return;
-  const from=r.kho||'kt';
-  if(from===khoCode){ r.kho=khoCode; return; }
-  khoTransferItem(r.ten_hang, r.dvt, parseFloat(r.sl)||0, from, khoCode, `Phân bổ kho từ Chi (ĐX ${r.dx_id||''})`, currentUser?.fullname||'Kế toán');
   r.kho=khoCode;
+  syncChiKho(r);   // đã hoàn thành → dời hàng sang kho mới; chưa thì chỉ ghi nhận kho đích
+  try{ renderKhoTab(); }catch(e){}
   syncNow();
-  showToast(`✅ Đã chuyển ${r.ten_hang} sang ${KHO_BP_LABELS[khoCode]||khoCode}`,2200,'success');
+  const done=r.tinh_trang==='hoan-thanh';
+  showToast(done?`✅ Đã chuyển ${r.ten_hang} sang ${KHO_BP_LABELS[khoCode]||khoCode}`:`Đã đặt kho đích: ${KHO_BP_LABELS[khoCode]||khoCode} (hàng vào kho khi phiếu Hoàn thành)`,2600,done?'success':'info');
+}
+// ===== Liên kết Chi ↔ Kho: hàng nhập vào kho gắn khi phiếu Chi "Hoàn thành" =====
+// Đẩy 1 mặt hàng Chi vào kho gắn (gắn ref_chi để rút chính xác; dedup chống trùng).
+function addChiKhoEntry(r){
+  const kho=r.kho||'kt', ten=r.ten_hang, dvt=r.dvt||''; if(!ten) return;
+  const sl=parseFloat(r.sl)||0;
+  const ngay=r.ngay||new Date().toLocaleDateString('vi-VN');
+  let it=KHO_DATA.find(x=>x.bophan===kho && x.ten===ten && (x.dvt||'')===dvt);
+  if(!it){ it={id:'KH'+Date.now()+Math.floor(Math.random()*1000),ma:'',ten,dvt:dvt||'Cái',bophan:kho,vitri:(typeof KHO_VITRI_LIST!=='undefined'?KHO_VITRI_LIST[0]:'VP'),ton_dau:0,img:'📦',ghichu:'',lichSu:[]}; KHO_DATA.push(it); }
+  if(!Array.isArray(it.lichSu)) it.lichSu=[];
+  if(sl>0 && !it.lichSu.some(h=>h.ref_chi===r.id)){
+    it.lichSu.push({ngay,loai:'nhap',sl,tu:'',den:kho,lydo:`Nhập từ Chi${r.ten_ncc&&r.ten_ncc!=='—'?' ('+r.ten_ncc+')':''}`,ref_chi:r.id,nguoi:currentUser?.fullname||'Kế toán'});
+  }
+  r.kho_pushed=true; r.kho_pushed_to=kho;
+}
+// Rút mặt hàng Chi khỏi mọi kho (xoá entry gắn ref_chi).
+function removeChiKhoEntry(r){
+  KHO_DATA.forEach(it=>{ if(Array.isArray(it.lichSu)) it.lichSu=it.lichSu.filter(h=>h.ref_chi!==r.id); });
+  r.kho_pushed=false; r.kho_pushed_to=null;
+}
+// Đồng bộ 1 bản ghi Chi với kho: hoàn thành→nhập, bỏ hoàn thành/đổi kho→rút+nhập lại.
+function syncChiKho(r){
+  if(!r) return;
+  const want = r.tinh_trang==='hoan-thanh';
+  if(r.kho_pushed && (!want || r.kho_pushed_to!==(r.kho||'kt'))) removeChiKhoEntry(r);
+  if(want && !r.kho_pushed) addChiKhoEntry(r);
 }
 // ----- MERGE: gộp nhiều đơn thành 1 phiếu chi (1 dòng tổng) -----
 let chiMergeBase=null;
@@ -3448,10 +3497,11 @@ function deleteChiGroup(key){
   if(!recs.length) return;
   const tong=recs.reduce((s,r)=>s+(parseFloat(r.tong)||0),0);
   if(!confirm(`Xoá phiếu chi này (${recs.length} mặt hàng · ${fmt(tong)})?`)) return;
+  recs.forEach(removeChiKhoEntry);   // rút hàng khỏi kho (nếu đã nhập lúc hoàn thành)
   for(let i=CHI_DATA.length-1;i>=0;i--){ if(chiGroupKey(CHI_DATA[i])===key) CHI_DATA.splice(i,1); }
   chiExpanded.delete(key);
   renderChiTab();
-  try{ syncThuChiSummary(); renderCongNoPtr(); }catch(e){}
+  try{ renderKhoTab(); syncThuChiSummary(); renderCongNoPtr(); }catch(e){}
   syncNow();
   showToast('Đã xoá phiếu chi',2000,'info');
 }
@@ -3731,7 +3781,7 @@ function recordPurchaseHistory(dx){
 // Khi đề xuất chuyển sang 'da-duyet': cộng kho KT + tạo bản ghi Chi + ghi lịch sử giá (1 lần duy nhất).
 function finalizeDxApproved(dx){
   if(!dx || dx.status!=='da-duyet' || dx._done) return;
-  dxItems(dx).forEach(it=> pushDxToKho(it, dx));   // cộng số lượng vào Kho tổng (Kho KT)
+  // (Đã gỡ liên kết Đề xuất → Kho: hàng chỉ vào kho khi phiếu Chi "Hoàn thành".)
   pushDxToChi(dx);                                  // tạo bản ghi Chi cho từng mặt hàng
   try{ recordPurchaseHistory(dx); }catch(e){}       // ghi giá vào lịch sử theo NCC
   dx._done = true;
@@ -5574,15 +5624,15 @@ function editDx(id){
 function deleteDx(id){
   const d=DX_DATA.find(x=>x.id===id); if(!d) return;
   if(!canDeleteDx(d)){ showToast('Không có quyền xoá đề xuất này.',2500,'error'); return; }
-  const warn = d.status==='da-duyet' ? '\n\n⚠️ Phiếu đã duyệt — các khoản Ghi Chi liên quan cũng sẽ bị xoá. (Kho nhập KHÔNG tự hoàn lại.)' : '';
+  const warn = d.status==='da-duyet' ? '\n\n⚠️ Phiếu đã duyệt — các khoản Ghi Chi liên quan cũng sẽ bị xoá, và hàng đã nhập kho từ phiếu chi đó cũng bị rút ra.' : '';
   if(!confirm(`Xoá đề xuất ${d.code||d.id}?${warn}`)) return;
   const idx=DX_DATA.findIndex(x=>x.id===id);
   if(idx>-1) DX_DATA.splice(idx,1);
   // Xoá luôn các bản ghi Ghi Chi được tạo từ phiếu này (liên kết theo dx_id)
   let removedChi=0;
-  for(let i=CHI_DATA.length-1;i>=0;i--){ if(CHI_DATA[i].dx_id===id){ CHI_DATA.splice(i,1); removedChi++; } }
+  for(let i=CHI_DATA.length-1;i>=0;i--){ if(CHI_DATA[i].dx_id===id){ removeChiKhoEntry(CHI_DATA[i]); CHI_DATA.splice(i,1); removedChi++; } }
   renderDxTable();
-  try{ renderChiTab(); }catch(e){}
+  try{ renderChiTab(); renderKhoTab(); }catch(e){}
   try{ syncThuChiSummary(); renderCongNoPtr(); }catch(e){}
   syncNow();
   showToast(`Đã xoá đề xuất${removedChi?` + ${removedChi} khoản chi liên quan`:''}`,2200,'info');
