@@ -2800,7 +2800,7 @@ async function enterApp(session){
   // Cờ dx._done chống tạo trùng khi đăng nhập lại.
   if(currentUser.role==='ketoan'||currentUser.role==='giamdoc'){
     DX_DATA.filter(d=>d.status==='da-duyet' && !d._done).forEach(dx=> finalizeDxApproved(dx));
-    try{ if(migrateChiKho()) syncNow(); }catch(e){}   // đồng bộ lại kho theo mô hình Chi↔Kho mới
+    try{ const m1=mergeKhoDuplicates(); const m2=migrateChiKho(); if(m1||m2) syncNow(); }catch(e){}   // gộp dòng kho trùng + đồng bộ Chi↔Kho
   }
   try{ syncChiNccDefaults(); }catch(e){}   // căn Hoá đơn/PTTT các bản Chi cũ theo NCC
   updateNsKpi();
@@ -3386,6 +3386,24 @@ function migrateChiKho(){
   (CHI_DATA||[]).forEach(r=>{ r.kho_pushed=false; r.kho_pushed_to=null; });
   (CHI_DATA||[]).forEach(r=>{ if(r.tinh_trang==='hoan-thanh'){ syncChiKho(r); changed=true; } });
   return changed;
+}
+// Gộp các dòng kho TRÙNG (cùng kho + tên + ĐVT) thành 1 — sửa "1 mặt hàng 2 dòng"/số âm do tách đôi.
+// Sắp theo id để mọi máy chọn dòng giữ giống nhau (đồng bộ nhất quán). Idempotent.
+function mergeKhoDuplicates(){
+  const keyOf=it=>`${it.bophan||''}|${(it.ten||'').trim().toLowerCase()}|${(it.dvt||'').trim().toLowerCase()}`;
+  const keep=new Map(); const removeIds=new Set();
+  [...KHO_DATA].sort((a,b)=>String(a.id)<String(b.id)?-1:1).forEach(it=>{
+    const k=keyOf(it), g=keep.get(k);
+    if(!g){ keep.set(k,it); return; }
+    g.ton_dau=(parseFloat(g.ton_dau)||0)+(parseFloat(it.ton_dau)||0);
+    g.lichSu=[...(g.lichSu||[]),...(it.lichSu||[])];
+    if(!g.ma && it.ma) g.ma=it.ma;
+    if((!g.img||g.img==='📦') && it.img && it.img!=='📦') g.img=it.img;
+    if(!g.ghichu && it.ghichu) g.ghichu=it.ghichu;
+    removeIds.add(it.id);
+  });
+  if(removeIds.size){ KHO_DATA=KHO_DATA.filter(it=>!removeIds.has(it.id)); return true; }
+  return false;
 }
 // Khoá gom nhóm Chi: ưu tiên merge_id (đã gộp), rồi dx_id (theo đơn), fallback id (chi thủ công).
 function chiGroupKey(r){ return r.merge_id || r.split_id || r.dx_id || r.id; }
@@ -6272,7 +6290,7 @@ function renderKhoTab(){
     return `<tr>
       <td style="font-size:11px;font-weight:600;color:var(--text-muted);">${it.ma}</td>
       <td>${imgEl}</td>
-      <td style="font-weight:500;min-width:140px;">${it.ten}</td>
+      <td style="font-weight:500;min-width:140px;">${it.ten} <button class="btn btn-ghost btn-sm" onclick="editKhoItem('${it.id}')" title="Sửa mặt hàng (tồn đầu, tên, ĐVT...)" style="padding:1px 5px;font-size:11px;">✏</button></td>
       <td><select class="inline-select" onchange="updateKhoVitri('${it.id}',this.value)" style="font-size:11px;">${KHO_VITRI_LIST.map(v=>`<option ${it.vitri===v?'selected':''}>${v}</option>`).join('')}</select></td>
       <td>${it.dvt}</td>
       <td style="text-align:center;font-weight:600;">${it.ton_dau}</td>
@@ -6503,9 +6521,19 @@ function saveKhoItem(){
     const idx=KHO_DATA.findIndex(x=>x.id===editingKhoId);
     if(idx>-1)KHO_DATA[idx]={...KHO_DATA[idx],...data};
   } else {
-    KHO_DATA.push({id:'KH'+Date.now(),...data,lichSu:[{ngay:new Date().toLocaleDateString('vi-VN'),loai:'nhap',sl:data.ton_dau,tu:'',den:'',lydo:'Nhập đầu kỳ',nguoi:currentUser?.fullname||'Kế toán'}]});
+    // Đã có mặt hàng cùng kho + tên + ĐVT → CỘNG vào tồn đầu món có sẵn (không tạo dòng trùng)
+    const dup=KHO_DATA.find(x=>x.bophan===data.bophan && (x.ten||'').trim().toLowerCase()===data.ten.trim().toLowerCase() && (x.dvt||'').trim().toLowerCase()===(data.dvt||'').trim().toLowerCase());
+    if(dup){
+      dup.ton_dau=(parseFloat(dup.ton_dau)||0)+data.ton_dau;
+      if(!Array.isArray(dup.lichSu)) dup.lichSu=[];
+      if(data.ton_dau>0) dup.lichSu.push({ngay:new Date().toLocaleDateString('vi-VN'),loai:'nhap',sl:data.ton_dau,tu:'',den:'',lydo:'Nhập đầu kỳ (bổ sung)',nguoi:currentUser?.fullname||'Kế toán'});
+      if(data.ghichu && !dup.ghichu) dup.ghichu=data.ghichu;
+      showToast(`Đã cộng ${data.ton_dau} ${data.dvt} vào tồn đầu "${dup.ten}" (mặt hàng đã có)`,2800,'info');
+    } else {
+      KHO_DATA.push({id:'KH'+Date.now(),...data,lichSu:[{ngay:new Date().toLocaleDateString('vi-VN'),loai:'nhap',sl:data.ton_dau,tu:'',den:'',lydo:'Nhập đầu kỳ',nguoi:currentUser?.fullname||'Kế toán'}]});
+    }
   }
-  closeModal('modal-kho-item');renderKhoTab();
+  closeModal('modal-kho-item');renderKhoTab();syncNow();
 }
 
 // ===== Kho Xuất/Huỷ: nhiều món, typeahead tên hàng, hiện số dư kho =====
