@@ -2233,6 +2233,27 @@ textarea{resize:vertical;min-height:68px;}
   </div>
 </div>
 
+<!-- MODAL SỬA MẶT HÀNG TRONG PHIẾU CHI -->
+<div class="modal-overlay" id="modal-chi-item">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title">✏️ Sửa Mặt Hàng</span><button class="close-btn" onclick="closeModal('modal-chi-item')">✕</button></div>
+    <div class="form-row full"><div class="form-group"><label>Tên hàng <span style="color:var(--red);">*</span></label><input id="cie-ten" placeholder="Tên mặt hàng"></div></div>
+    <div class="form-row">
+      <div class="form-group"><label>ĐVT</label><input id="cie-dvt" placeholder="gói / kg / cái..."></div>
+      <div class="form-group"><label>Đơn giá (đồng)</label><input type="number" id="cie-dongia" min="0" placeholder="0" oninput="cieCalc()"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Số lượng <span style="color:var(--red);">*</span></label><input type="number" id="cie-sl" min="0" placeholder="0" oninput="cieCalc()"></div>
+      <div class="form-group"><label>Thành tiền</label><div id="cie-tong" style="padding:8px 12px;background:var(--gold-pale);border-radius:8px;font-weight:700;color:var(--red);font-size:15px;">—</div></div>
+    </div>
+    <p style="font-size:12px;color:var(--text-muted);margin:6px 0 0;">Nếu phiếu chi đã Hoàn thành, kho sẽ tự cập nhật lại theo số lượng mới.</p>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
+      <button class="btn btn-ghost" onclick="closeModal('modal-chi-item')">Huỷ</button>
+      <button class="btn btn-primary" onclick="saveChiItemEdit()">✓ Lưu</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL TÁCH PHIẾU CHI (SPLIT) -->
 <div class="modal-overlay" id="modal-chi-split">
   <div class="modal">
@@ -3340,6 +3361,7 @@ function renderChiTab() {
     const detailRows=recs.map(r=>{
       const kho=r.kho||'kt';
       const khoSel=`<select class="inline-select" onchange="chiSetItemKho('${esc(r.id)}',this.value)" style="min-width:120px;">${khoOpts.map(k=>`<option value="${k}" ${kho===k?'selected':''}>${esc(KHO_BP_LABELS[k])}</option>`).join('')}</select>`;
+      const itemActions=canDelChi?`<div style="display:flex;gap:3px;"><button class="btn btn-ghost btn-sm" onclick="editChiItem('${esc(r.id)}')" title="Sửa mặt hàng" style="padding:2px 6px;">✏</button><button class="btn btn-danger btn-sm" onclick="deleteChiItem('${esc(r.id)}')" title="Xoá mặt hàng khỏi phiếu" style="padding:2px 6px;">🗑</button></div>`:'';
       return `<tr>
         <td style="font-size:11px;color:var(--text-muted);white-space:nowrap;">${esc(r.ngay)}</td>
         <td><span style="font-weight:500;">${esc(r.ten_hang)}</span> <span style="color:var(--text-muted);font-size:11px;">${esc(r.dvt||'')}</span></td>
@@ -3348,12 +3370,13 @@ function renderChiTab() {
         <td style="font-weight:600;color:var(--red);">${fmt(r.tong)}</td>
         <td><span class="badge badge-navy" style="font-size:10px;">${esc(r.bophan||'—')}</span></td>
         <td>${khoSel}</td>
+        <td>${itemActions}</td>
       </tr>`;
     }).join('');
     const detailWrap=`<tr class="chi-detail-row" style="display:${open?'':'none'};"><td colspan="10" style="padding:0;background:var(--bg);">
       <div style="padding:8px 12px;">
         <table style="width:100%;"><thead><tr style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;">
-          <th style="text-align:left;">Ngày</th><th style="text-align:left;">Mặt hàng · ĐVT</th><th style="text-align:left;">Đơn giá</th><th style="text-align:center;">SL</th><th style="text-align:left;">Tổng tiền</th><th style="text-align:left;">Bộ phận</th><th style="text-align:left;">Kho</th>
+          <th style="text-align:left;">Ngày</th><th style="text-align:left;">Mặt hàng · ĐVT</th><th style="text-align:left;">Đơn giá</th><th style="text-align:center;">SL</th><th style="text-align:left;">Tổng tiền</th><th style="text-align:left;">Bộ phận</th><th style="text-align:left;">Kho</th><th style="text-align:left;">Sửa/Xoá</th>
         </tr></thead><tbody>${detailRows}</tbody></table>
         ${canDelChi?`<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px;">${isMerged?`<button class="btn btn-ghost btn-sm" onclick="unmergeChi('${esc(g.merge_id)}')">Tách phiếu</button>`:''}<button class="btn btn-danger btn-sm" onclick="deleteChiGroup('${esc(g.key)}')">🗑 Xoá phiếu chi này</button></div>`:''}
       </div>
@@ -3460,6 +3483,55 @@ function syncChiKho(r){
   const want = r.tinh_trang==='hoan-thanh';
   if(r.kho_pushed && (!want || r.kho_pushed_to!==(r.kho||'kt'))) removeChiKhoEntry(r);
   if(want && !r.kho_pushed) addChiKhoEntry(r);
+}
+// ----- Sửa / Xoá 1 mặt hàng trong phiếu chi (kế toán chỉnh khi đơn nhận về thay đổi) -----
+let editingChiItemId=null;
+function editChiItem(id){
+  if(!(currentUser?.role==='giamdoc'||currentUser?.role==='ketoan')){ showToast('Không có quyền sửa.',2200,'error'); return; }
+  const r=CHI_DATA.find(x=>x.id===id); if(!r) return;
+  editingChiItemId=id;
+  document.getElementById('cie-ten').value=r.ten_hang||'';
+  document.getElementById('cie-dvt').value=r.dvt||'';
+  document.getElementById('cie-dongia').value=r.don_gia||0;
+  document.getElementById('cie-sl').value=r.sl||0;
+  cieCalc();
+  openModal('modal-chi-item');
+}
+function cieCalc(){
+  const dg=parseFloat(document.getElementById('cie-dongia').value)||0;
+  const sl=parseFloat(document.getElementById('cie-sl').value)||0;
+  const el=document.getElementById('cie-tong'); if(el) el.textContent=fmt(dg*sl);
+}
+function saveChiItemEdit(){
+  const r=CHI_DATA.find(x=>x.id===editingChiItemId); if(!r){ closeModal('modal-chi-item'); return; }
+  const ten=document.getElementById('cie-ten').value.trim();
+  const dvt=document.getElementById('cie-dvt').value.trim();
+  const dg=parseFloat(document.getElementById('cie-dongia').value)||0;
+  const sl=parseFloat(document.getElementById('cie-sl').value)||0;
+  if(!ten||sl<=0){ showToast('Nhập tên hàng và số lượng hợp lệ!',2600,'error'); return; }
+  const wasPushed=r.kho_pushed;
+  r.ten_hang=ten; r.dvt=dvt; r.don_gia=dg; r.sl=sl; r.tong=sl*dg;
+  if(wasPushed) removeChiKhoEntry(r);   // rút entry kho cũ rồi nhập lại theo số mới (nếu vẫn hoàn thành)
+  syncChiKho(r);
+  editingChiItemId=null;
+  closeModal('modal-chi-item');
+  renderChiTab();
+  try{ renderKhoTab(); }catch(e){}
+  try{ syncThuChiSummary(); renderCongNoPtr(); }catch(e){}
+  syncNow();
+  showToast('✅ Đã cập nhật mặt hàng',2200,'success');
+}
+function deleteChiItem(id){
+  if(!(currentUser?.role==='giamdoc'||currentUser?.role==='ketoan')){ showToast('Không có quyền xoá.',2200,'error'); return; }
+  const r=CHI_DATA.find(x=>x.id===id); if(!r) return;
+  if(!confirm(`Xoá mặt hàng "${r.ten_hang}" khỏi phiếu chi?`)) return;
+  removeChiKhoEntry(r);   // rút khỏi kho nếu đã nhập
+  const idx=CHI_DATA.findIndex(x=>x.id===id); if(idx>-1) CHI_DATA.splice(idx,1);
+  renderChiTab();
+  try{ renderKhoTab(); }catch(e){}
+  try{ syncThuChiSummary(); renderCongNoPtr(); }catch(e){}
+  syncNow();
+  showToast('Đã xoá mặt hàng khỏi phiếu chi',2000,'info');
 }
 // ----- MERGE: gộp nhiều đơn thành 1 phiếu chi (1 dòng tổng) -----
 let chiMergeBase=null;
