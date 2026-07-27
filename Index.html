@@ -2231,7 +2231,7 @@ textarea{resize:vertical;min-height:68px;}
     </div>
     <div class="form-row">
       <div class="form-group"><label>Bộ phận</label><select id="chi-bophan"><option value="buong-phong">Buồng phòng</option><option value="nha-hang">Nhà hàng</option><option value="bep">Bếp</option><option value="sale">Sale</option><option value="ky-thuat">Kỹ thuật</option><option value="le-tan">Lễ tân</option><option value="hr">HR</option><option value="hcns">Hành chính</option></select></div>
-      <div class="form-group"><label>Nhà cung cấp</label><select id="chi-ncc"><option value="">— Chọn NCC —</option></select></div>
+      <div class="form-group"><label>Nhà cung cấp</label><select id="chi-ncc" onchange="chiNccChange()"><option value="">— Chọn NCC —</option></select></div>
     </div>
     <div class="form-row">
       <div class="form-group"><label>Hóa đơn</label><select id="chi-hoadon"><option value="KO VAT">KO VAT</option><option value="VAT-chua-nhan">VAT — Chưa nhận</option><option value="VAT-da-nhan">VAT — Đã nhận</option></select></div>
@@ -4039,10 +4039,21 @@ function editThu(id){
 }
 
 // ==================== MODAL GHI CHI THỦ CÔNG ====================
+// Chọn NCC ở Ghi Chi thủ công → tự điền Hoá đơn/PTTT mặc định theo NCC (kế toán chỉnh lại được).
+function chiNccChange(){
+  const ten=document.getElementById('chi-ncc').value;
+  const nccRec=(NCC_DATA||[]).find(n=>(n.ten||'')===ten);
+  if(!nccRec) return;
+  const d=nccChiDefaults(nccRec);
+  const hdBack={'KO VAT':'KO VAT','VAT-chưa nhận':'VAT-chua-nhan','VAT-đã nhận':'VAT-da-nhan'};
+  const hd=document.getElementById('chi-hoadon'); if(hd) hd.value=hdBack[d.hoa_don]||'KO VAT';
+  const pt=document.getElementById('chi-pttt'); if(pt) pt.value=d.pttt;
+}
 function saveChi() {
   const ten_hang = document.getElementById('chi-ten').value.trim();
   const don_gia  = parseFloat(document.getElementById('chi-dongia').value)||0;
   const sl       = parseFloat(document.getElementById('chi-sl').value)||1;
+  const ngayIso  = document.getElementById('chi-ngay').value;
   const bp       = document.getElementById('chi-bophan').value;
   const ncc      = document.getElementById('chi-ncc').value;
   const hoa_don  = document.getElementById('chi-hoadon').value;
@@ -4055,15 +4066,18 @@ function saveChi() {
   const hdMap={'KO VAT':'KO VAT','VAT-chua-nhan':'VAT-chưa nhận','VAT-da-nhan':'VAT-đã nhận'};
   CHI_DATA.unshift({
     id:'C'+Date.now(),
-    ngay: new Date().toLocaleDateString('vi-VN'),
+    ngay: ngayIso ? ngayIso.split('-').reverse().join('/') : new Date().toLocaleDateString('vi-VN'),
     ten_hang, bophan: BP_LABELS[bp]||bp, sl, dvt:'lần',
     don_gia, tong: don_gia*sl,
     ten_ncc: ncc||'—', hoa_don: hdMap[hoa_don]||hoa_don, pttt, so_phieu_chi:so_phieu, so_tk,
     tinh_trang:'dang-len-don', nguon:'thu-cong', dx_id:null,
+    kho:'kt',   // kho đích mặc định — hoàn thành phiếu chi thì nhập vào Kho KT
   });
   closeModal('modal-chi');
   renderChiTab();
   syncThuChiSummary();
+  try{ renderCongNoPtr(); }catch(e){}   // chi 'Công nợ' hiện ngay ở Phải Trả
+  syncNow();
 }
 
 // ==================== NAV ====================
@@ -7233,10 +7247,11 @@ function openModal(id){
     thuResetLines([{}]);
   }
   if(id==='modal-chi'){
-    // Populate NCC dropdown
+    // Populate NCC dropdown từ NCC_DATA (không phải NCC_LIST rỗng)
     const sel=document.getElementById('chi-ncc');
-    if(sel){ sel.innerHTML='<option value="">— Chọn NCC —</option>'+NCC_LIST.map(n=>`<option value="${n.name}">${n.name}</option>`).join(''); }
+    if(sel){ sel.innerHTML='<option value="">— Chọn NCC —</option>'+(NCC_DATA||[]).map(n=>`<option value="${esc(n.ten)}">${esc(n.ten)}</option>`).join(''); }
     document.getElementById('chi-tong-preview').textContent='—';
+    const dn=document.getElementById('chi-ngay'); if(dn) dn.value=new Date().toISOString().slice(0,10);
     ['chi-ten','chi-sophieu','chi-sotk'].forEach(i=>{ const el=document.getElementById(i); if(el) el.value=''; });
     ['chi-dongia','chi-sl'].forEach(i=>{ const el=document.getElementById(i); if(el) el.value=i==='chi-sl'?'1':''; });
   }
