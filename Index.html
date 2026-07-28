@@ -3805,13 +3805,19 @@ function syncThuChiSummary() {
   const el=(id,val)=>{ const e=document.getElementById(id); if(e) e.textContent=val; };
   const elTxt=(id,val)=>{ const e=document.getElementById(id); if(e) e.textContent=val; };
 
+  // Thu đọc theo TỪNG DÒNG tiền (mỗi PTTT/ngoại tệ 1 đơn vị) — để khoản thu nhóm không bị bỏ sót/ẩn khi lọc.
+  const thuUnits = THU_DATA.flatMap(r=> thuLines(r).map(l=>({
+    ngay:r.ngay, mota:r.mota, bophan:r.bophan, nguoi:r.nguoi,
+    pttt:l.pttt, currency:l.currency||'VND',
+    vnd:(l.currency&&l.currency!=='VND')?0:(parseFloat(l.sotien)||0),
+    raw:parseFloat(l.sotien)||0,
+  })));
   // Lọc theo khoảng ngày (+ bộ lọc PTTT của filter row cho các ô tổng)
-  const thuRows  = THU_DATA.filter(r=>inRange(r) && (!fPttt||r.pttt===fPttt));
   const chiRows  = CHI_DATA.filter(r=>r.tinh_trang==='hoan-thanh' && inRange(r) && (!fPttt||r.pttt===fPttt));
-  const tongThu  = thuRows.reduce((s,r)=>s+thuVnd(r),0);
+  const tongThu  = thuUnits.filter(u=>inRange(u) && (!fPttt||u.pttt===fPttt)).reduce((s,u)=>s+u.vnd,0);
   const tongChi  = chiRows.reduce((s,r)=>s+chiAmt(r),0);
   // Tiền mặt (PTTT='TM') trong khoảng — không phụ thuộc filter PTTT của bảng
-  const thuTM = THU_DATA.filter(r=>inRange(r)&&r.pttt==='TM').reduce((s,r)=>s+thuVnd(r),0);
+  const thuTM = thuUnits.filter(u=>inRange(u)&&u.pttt==='TM').reduce((s,u)=>s+u.vnd,0);
   const chiTM = CHI_DATA.filter(r=>r.tinh_trang==='hoan-thanh'&&inRange(r)&&r.pttt==='TM').reduce((s,r)=>s+chiAmt(r),0);
   const soDu  = thuTM - chiTM;   // số dư TIỀN MẶT của giai đoạn
 
@@ -3836,26 +3842,28 @@ function syncThuChiSummary() {
   const isKt = currentUser?.role==='ketoan';
   ['tc-box-tong-thu','tc-box-tong-chi'].forEach(id=>{ const e=document.getElementById(id); if(e) e.style.display=isKt?'none':''; });
 
-  // Render bảng tổng hợp (cùng khoảng ngày + bộ lọc)
+  // Render bảng tổng hợp (mỗi dòng tiền Thu = 1 dòng sổ; Chi 1 dòng/bản ghi)
   const allRows = [
-    ...THU_DATA.map(r=>({loai:'thu', ngay:r.ngay, mota:r.mota, bophan:r.bophan, pttt:r.pttt, thu:thuVnd(r), chi:0, nguoi:r.nguoi})),
+    ...thuUnits.map(u=>({loai:'thu', ngay:u.ngay, mota:u.mota, bophan:u.bophan, pttt:u.pttt, thu:u.vnd, chi:0, nguoi:u.nguoi, cur:u.currency, raw:u.raw})),
     ...CHI_DATA.filter(r=>r.tinh_trang==='hoan-thanh').map(r=>({loai:'chi', ngay:r.ngay, mota:r.ten_hang, bophan:r.bophan, pttt:r.pttt, thu:0, chi:chiAmt(r), nguoi:'Kế toán'})),
   ].filter(r=>(!fLoai||r.loai===fLoai) && (!fPttt||r.pttt===fPttt) && inRange(r))
    .sort((a,b)=>(vnToIso(b.ngay)).localeCompare(vnToIso(a.ngay)));
 
   const ptttBadge={'TM':'badge-tm','CK':'badge-ck','Cà thẻ':'badge-the','Công nợ':'badge-cong-no'};
   const tbody=document.getElementById('tbl-thu-chi-body');
-  if(tbody) tbody.innerHTML=allRows.map((r,i)=>`<tr>
+  if(tbody) tbody.innerHTML=allRows.map((r,i)=>{
+    const thuTxt = r.loai==='thu' ? (r.cur&&r.cur!=='VND' ? (r.raw||0).toLocaleString('vi-VN')+' '+esc(r.cur) : (r.thu?fmt(r.thu):'—')) : '—';
+    return `<tr>
     <td style="font-size:11px;color:var(--text-muted);">${i+1}</td>
     <td style="font-size:12px;">${r.ngay}</td>
     <td><span class="badge ${r.loai==='thu'?'badge-green':'badge-red'}">${r.loai==='thu'?'Thu':'Chi'}</span></td>
     <td>${r.mota}</td>
     <td style="font-size:12px;">${r.bophan}</td>
     <td><span class="badge ${ptttBadge[r.pttt]||'badge-navy'}" style="font-size:10px;">${r.pttt||'—'}</span></td>
-    <td class="amount-pos">${r.thu?fmt(r.thu):'—'}</td>
+    <td class="amount-pos">${thuTxt}</td>
     <td class="amount-neg">${r.chi?fmt(r.chi):'—'}</td>
     <td style="font-size:12px;">${r.nguoi}</td>
-  </tr>`).join('')||`<tr><td colspan="9" style="text-align:center;padding:28px;color:var(--text-muted);">Không có dữ liệu</td></tr>`;
+  </tr>`;}).join('')||`<tr><td colspan="9" style="text-align:center;padding:28px;color:var(--text-muted);">Không có dữ liệu</td></tr>`;
 }
 function renderThuChi(){ syncThuChiSummary(); }
 
