@@ -3301,15 +3301,18 @@ function renderThuTab() {
   const fPttt = document.getElementById('thu-f-pttt')?.value||'';
   const fFrom = document.getElementById('thu-from')?.value||'';   // yyyy-mm-dd (rỗng = tất cả)
   const fTo   = document.getElementById('thu-to')?.value||'';
-  let rows = THU_DATA.filter(r => (!fDm||r.danhmuc===fDm) && (!fPttt||r.pttt===fPttt)
+  // Lọc/cộng theo TỪNG DÒNG tiền: lọc PTTT gồm mọi khoản có dòng đó; số tiền = phần của PTTT đang lọc.
+  const lineVnd=l=>(l.currency&&l.currency!=='VND')?0:(parseFloat(l.sotien)||0);
+  const rowAmt=r=> fPttt ? thuLines(r).filter(l=>l.pttt===fPttt).reduce((s,l)=>s+lineVnd(l),0) : thuVnd(r);
+  let rows = THU_DATA.filter(r => (!fDm||r.danhmuc===fDm) && (!fPttt || thuLines(r).some(l=>l.pttt===fPttt))
     && (()=>{ if(!fFrom&&!fTo) return true; const iso=vnToIso(r.ngay); if(fFrom&&iso<fFrom) return false; if(fTo&&iso>fTo) return false; return true; })());
   const countEl = document.getElementById('thu-count'); if(countEl) countEl.textContent = rows.length+' bản ghi';
-  const totEl=document.getElementById('thu-filter-total'); if(totEl) totEl.textContent=fmt(rows.reduce((s,r)=>s+thuVnd(r),0));
+  const totEl=document.getElementById('thu-filter-total'); if(totEl) totEl.textContent=fmt(rows.reduce((s,r)=>s+rowAmt(r),0));
   const canDelThu=currentUser?.role==='giamdoc'||currentUser?.role==='ketoan';
   const ptttBadge = {TM:'badge-tm',CK:'badge-ck','Cà thẻ':'badge-the','Công nợ':'badge-cong-no'};
   document.getElementById('tbl-thu-body').innerHTML = rows.length
     ? rows.map((r,i)=>{
-        const lines=thuLines(r);
+        const lines=fPttt?thuLines(r).filter(l=>l.pttt===fPttt):thuLines(r);   // lọc PTTT → chỉ hiện dòng khớp
         // breakdown từng dòng tiền (PTTT + số tiền, kèm mã ngoại tệ nếu khác VND)
         const breakdown=lines.map(l=>`<span class="badge ${ptttBadge[l.pttt]||'badge-navy'}" style="font-size:9px;margin:1px;">${esc(l.pttt)} ${l.currency&&l.currency!=='VND'?(l.sotien||0).toLocaleString('vi-VN')+' '+esc(l.currency):fmt(l.sotien)}</span>`).join('');
         return `<tr>
@@ -3317,7 +3320,7 @@ function renderThuTab() {
         <td style="font-size:12px;">${esc(r.ngay)}</td>
         <td><span class="badge badge-navy">${esc(r.danhmuc)}</span></td>
         <td style="font-size:12px;">${esc(r.bophan)}</td>
-        <td class="amount-pos" style="font-weight:700;">${fmt(thuVnd(r))}<div style="margin-top:2px;">${breakdown}</div></td>
+        <td class="amount-pos" style="font-weight:700;">${fmt(rowAmt(r))}<div style="margin-top:2px;">${breakdown}</div></td>
         <td style="font-size:12px;">${esc(r.nguoi)}</td>
         <td style="font-size:11px;color:var(--text-muted);">${esc(r.ghichu||r.mota)||'—'}</td>
         <td><div style="display:flex;gap:3px;"><button class="btn btn-ghost btn-sm" onclick="editThu('${r.id}')" title="Sửa">✏</button>${canDelThu?`<button class="btn btn-danger btn-sm" onclick="deleteThu('${r.id}')" title="Xoá">🗑</button>`:''}</div></td>
