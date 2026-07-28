@@ -3305,6 +3305,7 @@ function renderThuTab() {
     && (()=>{ if(!fFrom&&!fTo) return true; const iso=vnToIso(r.ngay); if(fFrom&&iso<fFrom) return false; if(fTo&&iso>fTo) return false; return true; })());
   const countEl = document.getElementById('thu-count'); if(countEl) countEl.textContent = rows.length+' bản ghi';
   const totEl=document.getElementById('thu-filter-total'); if(totEl) totEl.textContent=fmt(rows.reduce((s,r)=>s+thuVnd(r),0));
+  const canDelThu=currentUser?.role==='giamdoc'||currentUser?.role==='ketoan';
   const ptttBadge = {TM:'badge-tm',CK:'badge-ck','Cà thẻ':'badge-the','Công nợ':'badge-cong-no'};
   document.getElementById('tbl-thu-body').innerHTML = rows.length
     ? rows.map((r,i)=>{
@@ -3319,7 +3320,7 @@ function renderThuTab() {
         <td class="amount-pos" style="font-weight:700;">${fmt(thuVnd(r))}<div style="margin-top:2px;">${breakdown}</div></td>
         <td style="font-size:12px;">${esc(r.nguoi)}</td>
         <td style="font-size:11px;color:var(--text-muted);">${esc(r.ghichu||r.mota)||'—'}</td>
-        <td><button class="btn btn-ghost btn-sm" onclick="editThu('${r.id}')" title="Sửa">✏</button></td>
+        <td><div style="display:flex;gap:3px;"><button class="btn btn-ghost btn-sm" onclick="editThu('${r.id}')" title="Sửa">✏</button>${canDelThu?`<button class="btn btn-danger btn-sm" onclick="deleteThu('${r.id}')" title="Xoá">🗑</button>`:''}</div></td>
       </tr>`;}).join('')
     : `<tr><td colspan="8" style="text-align:center;padding:28px;color:var(--text-muted);">Không có bản ghi thu nào</td></tr>`;
   syncThuChiSummary();
@@ -4068,6 +4069,17 @@ function editThu(id){
   document.getElementById('thu-mota').value=r.mota||'';
   thuResetLines(thuLines(r));
   openModal('modal-thu');
+}
+function deleteThu(id){
+  if(!(currentUser?.role==='giamdoc'||currentUser?.role==='ketoan')){ showToast('Không có quyền xoá.',2200,'error'); return; }
+  const r=THU_DATA.find(x=>x.id===id); if(!r) return;
+  if(!confirm(`Xoá khoản thu "${r.mota||r.danhmuc||''}" (${fmt(thuVnd(r))})?`)) return;
+  const idx=THU_DATA.findIndex(x=>x.id===id); if(idx>-1) THU_DATA.splice(idx,1);
+  renderThuTab();
+  syncThuChiSummary();
+  try{ renderCongNoPtr(); }catch(e){}   // cập nhật Phải Thu nếu là khoản công nợ
+  syncNow();
+  showToast('Đã xoá khoản thu',2000,'info');
 }
 
 // ==================== MODAL GHI CHI THỦ CÔNG ====================
