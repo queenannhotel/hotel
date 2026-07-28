@@ -941,7 +941,10 @@ textarea{resize:vertical;min-height:68px;}
             <select id="thu-f-dm" onchange="renderThuTab()" style="font-size:12px;padding:6px 10px;"><option value="">Tất cả danh mục</option></select>
             <button id="btn-cat-thu" onclick="openCatManager('thu')" title="Quản lý danh mục Thu (Giám đốc)" style="display:none;align-items:center;padding:5px 9px;border-radius:8px;border:1.5px solid var(--border);background:#fff;cursor:pointer;font-size:12px;">⚙</button>
             <select id="thu-f-pttt" onchange="renderThuTab()" style="font-size:12px;padding:6px 10px;"><option value="">Tất cả PTTT</option><option value="TM">TM</option><option value="CK">CK</option><option value="Cà thẻ">Cà thẻ</option><option value="Công nợ">Công nợ</option></select>
-            <input type="month" id="thu-f-thang" value="2026-07" onchange="renderThuTab()" style="width:130px;font-size:12px;padding:6px 10px;">
+            <span style="font-size:12px;color:var(--text-muted);">Từ</span>
+            <input type="date" id="thu-from" onchange="renderThuTab()" style="width:140px;font-size:12px;padding:6px 10px;" title="Từ ngày">
+            <span style="font-size:12px;color:var(--text-muted);">→</span>
+            <input type="date" id="thu-to" onchange="renderThuTab()" style="width:140px;font-size:12px;padding:6px 10px;" title="Đến ngày">
             <span id="thu-count" style="font-size:12px;color:var(--text-muted);margin-left:4px;"></span>
           </div>
         </div>
@@ -3287,7 +3290,10 @@ const CHI_STATUS_ORDER = {'dang-len-don':0,'dang-giao':1,'hoan-thanh':2};
 function renderThuTab() {
   const fDm   = document.getElementById('thu-f-dm')?.value||'';
   const fPttt = document.getElementById('thu-f-pttt')?.value||'';
-  let rows = THU_DATA.filter(r => (!fDm||r.danhmuc===fDm) && (!fPttt||r.pttt===fPttt));
+  const fFrom = document.getElementById('thu-from')?.value||'';   // yyyy-mm-dd (rỗng = tất cả)
+  const fTo   = document.getElementById('thu-to')?.value||'';
+  let rows = THU_DATA.filter(r => (!fDm||r.danhmuc===fDm) && (!fPttt||r.pttt===fPttt)
+    && (()=>{ if(!fFrom&&!fTo) return true; const iso=vnToIso(r.ngay); if(fFrom&&iso<fFrom) return false; if(fTo&&iso>fTo) return false; return true; })());
   const countEl = document.getElementById('thu-count'); if(countEl) countEl.textContent = rows.length+' bản ghi';
   const ptttBadge = {TM:'badge-tm',CK:'badge-ck','Cà thẻ':'badge-the','Công nợ':'badge-cong-no'};
   document.getElementById('tbl-thu-body').innerHTML = rows.length
@@ -4009,7 +4015,7 @@ function saveThu() {
     if(idx>-1) THU_DATA[idx]={...THU_DATA[idx],...fields};
     editingThuId=null;
   } else {
-    THU_DATA.unshift({ id:'T'+Date.now(), ...fields, ghichu:'' });
+    THU_DATA.unshift({ id:'T'+Date.now()+'-'+Math.random().toString(36).slice(2,7), ...fields, ghichu:'' });
   }
   closeModal('modal-thu');
   renderThuTab();
@@ -7576,7 +7582,7 @@ function setSyncStatus(state){
 function _byIdDump(arr){ return (arr||[]).filter(x=>x&&x.id!=null).map(x=>({id:String(x.id), obj:x})); }
 function _mapDump(map){ return Object.keys(map||{}).map(k=>({id:String(k), obj:map[k]})); }
 const COLLECTIONS = {
-  thu:       { read:()=>_byIdDump(THU_DATA),  write:r=>{THU_DATA=r.map(x=>x.obj);},  render:()=>{try{syncThuChiSummary();}catch(e){} try{updateDashboardKPI();}catch(e){}} },
+  thu:       { read:()=>_byIdDump(THU_DATA),  write:r=>{THU_DATA=r.map(x=>x.obj);},  render:()=>{try{renderThuTab();}catch(e){} try{syncThuChiSummary();}catch(e){} try{updateDashboardKPI();}catch(e){}} },
   chi:       { read:()=>_byIdDump(CHI_DATA),  write:r=>{CHI_DATA=r.map(x=>x.obj);},  render:()=>{try{syncThuChiSummary();}catch(e){} try{updateDashboardKPI();}catch(e){}} },
   dx:        { read:()=>_byIdDump(DX_DATA),   write:r=>{DX_DATA=r.map(x=>x.obj);},   render:()=>{try{renderDxTable();}catch(e){} try{renderDashDx();}catch(e){}} },
   ncc:       { read:()=>_byIdDump(NCC_DATA),  write:r=>{NCC_DATA=r.map(x=>x.obj);},  render:()=>{try{renderNccTable();}catch(e){}} },
@@ -7608,9 +7614,16 @@ async function cloudPullAll(){
   if(!sb){ setSyncStatus('off'); return false; }
   setSyncStatus('sync');
   try{
-    const {data, error} = await sb.from('records').select('collection,id,data,deleted');
-    if(error) throw error;
-    const grouped={}; (data||[]).forEach(row=>{ (grouped[row.collection]=grouped[row.collection]||[]).push(row); });
+    // Phân trang: PostgREST mặc định trả tối đa 1000 dòng → kéo theo trang để lấy ĐỦ mọi bản ghi.
+    let all=[]; const PAGE=1000; let from=0;
+    while(true){
+      const {data, error} = await sb.from('records').select('collection,id,data,deleted').range(from, from+PAGE-1);
+      if(error) throw error;
+      all=all.concat(data||[]);
+      if(!data || data.length<PAGE) break;
+      from+=PAGE;
+    }
+    const grouped={}; all.forEach(row=>{ (grouped[row.collection]=grouped[row.collection]||[]).push(row); });
     lastSnapshot={};
     Object.keys(COLLECTIONS).forEach(name=>{
       const grp=grouped[name]||[];
