@@ -949,7 +949,7 @@ textarea{resize:vertical;min-height:68px;}
           </div>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;background:var(--gold-pale);border:1px solid rgba(201,168,76,.35);border-radius:10px;padding:10px 18px;margin:0 16px 12px;">
-          <span style="font-size:13px;color:var(--text-muted);">Tổng thu (theo bộ lọc)</span>
+          <span style="font-size:13px;color:var(--text-muted);">Tổng thu (theo bộ lọc) <span id="thu-total-note" style="font-size:11px;color:var(--text-muted);"></span></span>
           <b id="thu-filter-total" style="font-size:18px;font-weight:800;color:var(--green);">—</b>
         </div>
         <div class="table-wrap wide"><table><thead><tr><th>STT</th><th>Ngày</th><th>Danh mục</th><th>Bộ phận</th><th>Số tiền tổng (VND)</th><th>Người thu</th><th>Ghi chú</th><th></th></tr></thead>
@@ -3307,7 +3307,12 @@ function renderThuTab() {
   let rows = THU_DATA.filter(r => (!fDm||r.danhmuc===fDm) && (!fPttt || thuLines(r).some(l=>l.pttt===fPttt))
     && (()=>{ if(!fFrom&&!fTo) return true; const iso=vnToIso(r.ngay); if(fFrom&&iso<fFrom) return false; if(fTo&&iso>fTo) return false; return true; })());
   const countEl = document.getElementById('thu-count'); if(countEl) countEl.textContent = rows.length+' bản ghi';
-  const totEl=document.getElementById('thu-filter-total'); if(totEl) totEl.textContent=fmt(rows.reduce((s,r)=>s+rowAmt(r),0));
+  // Thanh Tổng: user không phải Giám đốc KHÔNG xem tổng "Doanh thu phòng"
+  const isGD = currentUser?.role==='giamdoc';
+  const visRows = isGD ? rows : rows.filter(r=>r.danhmuc!=='Doanh thu phòng');
+  const totEl=document.getElementById('thu-filter-total');
+  if(totEl) totEl.textContent = (!isGD && fDm==='Doanh thu phòng') ? '🔒 Chỉ Giám đốc' : fmt(visRows.reduce((s,r)=>s+rowAmt(r),0));
+  const noteEl=document.getElementById('thu-total-note'); if(noteEl) noteEl.textContent = isGD ? '' : '(không gồm Doanh thu phòng)';
   const canDelThu=currentUser?.role==='giamdoc'||currentUser?.role==='ketoan';
   const ptttBadge = {TM:'badge-tm',CK:'badge-ck','Cà thẻ':'badge-the','Công nợ':'badge-cong-no'};
   document.getElementById('tbl-thu-body').innerHTML = rows.length
