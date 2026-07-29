@@ -3195,11 +3195,12 @@ let catalogItems=[];
 
 // ==================== EXPORT CSV ====================
 // Ghi 1 bảng ra file: ưu tiên .xlsx qua SheetJS (chạy tốt trên iPad), fallback CSV blob.
-function writeSheet(baseName, headers, rows){
+function writeSheet(baseName, headers, rows, merges){
   const aoa=[headers, ...rows];
   if(typeof XLSX!=='undefined' && XLSX.utils && XLSX.writeFile){
     try{
       const ws=XLSX.utils.aoa_to_sheet(aoa);
+      if(merges&&merges.length) ws['!merges']=merges;   // gộp ô (vd Tổng tiền NCC / NCC ở Ghi Chi)
       const wb=XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
       XLSX.writeFile(wb, baseName+'.xlsx');
@@ -3217,20 +3218,42 @@ function writeSheet(baseName, headers, rows){
 // Xuất Excel thống nhất cho mọi tab.
 function exportExcel(section){
   const S={ 'tab-thu':'thu', 'tab-chi':'chi' }[section] || section;
-  let name='', headers=[], rows=[];
+  let name='', headers=[], rows=[], merges=null;
   const HD=(h)=> (typeof HD_LABELS!=='undefined' && HD_LABELS[h]) || h || '';
+  const ascDate=(a,b)=>vnToIso(a.ngay).localeCompare(vnToIso(b.ngay));   // ngày tăng dần (nhỏ→lớn)
   if(S==='thu'){
     name='GhiThu'; headers=['ID','Ngày','Mô tả','Số tiền','Loại tiền','Danh mục','Bộ phận','PTTT','Người thu'];
-    rows=THU_DATA.map(r=>[r.id,r.ngay,r.mota,r.sotien,r.currency||'VND',r.danhmuc,r.bophan,r.pttt,r.nguoi||'']);
+    rows=THU_DATA.filter(thuActiveFilter()).sort(ascDate)
+      .map(r=>[r.id,r.ngay,r.mota,r.sotien,r.currency||'VND',r.danhmuc,r.bophan,r.pttt,r.nguoi||'']);
   } else if(S==='chi'){
-    name='GhiChi'; headers=['ID','Ngày','Tên hàng','ĐVT','Đơn giá','SL','Thành tiền','Bộ phận','NCC','Hoá đơn','PTTT','Tình trạng','Nguồn'];
-    rows=CHI_DATA.map(r=>[r.id,r.ngay,r.ten_hang||r.mota||'',r.dvt||'',r.don_gia||0,r.sl||0,r.tong??((r.don_gia||0)*(r.sl||0)),r.bophan||'',r.ten_ncc||'',r.hoa_don||'',r.pttt||'',r.tinh_trang||'',r.nguon||'']);
+    name='GhiChi';
+    headers=['ID','Ngày','Tên hàng','ĐVT','Đơn giá','SL','Thành tiền','Tổng tiền NCC','NCC','Bộ phận','Hoá đơn','PTTT','Tình trạng','Nguồn'];
+    // Ngày tăng dần; trong cùng ngày gom các dòng cùng NCC liền nhau (để merge). Merge khi run (ngày+NCC) ≥2.
+    const recs=CHI_DATA.filter(chiActiveFilter())
+      .sort((a,b)=>ascDate(a,b) || (a.ten_ncc||'').localeCompare(b.ten_ncc||'','vi'));
+    merges=[];
+    for(let i=0;i<recs.length;){
+      let j=i; const key=r=>`${r.ngay}||${r.ten_ncc||''}`;
+      while(j+1<recs.length && key(recs[j+1])===key(recs[i])) j++;   // run cùng (ngày, NCC)
+      const sub=recs.slice(i,j+1).reduce((s,r)=>s+(r.tong??((r.don_gia||0)*(r.sl||0))),0);
+      recs.slice(i,j+1).forEach((r,k)=>{
+        const tt=r.tong??((r.don_gia||0)*(r.sl||0));
+        rows.push([r.id,r.ngay,r.ten_hang||r.mota||'',r.dvt||'',r.don_gia||0,r.sl||0,tt,
+          k===0?sub:'', k===0?(r.ten_ncc||''):'',   // Tổng tiền NCC + NCC chỉ ghi ở dòng đầu run
+          r.bophan||'',r.hoa_don||'',r.pttt||'',r.tinh_trang||'',r.nguon||'']);
+      });
+      if(j>i){   // run ≥2 dòng → merge cột Tổng tiền NCC (7) & NCC (8); +1 do header ở r=0
+        const r0=rows.length-(j-i+1)+1, r1=rows.length;
+        merges.push({s:{r:r0,c:7},e:{r:r1,c:7}}, {s:{r:r0,c:8},e:{r:r1,c:8}});
+      }
+      i=j+1;
+    }
   } else if(S==='thu-chi'){
     name='ThuChi_TongHop'; headers=['Ngày','Loại','Mô tả','Bộ phận','PTTT','Thu','Chi'];
-    rows=[
-      ...THU_DATA.map(r=>[r.ngay,'Thu',r.mota,r.bophan,r.pttt,r.sotien||0,0]),
-      ...CHI_DATA.map(r=>[r.ngay,'Chi',r.ten_hang||r.mota||'',r.bophan,r.pttt,0,r.tong??((r.don_gia||0)*(r.sl||0))]),
-    ];
+    // Ngày tăng dần; trong cùng ngày Thu trước Chi.
+    rows=buildThuChiBook()
+      .sort((a,b)=>ascDate(a,b) || ((a.loai==='thu'?0:1)-(b.loai==='thu'?0:1)))
+      .map(r=>[r.ngay, r.loai==='thu'?'Thu':'Chi', r.mota, r.bophan, r.pttt, r.thu||0, r.chi||0]);
   } else if(S==='kho'){
     name='Kho_'+(currentKhoTab||'all');
     headers=['Mã','Tên','Kho/Bộ phận','ĐVT','Vị trí','Tồn đầu','Nhập','Xuất','Huỷ','Còn lại'];
@@ -3248,7 +3271,8 @@ function exportExcel(section){
     name='DeXuat_MuaHang';
     headers=['Mã ĐX','Bộ phận','Người đề xuất','Ngày','Ưu tiên','Trạng thái','Tên hàng','NCC','SL','ĐVT','Đơn giá','Thành tiền'];
     const BPL={'buong-phong':'Buồng phòng','nha-hang':'Nhà hàng','bep':'Bếp','le-tan':'Lễ tân','ky-thuat':'Kỹ thuật','sale':'Sale','hr':'HR'};
-    DX_DATA.forEach(d=>dxItems(d).forEach(it=>rows.push([d.code||d.id,BPL[d.bophan]||d.bophan,d.nguoi||'',d.ngay,d.priority||'Thường',d.status,it.ten,it.ncc||'',it.sl,it.dvt||'',it.dongia||0,(parseFloat(it.sl)||0)*(parseFloat(it.dongia)||0)])));
+    DX_DATA.filter(dxActiveFilter()).sort(ascDate)
+      .forEach(d=>dxItems(d).forEach(it=>rows.push([d.code||d.id,BPL[d.bophan]||d.bophan,d.nguoi||'',d.ngay,d.priority||'Thường',d.status,it.ten,it.ncc||'',it.sl,it.dvt||'',it.dongia||0,(parseFloat(it.sl)||0)*(parseFloat(it.dongia)||0)])));
   } else if(S==='nhan-su'){
     name='NhanSu_Luong';
     headers=['Tháng','Loại','Mô tả','Số tiền','Người','Ghi chú'];
@@ -3278,9 +3302,10 @@ function exportExcel(section){
     const fB=document.getElementById('tr-h-bp')?.value||'';
     const stL={'cho-duyet':'Chờ duyệt','da-duyet':'Đã duyệt','tu-choi':'Từ chối'};
     (TR_DATA||[]).filter(d=>{ if(fB&&d.bophan!==fB) return false; if(from||to){ const iso=vnToIso(d.ngay); if(from&&iso<from) return false; if(to&&iso>to) return false; } return true; })
+      .sort(ascDate)
       .forEach(d=>(d.items||[]).forEach(it=>rows.push([d.ngay,d.code||d.id,BP_LABELS[d.bophan]||d.bophan,d.nguoi||'',it.ten,it.dvt||'',it.sl,trBalance(d.bophan,it.ten,it.dvt),stL[d.status]||d.status])));
   } else return;
-  writeSheet(name, headers, rows);
+  writeSheet(name, headers, rows, merges);
 }
 function exportCSV(section){ exportExcel(section); }   // t\u01B0\u01A1ng th\u00EDch ch\u1ED7 g\u1ECDi c\u0169
 
@@ -3297,16 +3322,22 @@ let CHI_DATA = [];
 const CHI_STATUS_ORDER = {'dang-len-don':0,'dang-giao':1,'hoan-thanh':2};
 
 // ==================== RENDER THU TAB ====================
-function renderThuTab() {
+// Predicate lọc Ghi Thu dùng chung (bảng + xuất Excel) — đọc các ô lọc hiện tại.
+function thuActiveFilter(){
   const fDm   = document.getElementById('thu-f-dm')?.value||'';
   const fPttt = document.getElementById('thu-f-pttt')?.value||'';
   const fFrom = document.getElementById('thu-from')?.value||'';   // yyyy-mm-dd (rỗng = tất cả)
   const fTo   = document.getElementById('thu-to')?.value||'';
+  return r => (!fDm||r.danhmuc===fDm) && (!fPttt || thuLines(r).some(l=>l.pttt===fPttt))
+    && (()=>{ if(!fFrom&&!fTo) return true; const iso=vnToIso(r.ngay); if(fFrom&&iso<fFrom) return false; if(fTo&&iso>fTo) return false; return true; })();
+}
+function renderThuTab() {
+  const fPttt = document.getElementById('thu-f-pttt')?.value||'';
+  const fDm   = document.getElementById('thu-f-dm')?.value||'';
   // Lọc/cộng theo TỪNG DÒNG tiền: lọc PTTT gồm mọi khoản có dòng đó; số tiền = phần của PTTT đang lọc.
   const lineVnd=l=>(l.currency&&l.currency!=='VND')?0:(parseFloat(l.sotien)||0);
   const rowAmt=r=> fPttt ? thuLines(r).filter(l=>l.pttt===fPttt).reduce((s,l)=>s+lineVnd(l),0) : thuVnd(r);
-  let rows = THU_DATA.filter(r => (!fDm||r.danhmuc===fDm) && (!fPttt || thuLines(r).some(l=>l.pttt===fPttt))
-    && (()=>{ if(!fFrom&&!fTo) return true; const iso=vnToIso(r.ngay); if(fFrom&&iso<fFrom) return false; if(fTo&&iso>fTo) return false; return true; })());
+  let rows = THU_DATA.filter(thuActiveFilter());
   rows.sort((a,b)=>vnToIso(b.ngay).localeCompare(vnToIso(a.ngay)));   // mới → cũ
   const countEl = document.getElementById('thu-count'); if(countEl) countEl.textContent = rows.length+' bản ghi';
   // Thanh Tổng: user không phải Giám đốc KHÔNG xem tổng "Doanh thu phòng"
@@ -3836,6 +3867,25 @@ function ensureTcRange(){
   if(t&&!t.value){ const d=new Date(); const last=new Date(d.getFullYear(),d.getMonth()+1,0); t.value=`${last.getFullYear()}-${String(last.getMonth()+1).padStart(2,'0')}-${String(last.getDate()).padStart(2,'0')}`; }
 }
 function tcSetThisMonth(){ const f=document.getElementById('tc-from'), t=document.getElementById('tc-to'); if(f)f.value=''; if(t)t.value=''; ensureTcRange(); renderThuChi(); }
+// Dựng dòng "Sổ Thu Chi Tổng Hợp" đã lọc (Thu theo từng dòng tiền + Chi hoàn thành) — CHƯA sort.
+// Dùng chung cho bảng hiển thị (sort giảm dần) và xuất Excel (sort tăng dần).
+function buildThuChiBook(){
+  const fLoai = document.getElementById('tc-f-loai')?.value||'';
+  const fPttt = document.getElementById('tc-f-pttt')?.value||currentUser?.tc_filter||'';
+  const from  = document.getElementById('tc-from')?.value||'';
+  const to    = document.getElementById('tc-to')?.value||'';
+  const inRange=r=>{ const iso=vnToIso(r.ngay); return (!from||iso>=from)&&(!to||iso<=to); };
+  const thuUnits = THU_DATA.flatMap(r=> thuLines(r).map(l=>({
+    ngay:r.ngay, mota:r.mota, bophan:r.bophan, nguoi:r.nguoi,
+    pttt:l.pttt, currency:l.currency||'VND',
+    vnd:(l.currency&&l.currency!=='VND')?0:(parseFloat(l.sotien)||0),
+    raw:parseFloat(l.sotien)||0,
+  })));
+  return [
+    ...thuUnits.map(u=>({loai:'thu', ngay:u.ngay, mota:u.mota, bophan:u.bophan, pttt:u.pttt, thu:u.vnd, chi:0, nguoi:u.nguoi, cur:u.currency, raw:u.raw})),
+    ...CHI_DATA.filter(r=>r.tinh_trang==='hoan-thanh').map(r=>({loai:'chi', ngay:r.ngay, mota:r.ten_hang, bophan:r.bophan, pttt:r.pttt, thu:0, chi:chiAmt(r), nguoi:'Kế toán'})),
+  ].filter(r=>(!fLoai||r.loai===fLoai) && (!fPttt||r.pttt===fPttt) && inRange(r));
+}
 function syncThuChiSummary() {
   ensureTcRange();
   const fLoai = document.getElementById('tc-f-loai')?.value||'';
@@ -3885,12 +3935,8 @@ function syncThuChiSummary() {
   const isKt = currentUser?.role==='ketoan';
   ['tc-box-tong-thu','tc-box-tong-chi'].forEach(id=>{ const e=document.getElementById(id); if(e) e.style.display=isKt?'none':''; });
 
-  // Render bảng tổng hợp (mỗi dòng tiền Thu = 1 dòng sổ; Chi 1 dòng/bản ghi)
-  const allRows = [
-    ...thuUnits.map(u=>({loai:'thu', ngay:u.ngay, mota:u.mota, bophan:u.bophan, pttt:u.pttt, thu:u.vnd, chi:0, nguoi:u.nguoi, cur:u.currency, raw:u.raw})),
-    ...CHI_DATA.filter(r=>r.tinh_trang==='hoan-thanh').map(r=>({loai:'chi', ngay:r.ngay, mota:r.ten_hang, bophan:r.bophan, pttt:r.pttt, thu:0, chi:chiAmt(r), nguoi:'Kế toán'})),
-  ].filter(r=>(!fLoai||r.loai===fLoai) && (!fPttt||r.pttt===fPttt) && inRange(r))
-   .sort((a,b)=>(vnToIso(b.ngay)).localeCompare(vnToIso(a.ngay)));
+  // Render bảng tổng hợp (mỗi dòng tiền Thu = 1 dòng sổ; Chi 1 dòng/bản ghi) — hiển thị mới → cũ
+  const allRows = buildThuChiBook().sort((a,b)=>(vnToIso(b.ngay)).localeCompare(vnToIso(a.ngay)));
 
   const ptttBadge={'TM':'badge-tm','CK':'badge-ck','Cà thẻ':'badge-the','Công nợ':'badge-cong-no'};
   const tbody=document.getElementById('tbl-thu-chi-body');
@@ -5719,21 +5765,24 @@ function canApproveDx(d){
   return false;                                                        // cấp 'gd' chỉ giám đốc
 }
 
-function renderDxTable(){
-  try{ syncMobNotif(); }catch(e){}   // cập nhật badge số đề xuất chờ duyệt (không phụ thuộc bộ lọc/early-return)
+// Predicate lọc Đề xuất dùng chung (bảng + xuất Excel) — đọc các ô lọc hiện tại + quyền truong-bp.
+function dxActiveFilter(){
   const fStatus=document.getElementById('dx-f-status')?.value||'';
   const fBp=document.getElementById('dx-f-bp')?.value||'';
   const fFrom=document.getElementById('dx-from')?.value||'';   // yyyy-mm-dd (rỗng = tất cả)
   const fTo=document.getElementById('dx-to')?.value||'';
-
-  let items=DX_DATA.filter(d=>{
+  return d=>{
     if(fStatus&&!d.status.includes(fStatus)) return false;
     if(fBp&&d.bophan!==fBp) return false;
     if(fFrom||fTo){ const iso=vnToIso(d.ngay); if(fFrom&&iso<fFrom) return false; if(fTo&&iso>fTo) return false; }
     // Phân quyền: truong-bp chỉ xem đề xuất của (các) bộ phận mình phụ trách
     if(currentUser?.role==='truong-bp'&&!userBophans(currentUser).includes(d.bophan)) return false;
     return true;
-  });
+  };
+}
+function renderDxTable(){
+  try{ syncMobNotif(); }catch(e){}   // cập nhật badge số đề xuất chờ duyệt (không phụ thuộc bộ lọc/early-return)
+  let items=DX_DATA.filter(dxActiveFilter());
   items.sort((a,b)=>vnToIso(b.ngay).localeCompare(vnToIso(a.ngay)));   // mới → cũ
   const rc=document.getElementById('dx-result-count'); if(rc) rc.textContent=items.length+' đề xuất';
 
