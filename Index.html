@@ -3428,7 +3428,7 @@ function renderChiTab() {
       ? `<button class="btn btn-danger btn-sm" onclick="deleteChiGroup('${esc(g.key)}')" title="Xoá phiếu chi">🗑</button>` : '';
     const groupRow=`<tr class="chi-group-row" style="cursor:pointer;background:var(--cream);" onclick="toggleChiExpand('${esc(g.key)}')">
       <td style="text-align:center;font-size:13px;color:var(--navy);">${open?'▾':'▸'}</td>
-      <td style="font-size:12px;">${esc(first.ngay)}</td>
+      <td onclick="event.stopPropagation()"><input type="date" class="inline-input" value="${vnToIso(first.ngay)}" onchange="updateChiGroupNgay('${esc(g.key)}',this.value)" style="width:132px;font-size:11px;padding:4px 6px;"></td>
       <td style="font-weight:600;">${esc(nccLabel)}${isMerged?` <span class="badge badge-blue" style="font-size:9px;">GỘP ${dxCount}</span>`:''}</td>
       <td style="font-weight:700;color:var(--red);">${fmt(tong)}</td>
       <td onclick="event.stopPropagation()">
@@ -3538,6 +3538,21 @@ function updateChiGroupField(key,field,val){
   });
   if(field==='pttt'){ renderCongNoPtr(); syncThuChiSummary(); }
   syncNow();
+}
+// Sửa ngày phiếu chi (áp cho mọi mặt hàng trong phiếu) + cập nhật ngày lịch sử kho gắn phiếu (ref_chi).
+function updateChiGroupNgay(key,iso){
+  if(!iso) return;                                   // rỗng → giữ ngày cũ
+  const vn = iso.split('-').reverse().join('/');     // yyyy-mm-dd → d/m/yyyy
+  CHI_DATA.filter(r=>chiGroupKey(r)===key).forEach(r=>{
+    r.ngay = vn;
+    KHO_DATA.forEach(it=>(it.lichSu||[]).forEach(h=>{ if(h.ref_chi===r.id) h.ngay = vn; }));   // kho khớp ngày phiếu
+  });
+  syncNow();
+  renderChiTab();                                    // sắp lại theo ngày
+  try{ syncThuChiSummary(); }catch(e){}
+  try{ renderCongNoPtr(); }catch(e){}
+  try{ renderKhoTab(); }catch(e){}
+  showToast('Đã cập nhật ngày phiếu chi',2000,'success');
 }
 function updateChiGroupStatus(key,val){
   CHI_DATA.filter(r=>chiGroupKey(r)===key).forEach(r=>{ r.tinh_trang=val; syncChiKho(r); });   // hoàn thành→nhập kho, bỏ→rút
