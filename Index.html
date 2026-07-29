@@ -3881,9 +3881,19 @@ function buildThuChiBook(){
     vnd:(l.currency&&l.currency!=='VND')?0:(parseFloat(l.sotien)||0),
     raw:parseFloat(l.sotien)||0,
   })));
+  // Chi: gom theo PHIẾU CHI (chiGroupKey) — mỗi phiếu 1 dòng, tổng tiền cả phiếu (không tách từng món).
+  const chiGroups={}; const chiOrder=[];
+  CHI_DATA.filter(r=>r.tinh_trang==='hoan-thanh').forEach(r=>{
+    const k=chiGroupKey(r); if(!chiGroups[k]){ chiGroups[k]=[]; chiOrder.push(k); } chiGroups[k].push(r);
+  });
+  const chiRowsBook = chiOrder.map(k=>{ const recs=chiGroups[k], first=recs[0];
+    const ncc=[...new Set(recs.map(x=>x.ten_ncc).filter(n=>n&&n!=='—'))].join(', ')||first.ten_hang||'—';
+    const bp =[...new Set(recs.map(x=>x.bophan).filter(Boolean))].join(', ')||'';
+    return {loai:'chi', ngay:first.ngay, mota:ncc, bophan:bp, pttt:first.pttt, thu:0, chi:recs.reduce((s,x)=>s+chiAmt(x),0), nguoi:'Kế toán'};
+  });
   return [
     ...thuUnits.map(u=>({loai:'thu', ngay:u.ngay, mota:u.mota, bophan:u.bophan, pttt:u.pttt, thu:u.vnd, chi:0, nguoi:u.nguoi, cur:u.currency, raw:u.raw})),
-    ...CHI_DATA.filter(r=>r.tinh_trang==='hoan-thanh').map(r=>({loai:'chi', ngay:r.ngay, mota:r.ten_hang, bophan:r.bophan, pttt:r.pttt, thu:0, chi:chiAmt(r), nguoi:'Kế toán'})),
+    ...chiRowsBook,
   ].filter(r=>(!fLoai||r.loai===fLoai) && (!fPttt||r.pttt===fPttt) && inRange(r));
 }
 function syncThuChiSummary() {
