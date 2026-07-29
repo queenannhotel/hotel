@@ -3337,26 +3337,29 @@ function renderThuTab() {
 }
 
 // ==================== RENDER CHI TAB ====================
-function renderChiTab() {
-  try{ syncChiNccDefaults(); }catch(e){}   // căn Hoá đơn/PTTT theo NCC (trừ bản đã sửa tay)
+// Predicate lọc Ghi Chi dùng chung (bảng + danh sách ứng viên MERGE) — đọc các ô lọc hiện tại.
+function chiActiveFilter(){
   const fStatus = document.getElementById('chi-f-status')?.value||'';
   const fBp     = document.getElementById('chi-f-bp')?.value||'';
   const fPttt   = document.getElementById('chi-f-pttt')?.value||'';
+  const fNcc    = document.getElementById('chi-f-ncc')?.value||'';
   const fFrom   = document.getElementById('chi-from')?.value||'';   // yyyy-mm-dd (rỗng = tất cả)
   const fTo     = document.getElementById('chi-to')?.value||'';
-  // Đổ dropdown lọc NCC (distinct từ dữ liệu Chi), giữ lựa chọn hiện tại
-  const nccSel=document.getElementById('chi-f-ncc');
-  if(nccSel){ const cur=nccSel.value; const nccs=[...new Set(CHI_DATA.map(r=>r.ten_ncc).filter(n=>n&&n!=='—'))].sort();
-    nccSel.innerHTML='<option value="">Tất cả NCC</option>'+nccs.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('');
-    nccSel.value=nccs.includes(cur)?cur:''; }
-  const fNcc = nccSel?nccSel.value:'';
-  let rows = CHI_DATA.filter(r =>
+  return r =>
     (!fStatus||r.tinh_trang===fStatus) &&
     (!fBp||r.bophan===BP_LABELS[fBp]||r.bophan===fBp) &&
     (!fPttt||r.pttt===fPttt) &&
     (!fNcc||r.ten_ncc===fNcc) &&
-    (()=>{ if(!fFrom&&!fTo) return true; const iso=vnToIso(r.ngay); if(fFrom&&iso<fFrom) return false; if(fTo&&iso>fTo) return false; return true; })()
-  );
+    (()=>{ if(!fFrom&&!fTo) return true; const iso=vnToIso(r.ngay); if(fFrom&&iso<fFrom) return false; if(fTo&&iso>fTo) return false; return true; })();
+}
+function renderChiTab() {
+  try{ syncChiNccDefaults(); }catch(e){}   // căn Hoá đơn/PTTT theo NCC (trừ bản đã sửa tay)
+  // Đổ dropdown lọc NCC (distinct từ dữ liệu Chi), giữ lựa chọn hiện tại — trước khi đọc predicate
+  const nccSel=document.getElementById('chi-f-ncc');
+  if(nccSel){ const cur=nccSel.value; const nccs=[...new Set(CHI_DATA.map(r=>r.ten_ncc).filter(n=>n&&n!=='—'))].sort();
+    nccSel.innerHTML='<option value="">Tất cả NCC</option>'+nccs.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('');
+    nccSel.value=nccs.includes(cur)?cur:''; }
+  let rows = CHI_DATA.filter(chiActiveFilter());
   // Sort: dang-len-don → dang-giao → hoan-thanh
   rows.sort((a,b)=>(CHI_STATUS_ORDER[a.tinh_trang]??99)-(CHI_STATUS_ORDER[b.tinh_trang]??99));
   const countEl=document.getElementById('chi-count'); if(countEl) countEl.textContent=rows.length+' bản ghi';
@@ -3603,11 +3606,14 @@ function openChiMerge(baseKey){
   chiMergeBase=baseKey;
   const baseRecs=CHI_DATA.filter(r=>chiGroupKey(r)===baseKey);
   const baseMid=baseRecs[0]?.merge_id||'';
+  // Chỉ hiện phiếu chi đang khớp bộ lọc hiện tại (khoảng ngày + trạng thái + bộ phận + PTTT + NCC).
+  const visible=new Set(CHI_DATA.filter(chiActiveFilter()).map(chiGroupKey));
   // Ứng viên: các nhóm theo dx_id, KHÁC nhóm base, chưa thuộc merge_id khác (cho phép gộp đơn lẻ).
   const seen=new Set(); const cands=[];
   CHI_DATA.forEach(r=>{
     const k=chiGroupKey(r);
     if(k===baseKey||seen.has(k)) return;
+    if(!visible.has(k)) return;   // ngoài bộ lọc đang chọn → bỏ qua
     if(r.merge_id && r.merge_id!==baseMid) return;   // đã gộp vào phiếu khác → bỏ qua
     seen.add(k);
     const recs=CHI_DATA.filter(x=>chiGroupKey(x)===k);
@@ -3618,10 +3624,11 @@ function openChiMerge(baseKey){
     cands.push({key:k,label});
   });
   const box=document.getElementById('chi-merge-list');
+  const hint='<div style="color:var(--text-muted);font-size:11px;margin-bottom:8px;">Chỉ hiện phiếu chi khớp bộ lọc đang chọn.</div>';
   box.innerHTML = cands.length
-    ? cands.map(c=>`<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;">
+    ? hint+cands.map(c=>`<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;">
         <input type="checkbox" class="chi-merge-chk" value="${esc(c.key)}"><span>${esc(c.label)}</span></label>`).join('')
-    : '<div style="color:var(--text-muted);padding:12px;">Không có phiếu nào khác để gộp.</div>';
+    : hint+'<div style="color:var(--text-muted);padding:12px;">Không có phiếu chi nào khác trong bộ lọc hiện tại để gộp.</div>';
   openModal('modal-chi-merge');
 }
 function confirmChiMerge(){
