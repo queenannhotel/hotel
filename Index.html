@@ -1184,6 +1184,7 @@ textarea{resize:vertical;min-height:68px;}
         <div class="card-body" style="padding:10px 16px;">
           <div class="filter-row">
             <input type="text" id="catalog-search" placeholder="🔍 Tìm tên hàng, mã hàng..." style="width:260px;" oninput="renderCatalog()">
+            <select id="catalog-f-ncc" onchange="renderCatalog()"><option value="">Tất cả NCC</option></select>
             <span id="catalog-count" style="font-size:12px;color:var(--text-muted);margin-left:auto;"></span>
           </div>
         </div>
@@ -3306,6 +3307,7 @@ function renderThuTab() {
   const rowAmt=r=> fPttt ? thuLines(r).filter(l=>l.pttt===fPttt).reduce((s,l)=>s+lineVnd(l),0) : thuVnd(r);
   let rows = THU_DATA.filter(r => (!fDm||r.danhmuc===fDm) && (!fPttt || thuLines(r).some(l=>l.pttt===fPttt))
     && (()=>{ if(!fFrom&&!fTo) return true; const iso=vnToIso(r.ngay); if(fFrom&&iso<fFrom) return false; if(fTo&&iso>fTo) return false; return true; })());
+  rows.sort((a,b)=>vnToIso(b.ngay).localeCompare(vnToIso(a.ngay)));   // mới → cũ
   const countEl = document.getElementById('thu-count'); if(countEl) countEl.textContent = rows.length+' bản ghi';
   // Thanh Tổng: user không phải Giám đốc KHÔNG xem tổng "Doanh thu phòng"
   const isGD = currentUser?.role==='giamdoc';
@@ -3372,6 +3374,7 @@ function renderChiTab() {
     if(!g){ g={key,recs:[],merge_id:r.merge_id||''}; gmap[key]=g; groups.push(g); }
     g.recs.push(r);
   });
+  groups.sort((a,b)=>vnToIso(b.recs[0].ngay).localeCompare(vnToIso(a.recs[0].ngay)));   // nhóm phiếu: mới → cũ
   const khoOpts=Object.keys(KHO_BP_LABELS);
   const html=groups.map(g=>{
     const recs=g.recs, first=recs[0];
@@ -3731,7 +3734,7 @@ function cnPtrGroups(){
       bp:[...new Set(recs.map(r=>r.bophan).filter(Boolean))].join(', ')||'—',   // Nguồn = bộ phận đề xuất
       paid:first.cn_status==='da',
     };
-  });
+  }).sort((a,b)=>vnToIso(b.first.ngay).localeCompare(vnToIso(a.first.ngay)));   // phiếu chi: mới → cũ
 }
 function cnPtrRowHtml(g){
   return `<tr style="background:var(--gold-pale);${g.paid?'opacity:.6;':''}">
@@ -3804,7 +3807,7 @@ function cnStatusSelect(val, onchange){
 // Phải Thu: từ các khoản Ghi Thu có PTTT = Công nợ (khách còn nợ).
 function renderCongNoPthu(){
   const tbody=document.getElementById('tbl-pt-body'); if(!tbody) return;
-  const rows=(THU_DATA||[]).filter(r=>r.pttt==='Công nợ');
+  const rows=(THU_DATA||[]).filter(r=>r.pttt==='Công nợ').sort((a,b)=>vnToIso(b.ngay).localeCompare(vnToIso(a.ngay)));   // mới → cũ
   tbody.innerHTML=rows.length ? rows.map(r=>`<tr${r.cn_status==='da'?' style="opacity:.6;"':''}>
     <td style="font-weight:500;">${esc(r.mota||r.danhmuc)||'—'}</td>
     <td style="font-size:12px;">${esc(r.danhmuc)||'—'}${r.bophan?` · <span style="color:var(--text-muted);">${esc(r.bophan)}</span>`:''}</td>
@@ -5360,11 +5363,20 @@ function saveNcc() {
 
 function renderCatalog(){
 const search=(document.getElementById('catalog-search')?.value||'').toLowerCase();
+// \u0110\u1ed5 dropdown l\u1ecdc NCC (distinct t\u00ean NCC li\u00ean k\u1ebft), gi\u1eef l\u1ef1a ch\u1ecdn hi\u1ec7n t\u1ea1i
+const nccSel=document.getElementById('catalog-f-ncc');
+if(nccSel){ const cur=nccSel.value;
+  const nccs=[...new Set(catalogItems.flatMap(it=>(it.nccIds||[]).map(nccName)).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi'));
+  nccSel.innerHTML='<option value="">T\u1ea5t c\u1ea3 NCC</option>'+nccs.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('');
+  nccSel.value=nccs.includes(cur)?cur:''; }
+const fNcc=nccSel?nccSel.value:'';
 const items=catalogItems.filter(it=>{
   const mBp=!catalogFilter||catBophans(it).includes(catalogFilter);
   const mS=!search||it.name.toLowerCase().includes(search)||it.code.toLowerCase().includes(search);
-  return mBp&&mS;
+  const mNcc=!fNcc||(it.nccIds||[]).some(nid=>nccName(nid)===fNcc);
+  return mBp&&mS&&mNcc;
 });
+items.sort((a,b)=>(a.name||'').localeCompare(b.name||'','vi'));   // t\u00ean A\u2192Z
 document.getElementById('catalog-count').textContent=items.length+' m\u1eb7t h\u00e0ng';
 document.getElementById('catalog-tbody').innerHTML=items.map(it=>{
   const p=calcPrices(it);
@@ -5715,6 +5727,7 @@ function renderDxTable(){
     if(currentUser?.role==='truong-bp'&&!userBophans(currentUser).includes(d.bophan)) return false;
     return true;
   });
+  items.sort((a,b)=>vnToIso(b.ngay).localeCompare(vnToIso(a.ngay)));   // mới → cũ
   const rc=document.getElementById('dx-result-count'); if(rc) rc.textContent=items.length+' đề xuất';
 
   const BP_LABEL={'buong-phong':'Buồng phòng','nha-hang':'Nhà hàng','bep':'Bếp','le-tan':'Lễ tân','ky-thuat':'Kỹ thuật','sale':'Sale','hr':'HR','van-phong':'VP'};
@@ -6485,6 +6498,7 @@ function renderKhoTab(){
   if(tab==='nhap'){renderKhoLogTab('nhap');return;}
   if(tab==='huy'){renderKhoLogTab('huy');return;}
   const items=KHO_DATA.filter(it=>it.bophan===tab&&(!search||(it.ma+it.ten).toLowerCase().includes(search))&&(!fVitri||it.vitri===fVitri));
+  items.sort((a,b)=>(a.ten||'').localeCompare(b.ten||'','vi'));   // tên A→Z
   const cnt=document.getElementById('kho-count'); if(cnt) cnt.textContent=items.length+' mặt hàng';
   document.getElementById('kho-thead').innerHTML=`<tr><th>Mã</th><th>Ảnh</th><th>Tên hàng</th><th>Vị trí</th><th>ĐVT</th><th>Tồn đầu</th><th style="color:var(--green)">Nhập</th><th style="color:var(--yellow)">Xuất</th><th style="color:var(--red)">Huỷ</th><th style="color:var(--green);font-weight:700">Còn lại</th><th>Ghi chú</th><th>Thao tác</th></tr>`;
   document.getElementById('kho-tbody').innerHTML=items.length?items.map(it=>{
@@ -6532,6 +6546,7 @@ function khoGroups(){
 }
 function renderKhoTongHop(search,fVitri){
   let groups=khoGroups().filter(g=>!search||((g.ma||'')+(g.ten||'')).toLowerCase().includes(search));
+  groups.sort((a,b)=>(a.ten||'').localeCompare(b.ten||'','vi'));   // tên A→Z
   const cnt=document.getElementById('kho-count'); if(cnt) cnt.textContent=groups.length+' mặt hàng';
   // KPI tổng: chỉ nhập/xuất/huỷ thực toàn kho (bỏ transfer nội bộ)
   let tN=0,tX=0,tH=0;
@@ -7177,7 +7192,8 @@ function renderTrList(){
   const today=new Date().toLocaleDateString('vi-VN');
   const fS=document.getElementById('tr-f-status')?.value||'';
   const fB=document.getElementById('tr-f-bp')?.value||'';
-  const rows=TR_DATA.filter(d=> d.ngay===today && trVisibleFor(d) && (!fS||d.status===fS) && (!fB||d.bophan===fB));
+  const rows=TR_DATA.filter(d=> d.ngay===today && trVisibleFor(d) && (!fS||d.status===fS) && (!fB||d.bophan===fB))
+    .sort((a,b)=>(b.code||'').localeCompare(a.code||''));   // cùng ngày → mã mới trước
   const rc=document.getElementById('tr-result-count'); if(rc) rc.textContent=rows.length+' yêu cầu';
   tb.innerHTML=rows.length? rows.map(d=>{
     const btns=[];
