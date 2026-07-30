@@ -989,7 +989,7 @@ textarea{resize:vertical;min-height:68px;}
         <div class="table-wrap xwide">
           <table><thead><tr>
             <th style="width:28px;"></th><th>Ngày</th><th>Tên NCC</th><th>Tổng tiền (đ)</th>
-            <th>Hóa đơn</th><th>PTTT</th><th>Số phiếu chi</th><th>Số TK</th><th>Trạng thái</th><th></th>
+            <th>Hóa đơn</th><th>Số HĐ</th><th>PTTT</th><th>Số phiếu chi</th><th>Trạng thái</th><th></th>
           </tr></thead>
           <tbody id="tbl-chi-body"></tbody>
           </table>
@@ -3432,12 +3432,13 @@ function renderChiTab() {
       <td style="font-weight:600;">${esc(nccLabel)}${isMerged?` <span class="badge badge-blue" style="font-size:9px;">GỘP ${dxCount}</span>`:''}</td>
       <td style="font-weight:700;color:var(--red);">${fmt(tong)}</td>
       <td onclick="event.stopPropagation()">
-        <select class="inline-select" onchange="updateChiGroupField('${esc(g.key)}','hoa_don',this.value)" style="min-width:130px;">
+        <select class="inline-select" onchange="updateChiGroupHoaDon('${esc(g.key)}',this.value,this)" style="min-width:130px;">
           <option value="KO VAT"        ${hoa_don==='KO VAT'?'selected':''}>KO VAT</option>
           <option value="VAT-chưa nhận" ${hoa_don==='VAT-chưa nhận'?'selected':''}>VAT — Chưa nhận</option>
           <option value="VAT-đã nhận"   ${hoa_don==='VAT-đã nhận'?'selected':''}>VAT — Đã nhận</option>
         </select>
       </td>
+      <td onclick="event.stopPropagation()"><input class="inline-input chi-sohd-input" value="${esc(first.so_hd||'')}" placeholder="Số HĐ..." onchange="updateChiGroupSoHd('${esc(g.key)}',this.value)" style="width:100px;"></td>
       <td onclick="event.stopPropagation()">
         <select class="inline-select" onchange="updateChiGroupField('${esc(g.key)}','pttt',this.value)">
           <option ${pttt==='TM'?'selected':''}>TM</option>
@@ -3446,7 +3447,6 @@ function renderChiTab() {
         </select>
       </td>
       <td onclick="event.stopPropagation()"><input class="inline-input" value="${esc(first.so_phieu_chi||'')}" placeholder="PC-xxxx" onchange="updateChiGroupField('${esc(g.key)}','so_phieu_chi',this.value)" style="width:90px;"></td>
-      <td onclick="event.stopPropagation()"><input class="inline-input" value="${esc(first.so_tk||'')}" placeholder="Số TK..." onchange="updateChiGroupField('${esc(g.key)}','so_tk',this.value)" style="width:110px;"></td>
       <td onclick="event.stopPropagation()">
         <select class="inline-select" onchange="updateChiGroupStatus('${esc(g.key)}',this.value)" style="border-color:${st==='hoan-thanh'?'var(--green)':st==='dang-giao'?'var(--yellow)':'var(--border)'};">
           <option value="dang-len-don" ${st==='dang-len-don'?'selected':''}>Đang lên đơn</option>
@@ -3538,6 +3538,18 @@ function updateChiGroupField(key,field,val){
   });
   if(field==='pttt'){ renderCongNoPtr(); syncThuChiSummary(); }
   syncNow();
+}
+// Đổi Hoá đơn: nếu chọn "VAT — Đã nhận" → focus ô nhập Số HĐ cùng dòng để nhập ngay.
+function updateChiGroupHoaDon(key,val,selEl){
+  updateChiGroupField(key,'hoa_don',val);
+  if(val==='VAT-đã nhận'){ const inp=selEl?.closest('tr')?.querySelector('.chi-sohd-input'); if(inp) inp.focus(); }
+}
+// Nhập Số HĐ: gõ số → trạng thái Hoá đơn tự nhảy "VAT — Đã nhận" (áp cho cả phiếu). Xoá trắng: giữ trạng thái.
+function updateChiGroupSoHd(key,val){
+  const v=(val||'').trim();
+  CHI_DATA.filter(r=>chiGroupKey(r)===key).forEach(r=>{ r.so_hd=v; if(v){ r.hoa_don='VAT-đã nhận'; r._chi_manual=true; } });
+  syncNow();
+  renderChiTab();   // cập nhật select Hoá đơn khi vừa auto-nhảy
 }
 // Sửa ngày phiếu chi (áp cho mọi mặt hàng trong phiếu) + cập nhật ngày lịch sử kho gắn phiếu (ref_chi).
 function updateChiGroupNgay(key,iso){
