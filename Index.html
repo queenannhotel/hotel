@@ -2233,7 +2233,7 @@ textarea{resize:vertical;min-height:68px;}
     <div class="modal-header"><span class="modal-title">💸 Ghi Chi Thủ Công</span><button class="close-btn" onclick="closeModal('modal-chi')">✕</button></div>
     <div class="form-row">
       <div class="form-group"><label>Ngày chi</label><input type="date" id="chi-ngay" value="2026-07-06"></div>
-      <div class="form-group"><label>Tên hàng / Nội dung</label><input id="chi-ten" placeholder="VD: Mua vật tư sửa chữa"></div>
+      <div class="form-group"><label>Tên hàng / Nội dung</label><div class="select-wrap"><input id="chi-ten" autocomplete="off" placeholder="Gõ tên — chọn từ danh mục hoặc nhập mới" oninput="chiTenInput(this)" onfocus="chiTenInput(this)" onblur="setTimeout(()=>kiCloseDd(this),200)"><div class="dropdown-list"></div></div></div>
     </div>
     <div class="form-row">
       <div class="form-group"><label>Đơn giá (đồng)</label><input type="number" id="chi-dongia" placeholder="0" oninput="calcChiModal()"></div>
@@ -4181,6 +4181,20 @@ function chiNccChange(){
   const hdBack={'KO VAT':'KO VAT','VAT-chưa nhận':'VAT-chua-nhan','VAT-đã nhận':'VAT-da-nhan'};
   const hd=document.getElementById('chi-hoadon'); if(hd) hd.value=hdBack[d.hoa_don]||'KO VAT';
   const pt=document.getElementById('chi-pttt'); if(pt) pt.value=d.pttt;
+}
+// Typeahead ô "Tên hàng" ở Ghi Chi Thủ Công: gõ tên mới tự do HOẶC lọc & chọn từ Danh mục.
+function chiTenInput(inp){
+  const dd=inp.closest('.select-wrap')?.querySelector('.dropdown-list'); if(!dd) return;
+  const q=(inp.value||'').trim().toLowerCase();
+  const list=(catalogItems||[]).filter(it=>!q||(it.name||'').toLowerCase().includes(q)||(it.code||'').toLowerCase().includes(q));
+  if(!list.length){ dd.innerHTML='<div class="dropdown-item" style="color:var(--text-muted);">Không có trong danh mục — có thể gõ tên tự do</div>'; dd.classList.add('open'); return; }
+  dd.innerHTML=list.slice(0,60).map(it=>`<div class="dropdown-item" onmousedown="chiSelectItem('${esc(it.id)}')"><span style="font-weight:600;">${esc(it.name)}</span> <span style="color:var(--text-muted);font-size:11px;">${esc(it.code||'')} · ${esc(it.dvt||'')}</span></div>`).join('');
+  dd.classList.add('open');
+}
+function chiSelectItem(id){
+  const it=(catalogItems||[]).find(x=>x.id===id); if(!it) return;
+  const el=document.getElementById('chi-ten'); if(el) el.value=it.name||'';
+  const dd=document.querySelector('#modal-chi .dropdown-list'); if(dd) dd.classList.remove('open');
 }
 function saveChi() {
   const ten_hang = document.getElementById('chi-ten').value.trim();
