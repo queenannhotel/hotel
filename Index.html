@@ -7830,11 +7830,24 @@ const WRITE_MATRIX = {
   mbData:['giamdoc','truong-bp'], hvLinen:['giamdoc','truong-bp'], hvRewash:['giamdoc','truong-bp'],
   hvCols:['giamdoc','truong-bp'], sx:['giamdoc','truong-bp'],
 };
+// Ánh xạ collection → tab: ai được CẤP TAB tương ứng cũng được ghi/đồng bộ nhóm đó (ngoài quyền theo role).
+const COLLECTION_TAB = {
+  thu:'tab-thu', chi:'tab-chi', ncc:'nha-cung-cap', catalog:'danh-muc',
+  nsLuong:'nhan-su', bhxh:'nhan-su', tncn:'nhan-su',
+  dx:'de-xuat', kho:'kho', transferReq:'yeu-cau-transfer',
+  yc:'buong-phong', ycDeleted:'buong-phong', wsData:'buong-phong', roomStatus:'buong-phong',
+  amData:'buong-phong', mbData:'buong-phong', hvLinen:'buong-phong', hvRewash:'buong-phong',
+  hvCols:'buong-phong', sx:'buong-phong',
+};   // 'cats' KHÔNG map → giữ chỉ Giám đốc
 function canWriteCollection(name){
   const role=currentUser&&currentUser.role;
   if(role==='giamdoc') return true;
   const allow=WRITE_MATRIX[name];
-  return !allow || allow.includes(role); // collection không khai báo -> cho ghi
+  if(!allow || allow.includes(role)) return true; // collection không khai báo, hoặc role đã được phép
+  // Ngoài ra: user được CẤP TAB tương ứng cũng được ghi (đồng bộ theo tab)
+  const tab=COLLECTION_TAB[name];
+  if(tab){ const t=(currentUser&&currentUser.tabs)||DEFAULT_TABS[role]||[]; if(t.includes(tab)) return true; }
+  return false;
 }
 
 async function flushToCloud(){
