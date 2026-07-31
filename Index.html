@@ -6667,7 +6667,15 @@ function renderKhoTongHop(search,fVitri){
     let tonDau=0,nhap=0,xuat=0,huy=0,con=0;
     g.rows.forEach(it=>{ const r=calcKyStatsReal(it); const s=calcKyStats(it); tonDau+=it.ton_dau||0; nhap+=r.nhap; xuat+=r.xuat; huy+=r.huy; con+=s.con; });
     const cc=con<=0?'var(--red)':con<=5?'var(--yellow)':'var(--green)';
-    const bpBadges=g.rows.filter(it=>calcKyStats(it).con>0).map(it=>`<span class="badge badge-navy" style="font-size:9px;margin:1px;">${KHO_BP_LABELS[it.bophan]||it.bophan}: ${calcKyStats(it).con}</span>`).join('')||'<span style="font-size:11px;color:var(--text-muted);">—</span>';
+    // Gộp tổng "còn lại" theo TỪNG bộ phận (mỗi bộ phận 1 badge) — không lặp lại theo từng dòng kho.
+    const bpTotals={};
+    g.rows.forEach(it=>{ bpTotals[it.bophan]=(bpTotals[it.bophan]||0)+calcKyStats(it).con; });
+    const bpOrder=Object.keys(KHO_BP_LABELS);
+    const bpBadges=Object.keys(bpTotals)
+      .sort((a,b)=>(bpOrder.indexOf(a)+1||99)-(bpOrder.indexOf(b)+1||99))
+      .filter(bp=>bpTotals[bp]>0)
+      .map(bp=>`<span class="badge badge-navy" style="font-size:9px;margin:1px;">${KHO_BP_LABELS[bp]||bp}: ${bpTotals[bp]}</span>`)
+      .join('')||'<span style="font-size:11px;color:var(--text-muted);">—</span>';
     return `<tr>
       <td style="font-size:11px;font-weight:600;color:var(--text-muted);">${esc(g.ma)}</td>
       <td><div style="font-weight:500;">${esc(g.ten)}</div></td>
