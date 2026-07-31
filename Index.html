@@ -2045,6 +2045,26 @@ textarea{resize:vertical;min-height:68px;}
   </div>
 </div>
 
+<!-- ===== MODAL XUẤT HÀNG CUỐI THÁNG (tiêu dùng / thực phẩm) ===== -->
+<div class="modal-overlay" id="modal-kho-xuatthang">
+  <div class="modal modal-lg">
+    <div class="modal-header"><span class="modal-title" id="kxt-title">Xuất cuối tháng</span><button class="close-btn" onclick="closeModal('modal-kho-xuatthang')">✕</button></div>
+    <div class="form-row">
+      <div class="form-group"><label>Tháng xuất</label><input type="month" id="kxt-thang" onchange="renderKhoXuatThang()"></div>
+      <div class="form-group"><label>Tổng kết</label><div id="kxt-summary" style="padding:8px 12px;background:var(--gold-pale);border-radius:8px;font-weight:700;color:var(--yellow);">—</div></div>
+    </div>
+    <div style="font-size:12px;color:var(--text-muted);margin:2px 0 8px;">Xuất hết toàn bộ tồn còn lại của mặt hàng loại này ở <b>tất cả kho</b>. Kiểm tra danh sách rồi bấm Xác nhận.</div>
+    <div class="table-wrap" style="max-height:340px;overflow:auto;">
+      <table><thead><tr><th>Kho</th><th>Tên hàng</th><th>ĐVT</th><th style="text-align:center;">SL xuất (hết tồn)</th></tr></thead>
+      <tbody id="kxt-body"></tbody></table>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
+      <button class="btn btn-ghost" onclick="closeModal('modal-kho-xuatthang')">Huỷ</button>
+      <button class="btn btn-gold" onclick="confirmKhoXuatThang()">✅ Xác nhận xuất hết</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===== MODAL TẠO YÊU CẦU KHÁCH ===== -->
 <div class="modal-overlay" id="modal-bp-yc">
   <div class="modal">
@@ -2417,6 +2437,14 @@ textarea{resize:vertical;min-height:68px;}
     <div class="form-row">
       <div class="form-group"><label>Đơn vị tính</label><select id="ai-dvt"><option>bộ</option><option>cái</option><option>kg</option><option>lít</option><option>hộp</option><option>thùng</option><option>m²</option><option>cuộn</option><option>lần</option><option>đợt</option><option>tờ</option><option>gói</option><option>vỉ</option><option>can</option><option>đôi</option><option>túi</option><option>lon</option><option>chai</option><option>cây</option><option>xấp</option><option>sợi</option><option>ram</option></select></div>
       <div class="form-group"><label>Bộ phận sử dụng <span style="color:var(--text-muted);font-weight:400;font-size:11px;">— chọn nhiều</span></label><div id="ai-bophan-list" style="display:flex;flex-wrap:wrap;gap:6px 14px;padding:8px 0;"></div></div>
+    </div>
+    <div class="form-row full">
+      <div class="form-group"><label>Loại hàng <span style="color:var(--text-muted);font-weight:400;font-size:11px;">— chọn 1 (để trống nếu không phân loại)</span></label>
+        <div style="display:flex;gap:20px;padding:6px 0;">
+          <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;"><input type="checkbox" id="ai-loai-td" onchange="aiLoaiToggle('td')"> 📦 Hàng tiêu dùng</label>
+          <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;"><input type="checkbox" id="ai-loai-tp" onchange="aiLoaiToggle('tp')"> 🍽 Hàng thực phẩm</label>
+        </div>
+      </div>
     </div>
     <!-- NCC & GIÁ theo từng nhà cung cấp -->
     <div style="background:var(--cream);border:1px solid var(--border);border-radius:10px;padding:14px 15px;margin-bottom:12px;">
@@ -5488,7 +5516,7 @@ document.getElementById('catalog-tbody').innerHTML=items.map(it=>{
   const histRows=(it.purchaseHistory||[]).slice().reverse().slice(0,3).map(h=>`<div class="purchase-row"><span>${h.date}</span><span style="font-weight:600;color:var(--navy);">${fmt(h.price)}</span>${h.note?`<span style="color:var(--text-muted);font-size:10px;">${h.note}</span>`:''}</div>`).join('');
   return `<tr>
     <td style="font-size:11px;color:var(--text-muted);font-weight:600;">${it.code}</td>
-    <td><div style="font-weight:500;">${it.name}</div>${it.note?`<div style="font-size:11px;color:var(--text-muted);">${it.note}</div>`:''}</td>
+    <td><div style="font-weight:500;">${it.name}</div>${it.loaiHang?`<span class="badge ${it.loaiHang==='thuc-pham'?'badge-green':'badge-blue'}" style="font-size:9px;margin-top:2px;display:inline-block;">${LOAI_HANG_LABEL[it.loaiHang]}</span>`:''}${it.note?`<div style="font-size:11px;color:var(--text-muted);">${it.note}</div>`:''}</td>
     <td>${it.dvt}</td>
     <td>${catBophans(it).map(b=>`<span class="badge badge-navy" style="margin:1px;">${BP_LABELS[b]||b}</span>`).join('')||'—'}</td>
     <td style="max-width:180px;">${nccBadges||'\u2014'}</td>
@@ -5518,6 +5546,23 @@ function catVatParts(it){
 function catBophans(it){
   if(it && Array.isArray(it.bophans) && it.bophans.length) return it.bophans;
   return (it && it.bophan) ? [it.bophan] : [];
+}
+// Loại hàng: 'tieu-dung' | 'thuc-pham' | '' (chọn 1). Dùng cho phân loại + xuất cuối tháng.
+const LOAI_HANG_LABEL={'tieu-dung':'Tiêu dùng','thuc-pham':'Thực phẩm'};
+function aiLoaiToggle(which){   // tick 1 loại → bỏ loại kia (chỉ 1 loại)
+  const td=document.getElementById('ai-loai-td'), tp=document.getElementById('ai-loai-tp');
+  if(which==='td' && td && td.checked && tp) tp.checked=false;
+  if(which==='tp' && tp && tp.checked && td) td.checked=false;
+}
+function aiReadLoai(){
+  if(document.getElementById('ai-loai-td')?.checked) return 'tieu-dung';
+  if(document.getElementById('ai-loai-tp')?.checked) return 'thuc-pham';
+  return '';
+}
+function aiSetLoai(v){
+  const td=document.getElementById('ai-loai-td'), tp=document.getElementById('ai-loai-tp');
+  if(td) td.checked = v==='tieu-dung';
+  if(tp) tp.checked = v==='thuc-pham';
 }
 // D\u1ef1ng nh\u00f3m checkbox b\u1ed9 ph\u1eadn s\u1eed d\u1ee5ng trong modal Th\u00eam/S\u1eeda m\u1eb7t h\u00e0ng (t\u1eeb CATS.bophan)
 function renderAiBophanChecks(selected){
@@ -5615,7 +5660,7 @@ const suppliers=aiReadSuppliers();
 const nccIds=[...new Set(suppliers.map(s=>s.nccId))];   // suy ra danh s\u00e1ch NCC li\u00ean k\u1ebft
 const bophans=aiReadBophans();
 if(!bophans.length){ showToast('Ch\u1ecdn \u00edt nh\u1ea5t 1 b\u1ed9 ph\u1eadn s\u1eed d\u1ee5ng!',2500,'error'); return; }
-const base={code:document.getElementById('ai-code').value.trim(),name,dvt:document.getElementById('ai-dvt').value,bophans,bophan:bophans[0],nccIds,suppliers,note:document.getElementById('ai-note').value.trim()};
+const base={code:document.getElementById('ai-code').value.trim(),name,dvt:document.getElementById('ai-dvt').value,bophans,bophan:bophans[0],loaiHang:aiReadLoai(),nccIds,suppliers,note:document.getElementById('ai-note').value.trim()};
 if(editingItemId){
   const idx=catalogItems.findIndex(x=>x.id===editingItemId);
   if(idx>-1) catalogItems[idx]={...catalogItems[idx],...base};
@@ -6585,7 +6630,9 @@ function switchKhoTab(tab,el){
   // Cập nhật nút action trong header
   const actionWrap=document.getElementById('kho-action-btns');
   if(actionWrap){
-    if(tab==='xuat') actionWrap.innerHTML=`<button class="btn btn-yellow btn-sm" onclick="openKhoModalXuat()">⬇ Ghi Xuất hàng</button>`;
+    if(tab==='xuat') actionWrap.innerHTML=`<button class="btn btn-yellow btn-sm" onclick="openKhoModalXuat()">⬇ Ghi Xuất hàng</button>
+      <button class="btn btn-ghost btn-sm" onclick="openKhoXuatThang('tieu-dung')" title="Cuối tháng: xuất hết tồn hàng tiêu dùng ở mọi kho">📦 Ghi xuất Tiêu dùng (tháng)</button>
+      <button class="btn btn-ghost btn-sm" onclick="openKhoXuatThang('thuc-pham')" title="Cuối tháng: xuất hết tồn hàng thực phẩm ở mọi kho">🍽 Ghi xuất Thực phẩm (tháng)</button>`;
     else if(tab==='huy') actionWrap.innerHTML=`<button class="btn btn-danger btn-sm" onclick="openKhoModalHuy()">🗑 Ghi Huỷ hàng</button>`;
     else if(tab==='nhap') actionWrap.innerHTML=`<small style="font-size:12px;color:var(--text-muted);">Nhập tự động từ Đề xuất được duyệt</small>`;
     else actionWrap.innerHTML=`<button class="btn btn-ghost btn-sm" onclick="document.getElementById('kho-import-excel').click()">📥 Import Excel</button>
@@ -6971,6 +7018,53 @@ function saveKhoCommit(px,loai){
 }
 function saveKhoXuat(){ saveKhoCommit('kx','xuat'); }
 function saveKhoHuy(){ saveKhoCommit('kh','huy'); }
+
+// ===== Xuất cuối tháng theo LOẠI (tiêu dùng / thực phẩm): xuất hết tồn ở MỌI kho, xem trước rồi xác nhận =====
+let kxtLoai='';
+// Loại hàng của 1 dòng kho: tra Danh mục theo tên (phân loại lưu ở catalogItems.loaiHang).
+function itemLoaiHang(khoRow){
+  const c=(catalogItems||[]).find(x=>(x.name||'').trim().toLowerCase()===(khoRow.ten||'').trim().toLowerCase());
+  return c?(c.loaiHang||''):'';
+}
+function khoXuatThangRows(){
+  const rows=[];
+  KHO_DATA.forEach(it=>{ if(itemLoaiHang(it)===kxtLoai){ const con=calcKyStats(it).con; if(con>0) rows.push({it,con}); } });
+  rows.sort((a,b)=>(a.it.ten||'').localeCompare(b.it.ten||'','vi') || (KHO_BP_LABELS[a.it.bophan]||'').localeCompare(KHO_BP_LABELS[b.it.bophan]||''));
+  return rows;
+}
+function openKhoXuatThang(loai){
+  kxtLoai=loai;
+  document.getElementById('kxt-title').textContent=`⬇ Xuất ${LOAI_HANG_LABEL[loai]||''} cuối tháng — xuất hết tồn ở mọi kho`;
+  const d=new Date(); document.getElementById('kxt-thang').value=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  renderKhoXuatThang();
+  openModal('modal-kho-xuatthang');
+}
+function renderKhoXuatThang(){
+  const rows=khoXuatThangRows();
+  const body=document.getElementById('kxt-body'); if(!body) return;
+  body.innerHTML=rows.length ? rows.map(({it,con})=>`<tr>
+    <td><span class="badge badge-navy" style="font-size:10px;">${esc(KHO_BP_LABELS[it.bophan]||it.bophan)}</span></td>
+    <td style="font-weight:500;">${esc(it.ten)}</td>
+    <td>${esc(it.dvt||'')}</td>
+    <td style="text-align:center;font-weight:700;color:var(--yellow);">${con}</td>
+  </tr>`).join('') : `<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-muted);">Không có mặt hàng ${LOAI_HANG_LABEL[kxtLoai]||''} còn tồn ở kho nào</td></tr>`;
+  const totSl=rows.reduce((s,r)=>s+r.con,0);
+  const sm=document.getElementById('kxt-summary'); if(sm) sm.textContent=`${rows.length} dòng · tổng SL ${totSl}`;
+}
+function confirmKhoXuatThang(){
+  const rows=khoXuatThangRows();
+  if(!rows.length){ showToast('Không có mặt hàng để xuất',2200,'info'); return; }
+  const thang=document.getElementById('kxt-thang').value||'';   // yyyy-mm
+  let ngay, mmLabel;
+  if(thang){ const [y,m]=thang.split('-').map(Number); const last=new Date(y,m,0).getDate(); ngay=`${last}/${m}/${y}`; mmLabel=`${String(m).padStart(2,'0')}/${y}`; }
+  else { ngay=new Date().toLocaleDateString('vi-VN'); mmLabel=ngay; }
+  const nguoi=currentUser?.fullname||'Kế toán';
+  const lydo=`Xuất ${LOAI_HANG_LABEL[kxtLoai]||''} cuối tháng ${mmLabel}`;
+  rows.forEach(({it,con})=>{ (it.lichSu=it.lichSu||[]).push({ngay,loai:'xuat',sl:con,tu:it.bophan,den:'',lydo,nguoi}); });
+  closeModal('modal-kho-xuatthang');
+  renderKhoTab(); syncNow();
+  showToast(`✅ Đã xuất hết ${rows.length} dòng ${LOAI_HANG_LABEL[kxtLoai]||''} (${mmLabel})`,2800,'success');
+}
 
 // Cộng số lượng 1 mặt hàng đã duyệt vào KHO KT (kho tổng/kế toán) qua lịch sử nhập.
 function pushDxToKho(item, dx){
@@ -7494,6 +7588,7 @@ function editItem(id){
   document.getElementById('ai-code').value=it.code||'';
   document.getElementById('ai-dvt').value=it.dvt||'';
   renderAiBophanChecks(catBophans(it));
+  aiSetLoai(it.loaiHang||'');
   const note=document.getElementById('ai-note'); if(note) note.value=it.note||'';
   const hist=document.getElementById('ai-history-wrap'); if(hist) hist.style.display='none';
   // Nạp các dòng NCC & Giá. Tương thích item cũ (chỉ có nccIds) → dựng suppliers từ nccIds.
@@ -7529,6 +7624,7 @@ function openAddItemModal(){
   ['ai-name','ai-code','ai-note'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   const hist=document.getElementById('ai-history-wrap'); if(hist) hist.style.display='none';
   renderAiBophanChecks([]);
+  aiSetLoai('');
   aiRenderSuppliers([]);
   const del=document.getElementById('ai-delete-btn'); if(del) del.style.display='none';
   openModal('modal-add-item');
