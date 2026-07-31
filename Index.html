@@ -3538,8 +3538,10 @@ function migrateChiKho(){
 }
 // Gộp các dòng kho TRÙNG (cùng kho + tên + ĐVT) thành 1 — sửa "1 mặt hàng 2 dòng"/số âm do tách đôi.
 // Sắp theo id để mọi máy chọn dòng giữ giống nhau (đồng bộ nhất quán). Idempotent.
+// Chuẩn hoá tên/ĐVT kho để so trùng: NFC (gộp NFD↔NFC), bỏ khoảng trắng thừa, không phân biệt hoa/thường.
+function khoNorm(s){ return (s||'').normalize('NFC').trim().toLowerCase().replace(/\s+/g,' '); }
 function mergeKhoDuplicates(){
-  const keyOf=it=>`${it.bophan||''}|${(it.ten||'').trim().toLowerCase()}|${(it.dvt||'').trim().toLowerCase()}`;
+  const keyOf=it=>`${it.bophan||''}|${khoNorm(it.ten)}|${khoNorm(it.dvt)}`;
   const keep=new Map(); const removeIds=new Set();
   [...KHO_DATA].sort((a,b)=>String(a.id)<String(b.id)?-1:1).forEach(it=>{
     const k=keyOf(it), g=keep.get(k);
@@ -3617,7 +3619,7 @@ function addChiKhoEntry(r){
   const kho=r.kho||'kt', ten=r.ten_hang, dvt=r.dvt||''; if(!ten) return;
   const sl=parseFloat(r.sl)||0;
   const ngay=r.ngay||new Date().toLocaleDateString('vi-VN');
-  let it=KHO_DATA.find(x=>x.bophan===kho && x.ten===ten && (x.dvt||'')===dvt);
+  let it=KHO_DATA.find(x=>x.bophan===kho && khoNorm(x.ten)===khoNorm(ten) && khoNorm(x.dvt||'')===khoNorm(dvt));
   if(!it){ it={id:'KH'+Date.now()+Math.floor(Math.random()*1000),ma:'',ten,dvt:dvt||'Cái',bophan:kho,vitri:(typeof KHO_VITRI_LIST!=='undefined'?KHO_VITRI_LIST[0]:'VP'),ton_dau:0,img:'📦',ghichu:'',lichSu:[]}; KHO_DATA.push(it); }
   if(!Array.isArray(it.lichSu)) it.lichSu=[];
   if(sl>0 && !it.lichSu.some(h=>h.ref_chi===r.id)){
@@ -6903,7 +6905,7 @@ function saveKhoItem(){
     if(idx>-1)KHO_DATA[idx]={...KHO_DATA[idx],...data};
   } else {
     // Đã có mặt hàng cùng kho + tên + ĐVT → CỘNG vào tồn đầu món có sẵn (không tạo dòng trùng)
-    const dup=KHO_DATA.find(x=>x.bophan===data.bophan && (x.ten||'').trim().toLowerCase()===data.ten.trim().toLowerCase() && (x.dvt||'').trim().toLowerCase()===(data.dvt||'').trim().toLowerCase());
+    const dup=KHO_DATA.find(x=>x.bophan===data.bophan && khoNorm(x.ten)===khoNorm(data.ten) && khoNorm(x.dvt||'')===khoNorm(data.dvt||''));
     if(dup){
       dup.ton_dau=(parseFloat(dup.ton_dau)||0)+data.ton_dau;
       if(!Array.isArray(dup.lichSu)) dup.lichSu=[];
@@ -7074,7 +7076,7 @@ function pushDxToKho(item, dx){
   const lydo=`Nhập từ MH (ĐX: ${dx?.id||''})`;
   // Khớp theo tên + ĐVT để 2 mặt hàng trùng tên khác đơn vị không bị gộp chung 1 dòng kho.
   const dvt=item.dvt||'Cái';
-  let ktItem=KHO_DATA.find(it=>it.ten===item.ten&&(it.dvt||'Cái')===dvt&&it.bophan==='kt');
+  let ktItem=KHO_DATA.find(it=>it.bophan==='kt'&&khoNorm(it.ten)===khoNorm(item.ten)&&khoNorm(it.dvt||'Cái')===khoNorm(dvt));
   if(ktItem){ ktItem.lichSu.push({ngay,loai:'nhap',sl,tu:'',den:'kt',lydo,nguoi:'Kế toán'}); }
   else{ KHO_DATA.push({id:'KH'+Date.now()+Math.floor(Math.random()*1000),ma:'KTO-'+(Date.now().toString().slice(-4))+Math.floor(Math.random()*90+10),ten:item.ten,dvt:item.dvt||'Cái',bophan:'kt',vitri:'VP',ton_dau:0,img:'📦',ghichu:`Tạo từ ĐX ${dx?.id||''}`,lichSu:[{ngay,loai:'nhap',sl,tu:'',den:'kt',lydo,nguoi:'Kế toán'}]}); }
 }
