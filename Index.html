@@ -5756,11 +5756,11 @@ function dxRowHtml(){
     <div class="dxr-hint" style="grid-column:1 / -1;font-size:11px;color:var(--green);display:none;"></div>
   </div>`;
 }
-function dxAddRow(){ const box=document.getElementById('dx-items'); if(box) box.insertAdjacentHTML('beforeend',dxRowHtml()); }
+function dxAddRow(){ const box=document.getElementById('dx-items'); if(box){ box.insertAdjacentHTML('beforeend',dxRowHtml()); typeof dxSaveDraftDebounced==='function'&&dxSaveDraftDebounced(); } }
 function dxRemoveRow(btn){
   const box=document.getElementById('dx-items'); const row=btn.closest('.dx-item-row'); if(!box||!row) return;
   if(box.querySelectorAll('.dx-item-row').length<=1){ showToast('Cần ít nhất 1 mặt hàng',2000,'info'); return; }
-  row.remove(); dxUpdateTotal();
+  row.remove(); dxUpdateTotal(); dxSaveDraftDebounced&&dxSaveDraftDebounced();
 }
 // Đóng dropdown trong cùng ô (.select-wrap) của input.
 function dxCloseDd(inp){ const dd=inp.closest('.select-wrap')?.querySelector('.dropdown-list'); if(dd) dd.classList.remove('open'); }
@@ -5801,7 +5801,7 @@ function dxSelectItem(el, id){
   dxCloseDd(tenEl);
   // Tự bung dropdown NCC của đúng mặt hàng vừa chọn
   const nccEl=row.querySelector('.dxr-ncc'); if(nccEl){ nccEl.value=''; dxNccInput(nccEl,true); nccEl.focus(); }
-  dxUpdateTotal();
+  dxUpdateTotal(); dxSaveDraftDebounced&&dxSaveDraftDebounced();
 }
 
 // ---- Dropdown Nhà cung cấp (theo mặt hàng đã chọn) ----
@@ -5843,6 +5843,7 @@ function dxPickNccPrice(el, name){
       dxUpdateTotal();
     }
   }
+  dxSaveDraftDebounced&&dxSaveDraftDebounced();
 }
 function dxUpdateTotal(){
   let tong=0;
@@ -5967,6 +5968,7 @@ function submitDx(){
     // Cập nhật phiếu đang sửa — giữ nguyên trạng thái/luồng/người; cho cập nhật ngày tạo.
     const dx=DX_DATA.find(x=>x.id===editingDxId);
     if(dx){ dx.bophan=bophan; dx.priority=priority; dx.items=items; dx.ngay=ngay; }
+    dxClearDraft(editingDxId);   // đã Cập nhật → xoá nháp
     editingDxId=null;
     closeModal('modal-de-xuat');
     renderDxTable();
@@ -5985,6 +5987,7 @@ function submitDx(){
     ghichu:'', items,
   };
   DX_DATA.unshift(newDx);
+  dxClearDraft('new');   // đã Gửi → xoá nháp tạo mới
   closeModal('modal-de-xuat');
   renderDxTable();
   syncNow();
@@ -5992,6 +5995,46 @@ function submitDx(){
   showToast('✅ Đã gửi đề xuất '+items.length+' mặt hàng',2500,'success');
 }
 let editingDxId=null;
+// ===== Nháp Đề xuất: auto-lưu localStorage khi đang chỉnh, khôi phục khi mở lại (không mất khi bấm ra ngoài) =====
+let DX_DRAFTS={}; const DX_DRAFT_LS='qah_dx_drafts'; let _dxDraftTimer=null;
+function dxLoadDrafts(){ try{ DX_DRAFTS=JSON.parse(localStorage.getItem(DX_DRAFT_LS)||'{}')||{}; }catch(e){ DX_DRAFTS={}; } }
+function dxPersistDrafts(){ try{ localStorage.setItem(DX_DRAFT_LS, JSON.stringify(DX_DRAFTS)); }catch(e){} }
+function dxDraftKey(){ return editingDxId || 'new'; }
+function dxSerializeForm(){
+  const items=[...document.querySelectorAll('#dx-items .dx-item-row')].map(r=>({
+    itemId:r.dataset.itemId||'',
+    ten:r.querySelector('.dxr-ten')?.value||'',
+    ncc:r.querySelector('.dxr-ncc')?.value||'',
+    sl:r.querySelector('.dxr-sl')?.value||'',
+    dvt:r.querySelector('.dxr-dvt')?.value||'',
+    dongia:r.querySelector('.dxr-dongia')?.value||'',
+    dongiaht:r.querySelector('.dxr-dongiaht')?.value||'',
+    lydo:r.querySelector('.dxr-lydo')?.value||'',
+  }));
+  return { bophan:document.getElementById('dx-bophan')?.value||'', priority:document.getElementById('dx-priority')?.value||'Thường', ngay:document.getElementById('dx-ngay')?.value||'', items, ts:Date.now() };
+}
+function dxSaveDraft(){
+  if(!document.getElementById('modal-de-xuat')?.classList.contains('open')) return;   // chỉ lưu khi form đang mở
+  DX_DRAFTS[dxDraftKey()]=dxSerializeForm(); dxPersistDrafts();
+}
+function dxSaveDraftDebounced(){ clearTimeout(_dxDraftTimer); _dxDraftTimer=setTimeout(dxSaveDraft,300); }
+function dxClearDraft(key){ delete DX_DRAFTS[key==null?dxDraftKey():key]; dxPersistDrafts(); }
+function dxHasDraft(){ const d=DX_DRAFTS[dxDraftKey()]; return !!(d && Array.isArray(d.items) && d.items.some(i=>(i.ten||'').trim())); }
+function dxApplyDraft(d){
+  const bp=document.getElementById('dx-bophan'); if(bp) bp.value=d.bophan||'';
+  const pr=document.getElementById('dx-priority'); if(pr) pr.value=d.priority||'Thường';
+  const dn=document.getElementById('dx-ngay'); if(dn) dn.value=d.ngay||'';
+  const box=document.getElementById('dx-items'); if(box) box.innerHTML='';
+  (Array.isArray(d.items)&&d.items.length?d.items:[{}]).forEach(it=>{
+    dxAddRow();
+    const row=document.querySelector('#dx-items .dx-item-row:last-child'); if(!row) return;
+    row.dataset.itemId=it.itemId||'';
+    const set=(sel,v)=>{ const el=row.querySelector(sel); if(el) el.value=v; };
+    set('.dxr-ten',it.ten||''); set('.dxr-ncc',it.ncc||''); set('.dxr-sl',it.sl||''); set('.dxr-dvt',it.dvt||'');
+    set('.dxr-dongia',it.dongia||''); set('.dxr-dongiaht',it.dongiaht||''); set('.dxr-lydo',it.lydo||'');
+  });
+  dxUpdateTotal&&dxUpdateTotal();
+}
 // Mở lại form đề xuất để sửa 1 phiếu (chỉ khi còn chờ duyệt).
 function editDx(id){
   const d=DX_DATA.find(x=>x.id===id); if(!d) return;
@@ -6014,6 +6057,7 @@ function editDx(id){
   const title=document.getElementById('dx-modal-title'); if(title) title.textContent='✏️ Sửa Đề Xuất Mua Hàng';
   const sbtn=document.getElementById('dx-submit-btn'); if(sbtn) sbtn.textContent='💾 Cập nhật';
   openModal('modal-de-xuat');
+  if(dxHasDraft()){ dxApplyDraft(DX_DRAFTS[dxDraftKey()]); showToast('Đã khôi phục nội dung đang chỉnh dở',2400,'info'); }
 }
 function deleteDx(id){
   const d=DX_DATA.find(x=>x.id===id); if(!d) return;
@@ -7503,6 +7547,7 @@ function openDeXuatModal(){
   const wrap=document.getElementById('dx-total-wrap'); if(wrap) wrap.style.display='none';
   const val=document.getElementById('dx-total-val'); if(val) val.textContent='—';
   openModal('modal-de-xuat');
+  if(dxHasDraft()){ dxApplyDraft(DX_DRAFTS[dxDraftKey()]); showToast('Đã khôi phục nội dung đang soạn dở',2400,'info'); }
 }
 function openDxModal(){ openDeXuatModal(); }
 
@@ -7544,7 +7589,10 @@ function closeModal(id){
   document.getElementById(id).classList.remove('open');
   if(id==='modal-add-user') editingUserId=null;
 }
-document.querySelectorAll('.modal-overlay').forEach(o=>o.addEventListener('click',e=>{ if(e.target===o) o.classList.remove('open'); }));
+document.querySelectorAll('.modal-overlay').forEach(o=>o.addEventListener('click',e=>{ if(e.target===o){ if(o.id==='modal-de-xuat'){ try{ dxSaveDraft(); }catch(_){} } o.classList.remove('open'); } }));
+// Đề xuất: nạp nháp đã lưu + auto-lưu khi gõ/đổi trong form
+try{ dxLoadDrafts(); }catch(_){}
+(function(){ const m=document.getElementById('modal-de-xuat'); if(m){ m.addEventListener('input',dxSaveDraftDebounced); m.addEventListener('change',dxSaveDraftDebounced); } })();
 
 // ==================== MOBILE HELPERS ====================
 function isMobile(){ return window.innerWidth <= 768; }
