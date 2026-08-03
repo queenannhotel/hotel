@@ -2049,6 +2049,51 @@ textarea{resize:vertical;min-height:68px;}
   </div>
 </div>
 
+<!-- ===== MODAL NHẬP HÀNG THỦ CÔNG ===== -->
+<div class="modal-overlay" id="modal-kho-nhap">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title">📥 Ghi Nhập Hàng Thủ Công</span><button class="close-btn" onclick="closeModal('modal-kho-nhap')">✕</button></div>
+    <div class="form-row">
+      <div class="form-group"><label>Ngày nhập</label><input type="date" id="kn-ngay"></div>
+      <div class="form-group"><label>Nhập vào kho</label>
+        <select id="kn-bophan" onchange="khoRefreshBalances('kn')">
+          <option value="kt">Kho KT</option><option value="bep">Kho Bếp</option>
+          <option value="nha-hang">Kho Nhà hàng</option><option value="hk">Kho HK</option>
+          <option value="ky-thuat">Kho Kỹ thuật</option><option value="van-phong">Kho Văn phòng</option>
+          <option value="le-tan">Kho Lễ tân</option>
+        </select>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin:6px 0 8px;">
+      <label style="margin:0;">Mặt hàng nhập <span style="color:var(--red)">*</span></label>
+      <button class="btn btn-ghost btn-sm" type="button" onclick="khoAddRow('kn')">＋ Thêm món</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1.5fr 60px 1.5fr 30px;gap:6px;font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.3px;padding:0 8px;margin-bottom:3px;">
+      <span>Tên hàng</span><span>SL Nhập</span><span>Lý do</span><span></span>
+    </div>
+    <div id="kn-items"></div>
+    <div class="form-group" style="margin-bottom:12px;">
+      <label>Hình ảnh minh chứng</label>
+      <div class="img-picker" id="kn-img-picker" ondragover="imgPickerDrag(event,'kn')" ondragleave="imgPickerDragLeave('kn')" ondrop="imgPickerDrop(event,'kn')">
+        <img id="kn-img-preview" class="img-picker-preview" src="">
+        <div id="kn-img-emoji" class="img-picker-emoji" style="font-size:22px;color:var(--text-muted);">📷</div>
+        <div class="img-picker-btns">
+          <button type="button" class="img-picker-btn" onclick="document.getElementById('kn-img-file').click()">📁 Chọn file</button>
+          <button type="button" class="img-picker-btn" onclick="imgPickerPastePrompt('kn')">📋 Paste URL</button>
+          <button type="button" class="img-picker-btn" onclick="imgPickerClear('kn')" id="kn-img-clear" style="display:none;color:var(--red);border-color:var(--red);">✕ Xoá</button>
+        </div>
+        <div class="img-picker-hint">Kéo thả ảnh hoặc Ctrl+V paste từ clipboard</div>
+        <input type="file" id="kn-img-file" accept="image/*" style="display:none;" onchange="imgPickerFile(event,'kn')">
+        <input type="hidden" id="kn-img">
+      </div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
+      <button class="btn btn-ghost" onclick="closeModal('modal-kho-nhap')">Huỷ</button>
+      <button class="btn btn-gold" onclick="saveKhoNhap()">✅ Xác nhận Nhập</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===== MODAL XUẤT HÀNG CUỐI THÁNG (tiêu dùng / thực phẩm) ===== -->
 <div class="modal-overlay" id="modal-kho-xuatthang">
   <div class="modal modal-lg">
@@ -6715,7 +6760,7 @@ function switchKhoTab(tab,el){
       <button class="btn btn-ghost btn-sm" onclick="openKhoXuatThang('tieu-dung')" title="Cuối tháng: xuất hết tồn hàng tiêu dùng ở mọi kho">📦 Ghi xuất Tiêu dùng (tháng)</button>
       <button class="btn btn-ghost btn-sm" onclick="openKhoXuatThang('thuc-pham')" title="Cuối tháng: xuất hết tồn hàng thực phẩm ở mọi kho">🍽 Ghi xuất Thực phẩm (tháng)</button>`;
     else if(tab==='huy') actionWrap.innerHTML=`<button class="btn btn-danger btn-sm" onclick="openKhoModalHuy()">🗑 Ghi Huỷ hàng</button>`;
-    else if(tab==='nhap') actionWrap.innerHTML=`<small style="font-size:12px;color:var(--text-muted);">Nhập tự động từ Đề xuất được duyệt</small>`;
+    else if(tab==='nhap') actionWrap.innerHTML=`<button class="btn btn-gold btn-sm" onclick="openKhoModalNhap()">📥 Ghi Nhập hàng thủ công</button> <small style="font-size:11px;color:var(--text-muted);">+ nhập tự động từ Đề xuất đã duyệt</small>`;
     else actionWrap.innerHTML=`<button class="btn btn-ghost btn-sm" onclick="document.getElementById('kho-import-excel').click()">📥 Import Excel</button>
       <input type="file" id="kho-import-excel" accept=".xlsx,.xls,.csv" style="display:none;" onchange="importKhoExcel(this)">
       <button class="btn btn-excel btn-sm" onclick="exportKhoExcel()">📊 Xuất Excel</button>
@@ -6852,7 +6897,7 @@ function renderKhoLogTab(type){
   const loaiSet=type==='xuat'?['xuat','transfer-out']:type==='nhap'?['nhap','transfer-in']:['huy'];
   const all=[];
   KHO_DATA.forEach(it=>(it.lichSu||[]).filter(h=>loaiSet.includes(h.loai)).forEach(h=>all.push({...h,ma:it.ma,ten:it.ten,dvt:it.dvt,bophan:it.bophan})));
-  all.sort((a,b)=>b.ngay.localeCompare(a.ngay));
+  all.sort((a,b)=>(b.ngay||'').localeCompare(a.ngay||''));
   const thMap={xuat:['SL xuất','var(--yellow)'],nhap:['SL nhập','var(--green)'],huy:['SL huỷ','var(--red)']};
   const [slLabel,slColor]=thMap[type];
   document.getElementById('kho-thead').innerHTML=`<tr><th>Ngày</th><th>Mã</th><th>Tên hàng</th><th>Kho</th><th>${slLabel}</th><th>ĐVT</th><th>Ghi chú / Lý do</th>${type!=='nhap'?'<th>Ảnh</th>':''}<th>Người TH</th></tr>`;
@@ -7005,11 +7050,11 @@ function saveKhoItem(){
 // px = 'kx' (xuất) | 'kh' (huỷ). Dòng: tên hàng (typeahead) · SL · Còn · Lý do · xoá.
 function khoRowHtml(px){
   const isXuat = px==='kx';
-  const lydoPh = px==='kh' ? 'Lý do huỷ (bắt buộc)' : 'Lý do xuất';
+  const lydoPh = px==='kh' ? 'Lý do huỷ (bắt buộc)' : (px==='kn' ? 'Lý do nhập' : 'Lý do xuất');
   const grid = isXuat ? '1.4fr 74px 60px 1.4fr 30px' : '1.5fr 60px 1.5fr 30px';
   // Xuất: ô SL Tồn CK (cuối kỳ) giữa Tên hàng và SL Xuất → SL Xuất = tồn kho − Tồn CK
   const tonckCell = isXuat ? `<input type="number" class="kxr-tonck" min="0" placeholder="Tồn CK" title="SL tồn cuối kỳ (đếm thực tế) — SL Xuất = tồn kho − Tồn CK" oninput="khoRowXuatCalc(this.closest('.kho-item-row'))">` : '';
-  const slPh = isXuat ? 'SL Xuất' : 'SL';
+  const slPh = isXuat ? 'SL Xuất' : (px==='kn' ? 'SL Nhập' : 'SL');
   return `<div class="${px}r kho-item-row" data-dvt="" style="display:grid;grid-template-columns:${grid};gap:6px;align-items:start;margin-bottom:6px;padding:8px;background:var(--cream);border:1px solid var(--border);border-radius:8px;">
     <div class="form-group" style="margin:0;">
       <div class="select-wrap"><input class="${px}r-ten" autocomplete="off" placeholder="Gõ tên hàng..." oninput="khoRowTenInput(this,'${px}')" onfocus="khoRowTenInput(this,'${px}')" onblur="setTimeout(()=>{const dd=this.closest('.select-wrap')?.querySelector('.dropdown-list');if(dd)dd.classList.remove('open');},200)"><div class="dropdown-list"></div></div>
@@ -7031,8 +7076,16 @@ function khoRemoveRow(btn,px){
 function khoRowTenInput(inp,px){
   const row=inp.closest('.kho-item-row'); const dd=inp.closest('.select-wrap')?.querySelector('.dropdown-list'); if(!row||!dd) return;
   row.dataset.dvt='';   // gõ lại → bỏ liên kết
-  const kho=document.getElementById(px+'-bophan')?.value||'';
   const q=(inp.value||'').trim().toLowerCase();
+  if(px==='kn'){
+    // Nhập: chọn mặt hàng từ DANH MỤC (có thể chưa có trong kho)
+    const list=(catalogItems||[]).filter(it=>!q||(it.name||'').toLowerCase().includes(q)||(it.code||'').toLowerCase().includes(q));
+    dd.innerHTML=list.length
+      ? list.slice(0,60).map(it=>`<div class="dropdown-item" onmousedown="khoSelectItem(this,'kn','${esc(it.id)}')"><span style="font-weight:600;">${esc(it.name)}</span> <span style="color:var(--text-muted);font-size:11px;">${esc(it.code||'')} · ${esc(it.dvt||'')}</span></div>`).join('')
+      : '<div class="dropdown-item" style="color:var(--text-muted);">Không có trong danh mục — có thể gõ tên tự do</div>';
+    dd.classList.add('open'); khoRowBalance(row,'kn'); return;
+  }
+  const kho=document.getElementById(px+'-bophan')?.value||'';
   const list=KHO_DATA.filter(it=>it.bophan===kho && (!q || (it.ten||'').toLowerCase().includes(q) || (it.ma||'').toLowerCase().includes(q)));
   if(!list.length){ dd.innerHTML='<div class="dropdown-item" style="color:var(--text-muted);">Kho này chưa có mặt hàng phù hợp</div>'; dd.classList.add('open'); khoRowBalance(row,px); return; }
   dd.innerHTML=list.slice(0,60).map(it=>{const s=calcKyStats(it);return `<div class="dropdown-item" onmousedown="khoSelectItem(this,'${px}','${esc(it.id)}')"><span style="font-weight:600;">${esc(it.ten)}</span> <span style="color:var(--text-muted);font-size:11px;">${esc(it.dvt||'')} · còn ${s.con}</span></div>`;}).join('');
@@ -7040,10 +7093,17 @@ function khoRowTenInput(inp,px){
   khoRowBalance(row,px);
 }
 function khoSelectItem(el,px,id){
-  const row=el.closest('.kho-item-row'); const it=KHO_DATA.find(x=>x.id===id); if(!row||!it) return;
+  const row=el.closest('.kho-item-row'); if(!row) return;
+  const dd=el.closest('.select-wrap')?.querySelector('.dropdown-list'); if(dd) dd.classList.remove('open');
+  if(px==='kn'){
+    const c=(catalogItems||[]).find(x=>x.id===id); if(!c) return;
+    row.querySelector('.knr-ten').value=c.name||'';
+    row.dataset.dvt=c.dvt||'';
+    khoRowBalance(row,'kn'); return;
+  }
+  const it=KHO_DATA.find(x=>x.id===id); if(!it) return;
   row.querySelector('.'+px+'r-ten').value=it.ten||'';
   row.dataset.dvt=it.dvt||'';
-  const dd=el.closest('.select-wrap')?.querySelector('.dropdown-list'); if(dd) dd.classList.remove('open');
   if(px==='kx') khoRowXuatCalc(row); else khoRowBalance(row,px);
 }
 // Xuất: SL Xuất = tồn kho (đúng kho chọn) − SL Tồn CK. Nhập Tồn CK → tự điền SL Xuất.
@@ -7064,6 +7124,7 @@ function khoRowBalance(row,px){
   const dvt=row.dataset.dvt||'';
   if(!ten){ con.innerHTML='&nbsp;'; return; }
   const bal=khoBalance(kho,ten,dvt);
+  if(px==='kn'){ con.style.color='var(--green)'; con.textContent=`Tồn hiện tại: ${bal}${dvt?' '+dvt:''}`; return; }
   const sl=parseInt(row.querySelector('.'+px+'r-sl')?.value)||0;
   con.style.color = sl>bal ? 'var(--red)' : 'var(--green)';
   con.textContent=`Còn trong kho: ${bal}${dvt?' '+dvt:''}`;
@@ -7121,6 +7182,36 @@ function saveKhoCommit(px,loai){
 }
 function saveKhoXuat(){ saveKhoCommit('kx','xuat'); }
 function saveKhoHuy(){ saveKhoCommit('kh','huy'); }
+
+// ===== Nhập hàng thủ công: nhiều món vào 1 kho, cộng tồn (mặt hàng chưa có → tự tạo trong kho đó) =====
+function openKhoModalNhap(){
+  document.getElementById('kn-ngay').value=new Date().toISOString().slice(0,10);
+  const bp=!['tong-hop','xuat','nhap','huy'].includes(currentKhoTab)?currentKhoTab:'kt';
+  document.getElementById('kn-bophan').value=bp;
+  document.getElementById('kn-items').innerHTML=''; khoAddRow('kn');
+  imgPickerClear('kn');
+  openModal('modal-kho-nhap');
+  mdRestore('modal-kho-nhap');
+}
+function saveKhoNhap(){
+  const kho=document.getElementById('kn-bophan').value;
+  const ngay=(document.getElementById('kn-ngay').value||'').split('-').reverse().join('/')||new Date().toLocaleDateString('vi-VN');
+  const img=document.getElementById('kn-img').value.trim();
+  const nguoi=currentUser?.fullname||'Kế toán';
+  const rows=khoReadRows('kn');
+  if(!rows.length){ showToast('Vui lòng nhập ít nhất 1 món (tên + số lượng)!',2600,'error'); return; }
+  rows.forEach(r=>{
+    const dvt=(r.dvt||'').trim()||'Cái';
+    let it=KHO_DATA.find(x=>x.bophan===kho && khoNorm(x.ten)===khoNorm(r.ten) && khoDvt(x.dvt)===khoDvt(dvt));
+    if(!it){ it={id:'KH'+Date.now()+Math.floor(Math.random()*1000),ma:'',ten:r.ten,dvt,bophan:kho,vitri:(typeof KHO_VITRI_LIST!=='undefined'?KHO_VITRI_LIST[0]:'VP'),ton_dau:0,img:'📦',ghichu:'',lichSu:[]}; KHO_DATA.push(it); }
+    if(!Array.isArray(it.lichSu)) it.lichSu=[];
+    it.lichSu.push({ngay,loai:'nhap',sl:r.sl,tu:'',den:kho,lydo:r.lydo||'Nhập hàng',img,nguoi});
+  });
+  mdClear('modal-kho-nhap');
+  closeModal('modal-kho-nhap');
+  renderKhoTab(); syncNow();
+  showToast(`✅ Đã nhập ${rows.length} món vào ${KHO_BP_LABELS[kho]||kho}`,2600,'success');
+}
 
 // ===== Xuất cuối tháng theo LOẠI (tiêu dùng / thực phẩm): xuất hết tồn ở MỌI kho, xem trước rồi xác nhận =====
 let kxtLoai='';
@@ -7662,6 +7753,9 @@ const MODAL_DRAFTS = {
   'modal-kho-huy':  { key:()=>'kh', meaningful:()=>[...document.querySelectorAll('#kh-items .khr-ten')].some(i=>i.value.trim()),
      rowGroups:[{container:'#kh-items', rowSel:'.kho-item-row', add:()=>khoAddRow('kh')}],
      afterApply:()=>{ khoRefreshBalances('kh'); const v=document.getElementById('kh-img')?.value; if(v) imgPickerSet('kh',v); } },
+  'modal-kho-nhap': { key:()=>'kn', meaningful:()=>[...document.querySelectorAll('#kn-items .knr-ten')].some(i=>i.value.trim()),
+     rowGroups:[{container:'#kn-items', rowSel:'.kho-item-row', add:()=>khoAddRow('kn')}],
+     afterApply:()=>{ khoRefreshBalances('kn'); const v=document.getElementById('kn-img')?.value; if(v) imgPickerSet('kn',v); } },
 };
 let MD_STORE={}; const MD_LS='qah_modal_drafts'; let _mdTimer=null;
 function mdLoad(){ try{ MD_STORE=JSON.parse(localStorage.getItem(MD_LS)||'{}')||{}; }catch(e){ MD_STORE={}; } }
