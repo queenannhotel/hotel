@@ -1981,6 +1981,9 @@ textarea{resize:vertical;min-height:68px;}
       <label style="margin:0;">Mặt hàng cần xuất <span style="color:var(--red)">*</span></label>
       <button class="btn btn-ghost btn-sm" type="button" onclick="khoAddRow('kx')">＋ Thêm món</button>
     </div>
+    <div style="display:grid;grid-template-columns:1.4fr 74px 60px 1.4fr 30px;gap:6px;font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.3px;padding:0 8px;margin-bottom:3px;">
+      <span>Tên hàng</span><span>Tồn CK</span><span>SL Xuất</span><span>Lý do</span><span></span>
+    </div>
     <div id="kx-items"></div>
     <div class="form-group" style="margin-bottom:12px;">
       <label>Hình ảnh minh chứng</label>
@@ -7001,13 +7004,19 @@ function saveKhoItem(){
 // ===== Kho Xuất/Huỷ: nhiều món, typeahead tên hàng, hiện số dư kho =====
 // px = 'kx' (xuất) | 'kh' (huỷ). Dòng: tên hàng (typeahead) · SL · Còn · Lý do · xoá.
 function khoRowHtml(px){
+  const isXuat = px==='kx';
   const lydoPh = px==='kh' ? 'Lý do huỷ (bắt buộc)' : 'Lý do xuất';
-  return `<div class="${px}r kho-item-row" data-dvt="" style="display:grid;grid-template-columns:1.5fr 60px 1.5fr 30px;gap:6px;align-items:start;margin-bottom:6px;padding:8px;background:var(--cream);border:1px solid var(--border);border-radius:8px;">
+  const grid = isXuat ? '1.4fr 74px 60px 1.4fr 30px' : '1.5fr 60px 1.5fr 30px';
+  // Xuất: ô SL Tồn CK (cuối kỳ) giữa Tên hàng và SL Xuất → SL Xuất = tồn kho − Tồn CK
+  const tonckCell = isXuat ? `<input type="number" class="kxr-tonck" min="0" placeholder="Tồn CK" title="SL tồn cuối kỳ (đếm thực tế) — SL Xuất = tồn kho − Tồn CK" oninput="khoRowXuatCalc(this.closest('.kho-item-row'))">` : '';
+  const slPh = isXuat ? 'SL Xuất' : 'SL';
+  return `<div class="${px}r kho-item-row" data-dvt="" style="display:grid;grid-template-columns:${grid};gap:6px;align-items:start;margin-bottom:6px;padding:8px;background:var(--cream);border:1px solid var(--border);border-radius:8px;">
     <div class="form-group" style="margin:0;">
       <div class="select-wrap"><input class="${px}r-ten" autocomplete="off" placeholder="Gõ tên hàng..." oninput="khoRowTenInput(this,'${px}')" onfocus="khoRowTenInput(this,'${px}')" onblur="setTimeout(()=>{const dd=this.closest('.select-wrap')?.querySelector('.dropdown-list');if(dd)dd.classList.remove('open');},200)"><div class="dropdown-list"></div></div>
       <div class="${px}r-con" style="font-size:10px;color:var(--green);margin-top:3px;">&nbsp;</div>
     </div>
-    <input type="number" class="${px}r-sl" min="1" value="1" placeholder="SL" oninput="khoRowBalance(this.closest('.kho-item-row'),'${px}')">
+    ${tonckCell}
+    <input type="number" class="${px}r-sl" min="1" value="1" placeholder="${slPh}" oninput="khoRowBalance(this.closest('.kho-item-row'),'${px}')">
     <input class="${px}r-lydo" placeholder="${lydoPh}">
     <button class="btn btn-ghost btn-sm" type="button" onclick="khoRemoveRow(this,'${px}')" title="Xoá dòng" style="height:34px;padding:0;">🗑</button>
   </div>`;
@@ -7035,7 +7044,17 @@ function khoSelectItem(el,px,id){
   row.querySelector('.'+px+'r-ten').value=it.ten||'';
   row.dataset.dvt=it.dvt||'';
   const dd=el.closest('.select-wrap')?.querySelector('.dropdown-list'); if(dd) dd.classList.remove('open');
-  khoRowBalance(row,px);
+  if(px==='kx') khoRowXuatCalc(row); else khoRowBalance(row,px);
+}
+// Xuất: SL Xuất = tồn kho (đúng kho chọn) − SL Tồn CK. Nhập Tồn CK → tự điền SL Xuất.
+function khoRowXuatCalc(row){
+  if(!row) return;
+  const kho=document.getElementById('kx-bophan')?.value||'';
+  const ten=(row.querySelector('.kxr-ten')?.value||'').trim();
+  const dvt=row.dataset.dvt||'';
+  const tEl=row.querySelector('.kxr-tonck'), slEl=row.querySelector('.kxr-sl');
+  if(tEl && slEl && tEl.value!==''){ const bal=khoBalance(kho,ten,dvt); slEl.value=Math.max(0, bal-(parseFloat(tEl.value)||0)); }
+  khoRowBalance(row,'kx');
 }
 // Cập nhật "Còn: N" cho 1 dòng theo kho + tên + ĐVT
 function khoRowBalance(row,px){
@@ -7049,7 +7068,7 @@ function khoRowBalance(row,px){
   con.style.color = sl>bal ? 'var(--red)' : 'var(--green)';
   con.textContent=`Còn trong kho: ${bal}${dvt?' '+dvt:''}`;
 }
-function khoRefreshBalances(px){ document.querySelectorAll('#'+px+'-items .kho-item-row').forEach(row=>khoRowBalance(row,px)); }
+function khoRefreshBalances(px){ document.querySelectorAll('#'+px+'-items .kho-item-row').forEach(row=> px==='kx'?khoRowXuatCalc(row):khoRowBalance(row,px)); }
 function khoReadRows(px){
   return [...document.querySelectorAll('#'+px+'-items .kho-item-row')].map(row=>({
     ten:(row.querySelector('.'+px+'r-ten')?.value||'').trim(),
@@ -7085,8 +7104,8 @@ function saveKhoCommit(px,loai){
   // Validate tồn kho trước khi ghi (không ghi 1 phần nếu có dòng sai)
   const resolved=[];
   for(const r of rows){
-    const it=KHO_DATA.find(x=>x.bophan===kho && x.ten===r.ten && (x.dvt||'')===(r.dvt||''))
-          || KHO_DATA.filter(x=>x.bophan===kho && x.ten===r.ten).sort((a,b)=>calcKyStats(b).con-calcKyStats(a).con)[0];
+    const it=KHO_DATA.find(x=>x.bophan===kho && khoNorm(x.ten)===khoNorm(r.ten) && khoDvt(x.dvt)===khoDvt(r.dvt))
+          || KHO_DATA.filter(x=>x.bophan===kho && khoNorm(x.ten)===khoNorm(r.ten)).sort((a,b)=>calcKyStats(b).con-calcKyStats(a).con)[0];
     if(!it){ showToast(`Không tìm thấy "${r.ten}" trong ${KHO_BP_LABELS[kho]||kho}`,3000,'error'); return; }
     const con=calcKyStats(it).con;
     if(r.sl>con){ showToast(`"${r.ten}" chỉ còn ${con} trong kho`,3000,'error'); return; }
