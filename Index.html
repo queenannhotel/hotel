@@ -115,7 +115,7 @@ function _lsSaveRaw(){
       hvLinen:HV_LINEN,hvRewash:HV_REWASH_DATA,hvCols:HV_REWASH_COLS,
       wsData:WS_DATA_BY_DATE,roomStatus:ROOM_STATUS_BY_DATE,
       amData:AM_DATA_BY_DATE,mbData:MB_DATE_DATA,nsLuong:NS_LUONG,sxData:SX_DATA,
-      nsBhxh:NS_BHXH,nsTncn:NS_TNCN,cats:CATS,
+      nsBhxh:NS_BHXH,nsTncn:NS_TNCN,cats:CATS,dvtList:DVT_LIST,
     };
     localStorage.setItem(LS_KEY,JSON.stringify(data));
     return true;
@@ -145,6 +145,7 @@ function lsLoad(){
     if(d.nsBhxh)          NS_BHXH=d.nsBhxh;
     if(d.nsTncn)          NS_TNCN=d.nsTncn;
     if(d.cats){ ['ncc','thu','bophan'].forEach(k=>{ if(Array.isArray(d.cats[k])) CATS[k]=d.cats[k]; }); enforceThuCats(); rebuildBpLabels(); }
+    if(Array.isArray(d.dvtList)&&d.dvtList.length) DVT_LIST=d.dvtList;
     return true;
   }catch(e){return false;}
 }
@@ -2435,7 +2436,12 @@ textarea{resize:vertical;min-height:68px;}
       <div class="form-group"><label>Tên mặt hàng <span style="color:var(--red);">*</span></label><input id="ai-name" placeholder="VD: Ga trải giường cotton"></div>
     </div>
     <div class="form-row">
-      <div class="form-group"><label>Đơn vị tính</label><select id="ai-dvt"><option>bộ</option><option>cái</option><option>kg</option><option>lít</option><option>hộp</option><option>thùng</option><option>m²</option><option>cuộn</option><option>lần</option><option>đợt</option><option>tờ</option><option>gói</option><option>vỉ</option><option>can</option><option>đôi</option><option>túi</option><option>lon</option><option>chai</option><option>cây</option><option>xấp</option><option>sợi</option><option>ram</option></select></div>
+      <div class="form-group"><label>Đơn vị tính</label>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <select id="ai-dvt" style="flex:1;"></select>
+          <button type="button" id="ai-dvt-mgr" onclick="openCatManager('dvt')" title="Thêm/Xoá đơn vị tính (Giám đốc/Kế toán)" style="display:none;white-space:nowrap;padding:6px 9px;border-radius:8px;border:1.5px solid var(--border);background:#fff;cursor:pointer;font-size:12px;">⚙ ĐVT</button>
+        </div>
+      </div>
       <div class="form-group"><label>Bộ phận sử dụng <span style="color:var(--text-muted);font-weight:400;font-size:11px;">— chọn nhiều</span></label><div id="ai-bophan-list" style="display:flex;flex-wrap:wrap;gap:6px 14px;padding:8px 0;"></div></div>
     </div>
     <div class="form-row full">
@@ -2624,16 +2630,31 @@ function refreshCatSelects(key){
   (CAT_SELECTS[key]||[]).forEach(([id,o])=>fillCatSelect(id,key,o));
   if(key==='bophan') renderAiBophanChecks(aiReadBophans());  // checkbox bộ phận (danh mục hàng hoá) rebuild, giữ tick
 }
-function refreshAllCatSelects(){ catMergeUsed(); ['ncc','thu','bophan'].forEach(refreshCatSelects); }
+function refreshAllCatSelects(){ catMergeUsed(); ['ncc','thu','bophan'].forEach(refreshCatSelects); try{ fillDvtSelect(); }catch(e){} }
+// ===== Đơn vị tính (ĐVT) — danh sách đồng bộ (Giám đốc/Kế toán thêm được) =====
+let DVT_LIST=['bộ','cái','kg','lít','hộp','thùng','m²','cuộn','lần','đợt','tờ','gói','vỉ','can','đôi','túi','lon','chai','cây','xấp','sợi','ram'];
+function fillDvtSelect(selected){
+  const sel=document.getElementById('ai-dvt'); if(!sel) return;
+  const cur = selected!==undefined ? selected : sel.value;
+  const all=[...DVT_LIST];
+  const has=v=>all.some(x=>(x||'').toLowerCase()===(v||'').toLowerCase());
+  // Gộp ĐVT đã dùng trong danh mục (không mất giá trị cũ) + giá trị đang chọn (nếu là ĐVT lạ)
+  [...new Set((catalogItems||[]).map(it=>(it.dvt||'').trim()).filter(Boolean))].forEach(u=>{ if(!has(u)) all.push(u); });
+  if(cur && !has(cur)) all.push(cur);
+  sel.innerHTML=all.map(u=>`<option value="${esc(u)}">${esc(u)}</option>`).join('');
+  sel.value = cur||all[0]||'';
+}
 // Giữ tương thích tên cũ
 function populateNccDanhmuc(selected){ catMergeUsed(); fillCatSelect('ncc-danhmuc','ncc',{selected, allLabel:'— Chọn —'}); }
 
 // ===== QUẢN LÝ DANH MỤC (chỉ Giám đốc) =====
 let _catMgrKey='ncc';
-function catLabelOf(key){ return {ncc:'Danh mục NCC', thu:'Danh mục Thu', bophan:'Bộ phận'}[key]||key; }
+function catLabelOf(key){ return {ncc:'Danh mục NCC', thu:'Danh mục Thu', bophan:'Bộ phận', dvt:'Đơn vị tính'}[key]||key; }
 function _slugify(s){ return (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/đ/g,'d').replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'')||('bp'+Date.now()); }
 function openCatManager(key){
-  if(currentUser?.role!=='giamdoc'){ showToast('⛔ Chỉ Giám đốc được sửa danh mục',2500,'error'); return; }
+  const role=currentUser?.role;
+  const allowed = key==='dvt' ? (role==='giamdoc'||role==='ketoan') : (role==='giamdoc');
+  if(!allowed){ showToast(key==='dvt'?'⛔ Chỉ Giám đốc/Kế toán được sửa ĐVT':'⛔ Chỉ Giám đốc được sửa danh mục',2600,'error'); return; }
   _catMgrKey=key;
   const t=document.getElementById('cat-mgr-title'); if(t) t.textContent='Quản lý: '+catLabelOf(key);
   renderCatManager();
@@ -2641,7 +2662,7 @@ function openCatManager(key){
 }
 function renderCatManager(){
   const box=document.getElementById('cat-mgr-list'); if(!box) return;
-  const list=CATS[_catMgrKey]||[];
+  const list = _catMgrKey==='dvt' ? DVT_LIST : (CATS[_catMgrKey]||[]);
   box.innerHTML = list.map((it,i)=>{
     const l = typeof it==='string'? it : it.l;
     return `<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;">
@@ -2652,15 +2673,20 @@ function renderCatManager(){
 function catAdd(){
   const inp=document.getElementById('cat-mgr-new'); const name=(inp?.value||'').trim(); if(!name) return;
   const key=_catMgrKey;
-  if(key==='bophan'){
+  if(key==='dvt'){
+    if(!DVT_LIST.some(x=>(x||'').toLowerCase()===name.toLowerCase())) DVT_LIST.push(name);
+  } else if(key==='bophan'){
     const v=_slugify(name);
     if(!CATS.bophan.some(b=>b.v===v||b.l===name)) CATS.bophan.push({v,l:name});
   } else if(!CATS[key].includes(name)){ CATS[key].push(name); }
   if(inp) inp.value='';
   _catChanged();
 }
-function catDelete(i){ CATS[_catMgrKey].splice(i,1); _catChanged(); }
-function _catChanged(){ rebuildBpLabels(); refreshCatSelects(_catMgrKey); renderCatManager(); lsSave(); syncNow(); }
+function catDelete(i){ if(_catMgrKey==='dvt') DVT_LIST.splice(i,1); else CATS[_catMgrKey].splice(i,1); _catChanged(); }
+function _catChanged(){
+  if(_catMgrKey==='dvt'){ fillDvtSelect(); } else { rebuildBpLabels(); refreshCatSelects(_catMgrKey); }
+  renderCatManager(); lsSave(); syncNow();
+}
 let editingItemId = null;                                               // Danh mục: đang sửa mặt hàng?
 
 // Global number formatter (was only defined *locally* inside 2 functions,
@@ -7650,7 +7676,8 @@ function editItem(id){
   const title=document.getElementById('ai-modal-title'); if(title) title.textContent='✏️ Sửa Mặt Hàng';
   document.getElementById('ai-name').value=it.name||'';
   document.getElementById('ai-code').value=it.code||'';
-  document.getElementById('ai-dvt').value=it.dvt||'';
+  fillDvtSelect(it.dvt||'');
+  dxvtMgrBtnVisibility();
   renderAiBophanChecks(catBophans(it));
   aiSetLoai(it.loaiHang||'');
   const note=document.getElementById('ai-note'); if(note) note.value=it.note||'';
@@ -7682,10 +7709,17 @@ function renderAiNccList(selectedIds=[]){
     || '<span style="font-size:12px;color:var(--text-muted);">Chưa có NCC nào — thêm ở tab Nhà Cung Cấp.</span>';
 }
 function nccName(id){ const n=(NCC_DATA||[]).find(x=>x.id===id)||(typeof NCC_LIST!=='undefined'?NCC_LIST:[]).find(x=>x.id===id); return n?(n.ten||n.name):''; }
+// Hiện nút ⚙ ĐVT cho Giám đốc/Kế toán (ẩn với vai trò khác)
+function dxvtMgrBtnVisibility(){
+  const b=document.getElementById('ai-dvt-mgr'); if(!b) return;
+  const role=currentUser?.role; b.style.display=(role==='giamdoc'||role==='ketoan')?'':'none';
+}
 function openAddItemModal(){
   editingItemId=null; editingCatalogId=null;
   document.getElementById('ai-modal-title').textContent='📦 Thêm Mặt Hàng';
   ['ai-name','ai-code','ai-note'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  fillDvtSelect('');
+  dxvtMgrBtnVisibility();
   const hist=document.getElementById('ai-history-wrap'); if(hist) hist.style.display='none';
   renderAiBophanChecks([]);
   aiSetLoai('');
@@ -7932,6 +7966,7 @@ const COLLECTIONS = {
   hvRewash:  { read:()=>[{id:'_', obj:HV_REWASH_DATA}], write:r=>{const x=r.find(v=>v.id==='_'); HV_REWASH_DATA=x?x.obj:{};}, render:()=>{try{renderHangVai();}catch(e){}} },
   hvCols:    { read:()=>[{id:'_', obj:HV_REWASH_COLS}], write:r=>{const x=r.find(v=>v.id==='_'); HV_REWASH_COLS=x?x.obj:[];}, render:()=>{try{renderHangVai();}catch(e){}} },
   cats:      { read:()=>[{id:'_', obj:CATS}], write:r=>{const x=r.find(v=>v.id==='_'); if(x&&x.obj){ CATS=x.obj; enforceThuCats(); rebuildBpLabels(); }}, render:()=>{try{refreshAllCatSelects();}catch(e){}} },
+  dvtList:   { read:()=>[{id:'_', obj:DVT_LIST}], write:r=>{const x=r.find(v=>v.id==='_'); if(x&&Array.isArray(x.obj)) DVT_LIST=x.obj;}, render:()=>{try{fillDvtSelect();}catch(e){}} },
 };
 
 // lastSnapshot phản ánh trạng thái ĐÃ ở trên cloud: {collection:{id:json}}
@@ -7984,7 +8019,7 @@ function syncNow(){ _lsSaveRaw(); if(sb&&cloudReady) flushToCloud(); }
 const WRITE_MATRIX = {
   thu:['giamdoc','ketoan'], chi:['giamdoc','ketoan'],
   ncc:['giamdoc','ketoan'], catalog:['giamdoc','ketoan'],
-  nsLuong:['giamdoc','hr'], bhxh:['giamdoc','hr'], tncn:['giamdoc','hr'], cats:['giamdoc'],
+  nsLuong:['giamdoc','hr'], bhxh:['giamdoc','hr'], tncn:['giamdoc','hr'], cats:['giamdoc'], dvtList:['giamdoc','ketoan'],
   dx:['giamdoc','ketoan','truong-bp','hr'], kho:['giamdoc','ketoan','truong-bp','hr'], yc:['giamdoc','ketoan','truong-bp','hr'], ycDeleted:['giamdoc','ketoan','truong-bp','hr'], transferReq:['giamdoc','ketoan','truong-bp','hr'],
   wsData:['giamdoc','truong-bp'], roomStatus:['giamdoc','truong-bp'], amData:['giamdoc','truong-bp'],
   mbData:['giamdoc','truong-bp'], hvLinen:['giamdoc','truong-bp'], hvRewash:['giamdoc','truong-bp'],
@@ -7992,7 +8027,7 @@ const WRITE_MATRIX = {
 };
 // Ánh xạ collection → tab: ai được CẤP TAB tương ứng cũng được ghi/đồng bộ nhóm đó (ngoài quyền theo role).
 const COLLECTION_TAB = {
-  thu:'tab-thu', chi:'tab-chi', ncc:'nha-cung-cap', catalog:'danh-muc',
+  thu:'tab-thu', chi:'tab-chi', ncc:'nha-cung-cap', catalog:'danh-muc', dvtList:'danh-muc',
   nsLuong:'nhan-su', bhxh:'nhan-su', tncn:'nhan-su',
   dx:'de-xuat', kho:'kho', transferReq:'yeu-cau-transfer',
   yc:'buong-phong', ycDeleted:'buong-phong', wsData:'buong-phong', roomStatus:'buong-phong',
