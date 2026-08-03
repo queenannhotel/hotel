@@ -963,6 +963,7 @@ textarea{resize:vertical;min-height:68px;}
       <div class="section-header"><span class="section-title">⬇ Ghi Chi</span>
         <div style="display:flex;gap:8px;">
           <button class="btn btn-excel btn-sm" onclick="exportExcel('tab-chi')">📊 Xuất Excel</button>
+          <button class="btn btn-ghost btn-sm" onclick="openChiSyncKho()">🔄 Đồng bộ kho theo NCC</button>
           <button class="btn btn-primary" onclick="openModal('modal-chi')">+ Ghi Chi Thủ Công</button>
         </div>
       </div>
@@ -2124,6 +2125,26 @@ textarea{resize:vertical;min-height:68px;}
     <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
       <button class="btn btn-ghost" onclick="closeModal('modal-kho-xuatthang')">Huỷ</button>
       <button class="btn btn-gold" onclick="confirmKhoXuatThang()">✅ Xác nhận xuất hết</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL ĐỒNG BỘ KHO PHIẾU CHI THEO NCC ===== -->
+<div class="modal-overlay" id="modal-chi-sync-kho">
+  <div class="modal modal-lg">
+    <div class="modal-header"><span class="modal-title">🔄 Đồng bộ kho phiếu chi theo NCC</span><button class="close-btn" onclick="closeModal('modal-chi-sync-kho')">✕</button></div>
+    <div class="form-row">
+      <div class="form-group"><label>Từ ngày</label><input type="date" id="csk-from" onchange="renderChiSyncKho()"></div>
+      <div class="form-group"><label>Tổng kết</label><div id="csk-summary" style="padding:8px 12px;background:var(--gold-pale);border-radius:8px;font-weight:700;color:var(--yellow);">—</div></div>
+    </div>
+    <div style="font-size:12px;color:var(--text-muted);margin:2px 0 8px;">Đưa kho của phiếu chi về đúng <b>Kho mặc định</b> của NCC. Phiếu đã <b>Hoàn thành</b> sẽ được <b>dời tồn</b> sang kho mới. NCC chưa gán kho và phiếu trước mốc ngày sẽ không bị đụng.</div>
+    <div class="table-wrap" style="max-height:340px;overflow:auto;">
+      <table><thead><tr><th>Ngày</th><th>NCC</th><th>Tên hàng</th><th style="text-align:center;">Kho hiện tại → Kho NCC</th><th>Trạng thái</th></tr></thead>
+      <tbody id="csk-body"></tbody></table>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
+      <button class="btn btn-ghost" onclick="closeModal('modal-chi-sync-kho')">Huỷ</button>
+      <button class="btn btn-gold" onclick="confirmChiSyncKho()">✅ Đồng bộ</button>
     </div>
   </div>
 </div>
@@ -3703,6 +3724,53 @@ function chiSetItemKho(id,khoCode){
   const done=r.tinh_trang==='hoan-thanh';
   showToast(done?`✅ Đã chuyển ${r.ten_hang} sang ${KHO_BP_LABELS[khoCode]||khoCode}`:`Đã đặt kho đích: ${KHO_BP_LABELS[khoCode]||khoCode} (hàng vào kho khi phiếu Hoàn thành)`,2600,done?'success':'info');
 }
+// ===== Đồng bộ kho phiếu chi đã có theo Kho mặc định của NCC (thao tác 1 lần) =====
+// Danh sách ứng viên: phiếu từ mốc ngày, NCC ĐÃ gán kho, và kho hiện tại khác kho NCC.
+function chiSyncKhoRows(fromIso){
+  const rows=[];
+  (CHI_DATA||[]).forEach(r=>{
+    if(fromIso && vnToIso(r.ngay) < fromIso) return;   // trước mốc → bỏ qua
+    const want=nccKhoDefault(r.ten_ncc);
+    if(!want) return;                                  // NCC chưa gán kho → giữ nguyên
+    const from=r.kho||'kt';
+    if(from===want) return;                            // đã đúng → bỏ qua
+    rows.push({r, from, to:want});
+  });
+  return rows;
+}
+function openChiSyncKho(){
+  document.getElementById('csk-from').value='2026-08-01';   // mặc định từ 1/8 (đổi được)
+  renderChiSyncKho();
+  openModal('modal-chi-sync-kho');
+}
+function renderChiSyncKho(){
+  const fromIso=document.getElementById('csk-from').value||'';
+  const rows=chiSyncKhoRows(fromIso);
+  const stL={'dang-len-don':'Đang lên đơn','dang-giao':'Đang giao','hoan-thanh':'Hoàn thành'};
+  const body=document.getElementById('csk-body'); if(!body) return;
+  body.innerHTML=rows.length ? rows.map(({r,from,to})=>`<tr>
+    <td>${esc(r.ngay||'')}</td>
+    <td style="font-weight:500;">${esc(r.ten_ncc||'—')}</td>
+    <td>${esc(r.ten_hang||'')}</td>
+    <td style="text-align:center;"><span class="badge badge-navy" style="font-size:10px;">${esc(KHO_BP_LABELS[from]||from)}</span> → <span class="badge badge-green" style="font-size:10px;">${esc(KHO_BP_LABELS[to]||to)}</span></td>
+    <td>${r.tinh_trang==='hoan-thanh'?'<b style="color:var(--yellow);">'+esc(stL[r.tinh_trang])+' (dời tồn)</b>':esc(stL[r.tinh_trang]||r.tinh_trang||'')}</td>
+  </tr>`).join('') : `<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted);">Không có phiếu nào cần đồng bộ</td></tr>`;
+  const nPhieu=new Set(rows.map(({r})=>chiGroupKey(r))).size;
+  const nDone=rows.filter(({r})=>r.tinh_trang==='hoan-thanh').length;
+  const sm=document.getElementById('csk-summary'); if(sm) sm.textContent=`${rows.length} dòng · ${nPhieu} phiếu${nDone?` · ${nDone} đã hoàn thành sẽ dời tồn`:''}`;
+}
+function confirmChiSyncKho(){
+  const fromIso=document.getElementById('csk-from').value||'';
+  const rows=chiSyncKhoRows(fromIso);
+  if(!rows.length){ showToast('Không có phiếu cần đồng bộ',2200,'info'); return; }
+  rows.forEach(({r,to})=>{ r.kho=to; syncChiKho(r); });   // dời tồn cho phiếu đã hoàn thành
+  closeModal('modal-chi-sync-kho');
+  try{ renderChiTab(); }catch(e){}
+  try{ renderKhoTab(); }catch(e){}
+  syncNow();
+  showToast(`✅ Đã đồng bộ kho cho ${rows.length} dòng chi theo NCC`,2800,'success');
+}
+
 // ===== Liên kết Chi ↔ Kho: hàng nhập vào kho gắn khi phiếu Chi "Hoàn thành" =====
 // Đẩy 1 mặt hàng Chi vào kho gắn (gắn ref_chi để rút chính xác; dedup chống trùng).
 function addChiKhoEntry(r){
