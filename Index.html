@@ -1746,6 +1746,20 @@ textarea{resize:vertical;min-height:68px;}
       </div>
       <div class="form-group"><label>Ghi chú</label><input id="ncc-ghichu" placeholder="Ghi chú thêm..."></div>
     </div>
+    <div class="form-row">
+      <div class="form-group"><label>Kho mặc định <span style="color:#94a3b8;font-weight:400;">— chuyển hàng về (để trống = Kho KT)</span></label>
+        <select id="ncc-kho">
+          <option value="">— Không chọn (mặc định Kho KT) —</option>
+          <option value="kt">Kho KT</option>
+          <option value="bep">Kho Bếp</option>
+          <option value="nha-hang">Kho Nhà hàng</option>
+          <option value="hk">Kho HK</option>
+          <option value="ky-thuat">Kho Kỹ thuật</option>
+          <option value="van-phong">Kho Văn phòng</option>
+          <option value="le-tan">Kho Lễ tân</option>
+        </select>
+      </div>
+    </div>
     <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
       <button class="btn btn-ghost" onclick="closeModal('modal-ncc')">Huỷ</button>
       <button class="btn btn-gold" onclick="saveNcc()">💾 Lưu NCC</button>
@@ -4113,6 +4127,11 @@ function nccChiDefaults(nccRec){
   const pttt = (nccRec && pMap[nccRec.pttt]) || 'CK';
   return { hoa_don, pttt };
 }
+// Kho mặc định của 1 NCC (theo tên) — rỗng nếu NCC không chọn kho.
+function nccKhoDefault(tenNcc){
+  const n=(NCC_DATA||[]).find(x=>(x.ten||'').trim().toLowerCase()===(tenNcc||'').trim().toLowerCase());
+  return (n&&n.kho)||'';
+}
 // Tạo 1 bản ghi CHI cho từng mặt hàng của đề xuất đã duyệt (chống trùng theo dx_id + chỉ số dòng).
 function pushDxToChi(dx) {
   if(!dx) return;
@@ -4144,6 +4163,7 @@ function pushDxToChi(dx) {
       ten_ncc: tenNcc||'—',
       hoa_don: defHoaDon,
       pttt: defPttt,
+      kho: (nccRec&&nccRec.kho)||'kt',
       so_phieu_chi: '',
       so_tk: '',
       tinh_trang: 'dang-len-don',
@@ -4339,7 +4359,7 @@ function saveChi() {
     don_gia, tong: don_gia*sl,
     ten_ncc: ncc||'—', hoa_don: hdMap[hoa_don]||hoa_don, pttt, so_phieu_chi:so_phieu, so_tk,
     tinh_trang:'dang-len-don', nguon:'thu-cong', dx_id:null,
-    kho:'kt',   // kho đích mặc định — hoàn thành phiếu chi thì nhập vào Kho KT
+    kho: nccKhoDefault(ncc) || 'kt',   // kho đích: theo kho mặc định của NCC, fallback Kho KT
   });
   closeModal('modal-chi');
   renderChiTab();
@@ -5561,6 +5581,7 @@ function saveNcc() {
     hoadon:document.getElementById('ncc-hoadon').value,
     hopdong:document.getElementById('ncc-hopdong').value,
     ghichu:document.getElementById('ncc-ghichu').value.trim(),
+    kho:document.getElementById('ncc-kho').value,
   };
   if(editingNccId){
     const idx=NCC_DATA.findIndex(x=>x.id===editingNccId);
@@ -7675,10 +7696,12 @@ function openNccModal(id=null){
     document.getElementById('ncc-hoadon').value=ncc.hoadon||'co-vat';
     document.getElementById('ncc-hopdong').value=ncc.hopdong||'co';
     document.getElementById('ncc-ghichu').value=ncc.ghichu||'';
+    document.getElementById('ncc-kho').value=ncc.kho||'';
   } else {
     ['ncc-ten','ncc-tenfull','ncc-mst','ncc-sdt','ncc-email','ncc-nguoi','ncc-diachi','ncc-ghichu'].forEach(id=>{
       const el=document.getElementById(id); if(el) el.value='';
     });
+    document.getElementById('ncc-kho').value='';
     populateNccDanhmuc('');
     nccPickedCats=[];
     renderNccPickedCats();
