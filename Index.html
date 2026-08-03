@@ -5700,6 +5700,7 @@ if(editingItemId){
 } else {
   catalogItems.push({id:'IT'+Date.now(),...base,purchaseHistory:[]});
 }
+mdClear('modal-add-item');   // đã Lưu → xoá nháp
 closeModal('modal-add-item');
 renderCatalog();
 syncNow();
@@ -6936,6 +6937,7 @@ function openKhoAddItem(){
   document.getElementById('ki-bophan').value=bp;
   imgPickerClear('ki');
   openModal('modal-kho-item');
+  mdRestore('modal-kho-item');
 }
 function editKhoItem(id){
   editingKhoId=id;
@@ -6951,6 +6953,7 @@ function editKhoItem(id){
   imgPickerClear('ki');
   if(it.img) imgPickerSet('ki', it.img);
   openModal('modal-kho-item');
+  mdRestore('modal-kho-item');
 }
 // Kho: gõ tên hàng → gợi ý từ Danh mục hàng hoá (đồng bộ tên + ĐVT)
 function kiTenInput(inp){
@@ -6991,6 +6994,7 @@ function saveKhoItem(){
       KHO_DATA.push({id:'KH'+Date.now(),...data,lichSu:[{ngay:new Date().toLocaleDateString('vi-VN'),loai:'nhap',sl:data.ton_dau,tu:'',den:'',lydo:'Nhập đầu kỳ',nguoi:currentUser?.fullname||'Kế toán'}]});
     }
   }
+  mdClear('modal-kho-item');   // đã Lưu → xoá nháp
   closeModal('modal-kho-item');renderKhoTab();syncNow();
 }
 
@@ -7060,12 +7064,14 @@ function openKhoModalXuat(){
   document.getElementById('kx-items').innerHTML=''; khoAddRow('kx');
   imgPickerClear('kx');
   openModal('modal-kho-xuat');
+  mdRestore('modal-kho-xuat');
 }
 function openKhoModalHuy(){
   document.getElementById('kh-ngay').value=new Date().toISOString().slice(0,10);
   document.getElementById('kh-items').innerHTML=''; khoAddRow('kh');
   imgPickerClear('kh');
   openModal('modal-kho-huy');
+  mdRestore('modal-kho-huy');
 }
 // Xuất/Huỷ nhiều món trong 1 lần; ảnh minh chứng chung cho cả phiếu.
 function saveKhoCommit(px,loai){
@@ -7089,6 +7095,7 @@ function saveKhoCommit(px,loai){
   resolved.forEach(({it,r})=>{
     it.lichSu.push({ngay,loai,sl:r.sl,tu:kho,den:'',lydo:r.lydo||(loai==='huy'?'Huỷ':'Xuất dùng'),img,nguoi});
   });
+  mdClear(px==='kx'?'modal-kho-xuat':'modal-kho-huy');   // đã Xác nhận → xoá nháp
   closeModal(px==='kx'?'modal-kho-xuat':'modal-kho-huy');
   renderKhoTab();
   showToast(`✅ Đã ${loai==='huy'?'huỷ':'xuất'} ${resolved.length} món`,2400,'success');
@@ -7624,7 +7631,67 @@ function closeModal(id){
   document.getElementById(id).classList.remove('open');
   if(id==='modal-add-user') editingUserId=null;
 }
-document.querySelectorAll('.modal-overlay').forEach(o=>o.addEventListener('click',e=>{ if(e.target===o){ if(o.id==='modal-de-xuat'){ try{ dxSaveDraft(); }catch(_){} } o.classList.remove('open'); } }));
+// ===== Engine nháp chung cho modal Danh mục / Kho (không mất nội dung khi lỡ đóng ra ngoài) =====
+const MODAL_DRAFTS = {
+  'modal-add-item': { key:()=>editingItemId||'new', meaningful:()=>!!document.getElementById('ai-name')?.value.trim(),
+     rowGroups:[{container:'#ai-suppliers', rowSel:'.ai-sup-row', add:()=>aiAddSupplier()}],
+     afterApply:()=>document.querySelectorAll('#ai-suppliers .ais-vat').forEach(cb=>aiToggleVat(cb)) },
+  'modal-kho-item': { key:()=>editingKhoId||'new', meaningful:()=>!!document.getElementById('ki-ten')?.value.trim(), rowGroups:[] },
+  'modal-kho-xuat': { key:()=>'kx', meaningful:()=>[...document.querySelectorAll('#kx-items .kxr-ten')].some(i=>i.value.trim()),
+     rowGroups:[{container:'#kx-items', rowSel:'.kho-item-row', add:()=>khoAddRow('kx')}],
+     afterApply:()=>{ khoRefreshBalances('kx'); const v=document.getElementById('kx-img')?.value; if(v) imgPickerSet('kx',v); } },
+  'modal-kho-huy':  { key:()=>'kh', meaningful:()=>[...document.querySelectorAll('#kh-items .khr-ten')].some(i=>i.value.trim()),
+     rowGroups:[{container:'#kh-items', rowSel:'.kho-item-row', add:()=>khoAddRow('kh')}],
+     afterApply:()=>{ khoRefreshBalances('kh'); const v=document.getElementById('kh-img')?.value; if(v) imgPickerSet('kh',v); } },
+};
+let MD_STORE={}; const MD_LS='qah_modal_drafts'; let _mdTimer=null;
+function mdLoad(){ try{ MD_STORE=JSON.parse(localStorage.getItem(MD_LS)||'{}')||{}; }catch(e){ MD_STORE={}; } }
+function mdPersist(){ try{ localStorage.setItem(MD_LS, JSON.stringify(MD_STORE)); }catch(e){} }
+function mdSlot(id){ const cfg=MODAL_DRAFTS[id]; return id+'::'+(cfg?cfg.key():'?'); }
+function mdCtrlKey(c){ return c.id ? '#'+c.id : ((c.className||'')+'|'+(c.value||'')); }
+function mdSerialize(id){
+  const cfg=MODAL_DRAFTS[id], m=document.getElementById(id); if(!m) return null;
+  const inRow=c=>cfg.rowGroups.some(g=>c.closest(g.rowSel));
+  const scalars={};
+  m.querySelectorAll('input,select,textarea').forEach(c=>{ if(inRow(c)) return; const k=mdCtrlKey(c); if(!k||k==='|') return;
+    scalars[k]=(c.type==='checkbox'||c.type==='radio')?c.checked:c.value; });
+  const rowGroups=cfg.rowGroups.map(g=>[...m.querySelectorAll(g.rowSel)].map(row=>({
+    ds:{...row.dataset},
+    vals:[...row.querySelectorAll('input,select,textarea')].map(c=>(c.type==='checkbox'||c.type==='radio')?c.checked:c.value),
+  })));
+  return {scalars, rowGroups, ts:Date.now()};
+}
+function mdApply(id,d){
+  const cfg=MODAL_DRAFTS[id], m=document.getElementById(id); if(!m||!d) return;
+  Object.entries(d.scalars||{}).forEach(([k,v])=>{
+    let c = k[0]==='#' ? document.getElementById(k.slice(1)) : [...m.querySelectorAll('input,select,textarea')].find(x=>mdCtrlKey(x)===k);
+    if(!c) return; if(c.type==='checkbox'||c.type==='radio') c.checked=v; else c.value=v;
+  });
+  cfg.rowGroups.forEach((g,gi)=>{
+    const rowsData=(d.rowGroups&&d.rowGroups[gi])||[]; const cont=m.querySelector(g.container);
+    if(cont) cont.innerHTML='';
+    (rowsData.length?rowsData:[null]).forEach(rd=>{
+      g.add();
+      const row=m.querySelector(g.rowSel+':last-child'); if(!row||!rd) return;
+      Object.entries(rd.ds||{}).forEach(([kk,vv])=>{ try{ row.dataset[kk]=vv; }catch(_){} });
+      const ctrls=[...row.querySelectorAll('input,select,textarea')];
+      (rd.vals||[]).forEach((v,i)=>{ const c=ctrls[i]; if(!c) return; if(c.type==='checkbox'||c.type==='radio') c.checked=v; else c.value=v; });
+    });
+  });
+  try{ cfg.afterApply&&cfg.afterApply(); }catch(e){}
+}
+function mdSave(id){
+  const cfg=MODAL_DRAFTS[id]; if(!cfg) return;
+  if(!document.getElementById(id)?.classList.contains('open')) return;
+  if(cfg.meaningful()){ MD_STORE[mdSlot(id)]=mdSerialize(id); } else { delete MD_STORE[mdSlot(id)]; }
+  mdPersist();
+}
+function mdSaveDebounced(id){ clearTimeout(_mdTimer); _mdTimer=setTimeout(()=>mdSave(id),300); }
+function mdClear(id){ delete MD_STORE[mdSlot(id)]; mdPersist(); }
+function mdRestore(id){ const d=MD_STORE[mdSlot(id)]; if(d){ mdApply(id,d); showToast('Đã khôi phục nội dung đang nhập dở',2400,'info'); } }
+mdLoad();
+Object.keys(MODAL_DRAFTS).forEach(id=>{ const m=document.getElementById(id); if(m){ m.addEventListener('input',()=>mdSaveDebounced(id)); m.addEventListener('change',()=>mdSaveDebounced(id)); } });
+document.querySelectorAll('.modal-overlay').forEach(o=>o.addEventListener('click',e=>{ if(e.target===o){ if(o.id==='modal-de-xuat'){ try{ dxSaveDraft(); }catch(_){} } else if(MODAL_DRAFTS[o.id]){ try{ mdSave(o.id); }catch(_){} } o.classList.remove('open'); } }));
 // Đề xuất: nạp nháp đã lưu + auto-lưu khi gõ/đổi trong form
 try{ dxLoadDrafts(); }catch(_){}
 (function(){ const m=document.getElementById('modal-de-xuat'); if(m){ m.addEventListener('input',dxSaveDraftDebounced); m.addEventListener('change',dxSaveDraftDebounced); } })();
@@ -7690,6 +7757,7 @@ function editItem(id){
   aiRenderSuppliers(sups);
   const del=document.getElementById('ai-delete-btn'); if(del) del.style.display='inline-flex';
   openModal('modal-add-item');
+  mdRestore('modal-add-item');
 }
 function deleteItem(id){
   const it=catalogItems.find(x=>x.id===id); if(!it) return;
@@ -7726,6 +7794,7 @@ function openAddItemModal(){
   aiRenderSuppliers([]);
   const del=document.getElementById('ai-delete-btn'); if(del) del.style.display='none';
   openModal('modal-add-item');
+  mdRestore('modal-add-item');
 }
 function switchCatalogTab(tab,el){
   catalogFilter=tab;
