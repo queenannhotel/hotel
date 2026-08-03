@@ -7161,6 +7161,15 @@ function exportKhoExcel(){ exportExcel('kho'); return; /* dùng exportExcel th�
 }
 
 const PAGE_TITLES={dashboard:'Dashboard Tài Chính','thu-chi':'Quản Lý Thu Chi','tab-thu':'Ghi Thu','tab-chi':'Ghi Chi','cong-no':'Theo Dõi Công Nợ','nhan-su':'Nhân Sự & Lương','kho':'Quản Lý Kho','buong-phong':'Buồng Phòng','de-xuat':'Đề Xuất Mua Hàng','yeu-cau-transfer':'Yêu Cầu Transfer','nha-cung-cap':'Nhà Cung Cấp','danh-muc':'Danh Mục Hàng Hoá','bao-cao':'Báo Cáo Tài Chính','quan-ly-tk':'Quản Lý Tài Khoản','cai-dat':'Cài Đặt Hệ Thống'};
+// Mặc định LẦN ĐẦU mở tab trong phiên: lọc theo ngày hôm nay (user đổi khoảng ngày sau thì giữ nguyên).
+let _tabDateInit={};
+function ensureTabToday(fromId,toId,key){
+  if(_tabDateInit[key]) return;
+  _tabDateInit[key]=true;
+  const t=new Date().toISOString().slice(0,10);
+  const f=document.getElementById(fromId), to=document.getElementById(toId);
+  if(f) f.value=t; if(to) to.value=t;
+}
 function showPage(id,el){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById('page-'+id).classList.add('active');
@@ -7169,10 +7178,10 @@ function showPage(id,el){
   document.getElementById('page-heading').textContent=PAGE_TITLES[id]||'';
   if(id==='danh-muc') renderCatalog();
   if(id==='quan-ly-tk') renderUsersTable();
-  if(id==='de-xuat') renderDxTable();
+  if(id==='de-xuat'){ ensureTabToday('dx-from','dx-to','dx'); renderDxTable(); }
   if(id==='yeu-cau-transfer') renderTrTab();
-  if(id==='tab-thu') renderThuTab();
-  if(id==='tab-chi') renderChiTab();
+  if(id==='tab-thu'){ ensureTabToday('thu-from','thu-to','thu'); renderThuTab(); }
+  if(id==='tab-chi'){ ensureTabToday('chi-from','chi-to','chi'); renderChiTab(); }
   if(id==='thu-chi') syncThuChiSummary();
   if(id==='nha-cung-cap') renderNccTable();
   if(id==='cong-no') renderCongNoPtr();
