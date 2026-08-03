@@ -6760,7 +6760,7 @@ function switchKhoTab(tab,el){
       <button class="btn btn-ghost btn-sm" onclick="openKhoXuatThang('tieu-dung')" title="Cuối tháng: xuất hết tồn hàng tiêu dùng ở mọi kho">📦 Ghi xuất Tiêu dùng (tháng)</button>
       <button class="btn btn-ghost btn-sm" onclick="openKhoXuatThang('thuc-pham')" title="Cuối tháng: xuất hết tồn hàng thực phẩm ở mọi kho">🍽 Ghi xuất Thực phẩm (tháng)</button>`;
     else if(tab==='huy') actionWrap.innerHTML=`<button class="btn btn-danger btn-sm" onclick="openKhoModalHuy()">🗑 Ghi Huỷ hàng</button>`;
-    else if(tab==='nhap') actionWrap.innerHTML=`<button class="btn btn-gold btn-sm" onclick="openKhoModalNhap()">📥 Ghi Nhập hàng thủ công</button> <small style="font-size:11px;color:var(--text-muted);">+ nhập tự động từ Đề xuất đã duyệt</small>`;
+    else if(tab==='nhap') actionWrap.innerHTML=`<button class="btn btn-gold btn-sm" onclick="openKhoModalNhap()">📥 Ghi Nhập hàng thủ công</button> <small style="font-size:11px;color:var(--text-muted);">+ nhập tự động từ Phiếu Chi (từng món khi phiếu chi hoàn thành)</small>`;
     else actionWrap.innerHTML=`<button class="btn btn-ghost btn-sm" onclick="document.getElementById('kho-import-excel').click()">📥 Import Excel</button>
       <input type="file" id="kho-import-excel" accept=".xlsx,.xls,.csv" style="display:none;" onchange="importKhoExcel(this)">
       <button class="btn btn-excel btn-sm" onclick="exportKhoExcel()">📊 Xuất Excel</button>
