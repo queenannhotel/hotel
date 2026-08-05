@@ -314,6 +314,10 @@ body{font-family:'Inter',sans-serif;background:var(--cream);color:var(--text);mi
 /* bảng nào nhiều cột hơn */
 .table-wrap.wide table{min-width:1100px;}
 .table-wrap.xwide table{min-width:1400px;}
+/* Kho: khung cuộn có chiều cao trần → thanh cuộn ngang luôn trong tầm nhìn; freeze hàng tiêu đề */
+#kho-main-card .table-wrap{max-height:68vh;overflow:auto;}
+#kho-table thead th{position:sticky;top:0;z-index:5;}
+#kho-topscroll{overflow-x:auto;overflow-y:hidden;}
 
 /* CARDS + TABLES */
 .kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px;}
@@ -1348,6 +1352,7 @@ textarea{resize:vertical;min-height:68px;}
 
       <!-- Bảng kho chính -->
       <div class="card" id="kho-main-card">
+        <div id="kho-topscroll"><div id="kho-topscroll-spacer" style="height:1px;"></div></div>
         <div class="table-wrap xwide">
           <table id="kho-table">
             <thead id="kho-thead"></thead>
@@ -1591,10 +1596,17 @@ textarea{resize:vertical;min-height:68px;}
     <!-- BÁO CÁO -->
     <div class="page" id="page-bao-cao">
       <div class="section-header"><span class="section-title">📈 Báo Cáo Tài Chính</span>
-        <button class="btn btn-excel" onclick="exportExcel('bao-cao')">📊 Xuất Excel Báo Cáo</button>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <span style="font-size:12px;color:var(--text-muted);">Từ</span>
+          <input type="date" id="bc-from" onchange="renderBaoCao()" style="font-size:12px;padding:6px 10px;" title="Từ ngày">
+          <span style="font-size:12px;color:var(--text-muted);">→</span>
+          <input type="date" id="bc-to" onchange="renderBaoCao()" style="font-size:12px;padding:6px 10px;" title="Đến ngày">
+          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('bc-from').value='';document.getElementById('bc-to').value='';renderBaoCao();" title="Xoá lọc">Xoá lọc</button>
+          <button class="btn btn-excel" onclick="exportExcel('bao-cao')">📊 Xuất Excel Báo Cáo</button>
+        </div>
       </div>
       <div class="grid-3">
-        <div class="card"><div class="card-header"><div class="card-title">📊 Tổng hợp T7/2026</div></div><div class="card-body">
+        <div class="card"><div class="card-header"><div class="card-title">📊 <span id="bc-sum-title">Tổng hợp</span></div></div><div class="card-body">
           <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);"><span>Tổng Thu</span><strong class="amount-pos" id="tc-tong-thu-panel">0đ</strong></div>
           <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);"><span>Tổng Chi</span><strong class="amount-neg" id="tc-tong-chi-panel">0đ</strong></div>
           <div style="display:flex;justify-content:space-between;padding:10px 0;"><span style="font-weight:600;">Lợi Nhuận</span><strong style="color:var(--yellow);font-size:16px;" id="tc-loi-nhuan-panel">0đ</strong></div>
@@ -3421,12 +3433,13 @@ function exportExcel(section){
     rows=[...grab('#tbl-pt','Phải thu'),...grab('#tbl-ptr','Phải trả')];
   } else if(S==='bao-cao'){
     name='BaoCao_TaiChinh';
-    const now=new Date(),m=now.getMonth()+1,y=now.getFullYear();
-    const inMonth=r=>{const p=(r.ngay||'').split('/');return parseInt(p[1])===m&&parseInt(p[2])===y;};
-    const tThu=THU_DATA.filter(inMonth).reduce((s,r)=>s+(typeof thuVnd==='function'?thuVnd(r):(r.sotien||0)),0);
-    const tChi=CHI_DATA.filter(inMonth).reduce((s,r)=>s+(typeof chiAmt==='function'?chiAmt(r):(r.tong||0)),0);
+    const bcFrom=document.getElementById('bc-from')?.value||'', bcTo=document.getElementById('bc-to')?.value||'';
+    const inBc=r=>{const iso=vnToIso(r.ngay); return (!bcFrom||iso>=bcFrom)&&(!bcTo||iso<=bcTo);};
+    const ky=(bcFrom||bcTo)?`${bcFrom?bcFrom.split('-').reverse().join('/'):'…'} – ${bcTo?bcTo.split('-').reverse().join('/'):'…'}`:'toàn bộ';
+    const tThu=THU_DATA.filter(inBc).reduce((s,r)=>s+(typeof thuVnd==='function'?thuVnd(r):(r.sotien||0)),0);
+    const tChi=CHI_DATA.filter(inBc).reduce((s,r)=>s+(typeof chiAmt==='function'?chiAmt(r):(r.tong||0)),0);
     headers=['Hạng mục','Giá trị (đ)'];
-    rows=[['Tổng Thu tháng '+m,tThu],['Tổng Chi tháng '+m,tChi],['Lợi nhuận',tThu-tChi]];
+    rows=[['Tổng Thu ('+ky+')',tThu],['Tổng Chi ('+ky+')',tChi],['Lợi nhuận',tThu-tChi]];
   } else if(S==='yc-xoa'){
     name='YeuCau_DaXoa';
     headers=['Ngày xoá','Giờ xoá','Phòng','Loại YC','Chi tiết đồ','Thời điểm YC','Ghi chú','Người tiếp nhận','Lý do xoá','Người xoá'];
@@ -6676,8 +6689,16 @@ function updateDashboardKPI(){
 }
 
 function renderBaoCao(){
-  // ===== Doanh thu theo danh mục (từ THU_DATA thực tế) — CHỈ tính VND (bỏ ngoại tệ) =====
-  const tongThu = THU_DATA.reduce((s,r)=>s+thuVnd(r),0);
+  // ===== Bộ lọc kỳ: Từ ngày – Đến ngày (rỗng = toàn bộ) =====
+  const bcFrom=document.getElementById('bc-from')?.value||'';
+  const bcTo  =document.getElementById('bc-to')?.value||'';
+  const inBc = iso => (!bcFrom||iso>=bcFrom) && (!bcTo||iso<=bcTo);
+  const fM=bcFrom?bcFrom.slice(0,7):'', tM=bcTo?bcTo.slice(0,7):'';
+  const inBcMonth = th => (!fM||th>=fM) && (!tM||th<=tM);
+  const THU = THU_DATA.filter(r=>inBc(vnToIso(r.ngay)));
+  const CHI = CHI_DATA.filter(r=>inBc(vnToIso(r.ngay)));
+  // ===== Doanh thu theo danh mục (từ THU thực tế) — CHỈ tính VND (bỏ ngoại tệ) =====
+  const tongThu = THU.reduce((s,r)=>s+thuVnd(r),0);
   // nhomMap dựng theo THU_CATEGORIES (nguồn chuẩn dùng chung với form Ghi Thu).
   const nhomCfg = {
     'Doanh thu phòng': {id:'phong',  color:'var(--gold)'},
@@ -6690,7 +6711,7 @@ function renderBaoCao(){
   const nhomMap = {};
   THU_CATEGORIES.forEach(n=>{ nhomMap[n]=nhomCfg[n]||{id:'khac',color:'#aaa'}; });
   const totals = {};
-  THU_DATA.forEach(r=>{
+  THU.forEach(r=>{
     const key = nhomMap[r.danhmuc] ? r.danhmuc : 'Khác';
     totals[key] = (totals[key]||0) + thuVnd(r);
   });
@@ -6702,9 +6723,11 @@ function renderBaoCao(){
     if(el) el.textContent = val>0?fmt(val):'—';
     if(bar){ bar.style.width=pct+'%'; bar.style.background=cfg.color; }
   });
-  // ===== Chi phí: Nhân sự + Vận hành + Vật tư & Hàng hoá (từ dữ liệu thực) =====
-  const nhanSu = (typeof calcNsTotal==='function' ? (calcNsTotal('').tong||0) : 0);
-  const chiHT  = CHI_DATA.filter(r=>r.tinh_trang==='hoan-thanh');
+  // ===== Chi phí: Nhân sự (theo tháng trong khoảng) + Vận hành + Vật tư & Hàng hoá =====
+  const nsLuong = NS_LUONG.filter(r=>inBcMonth(r.thang||'')).reduce((s,r)=>s+(r.sotien||0),0);
+  const nsBhxh  = NS_BHXH.filter(r=>inBcMonth(r.thang||'')).reduce((s,r)=>s+Math.round((r.luong||0)*0.215),0);
+  const nhanSu  = nsLuong + nsBhxh;
+  const chiHT  = CHI.filter(r=>r.tinh_trang==='hoan-thanh');
   const vatTu  = chiHT.filter(r=>r.dx_id).reduce((s,r)=>s+(r.tong||0),0);   // chi từ đề xuất mua hàng
   const vanHanh= chiHT.reduce((s,r)=>s+(r.tong||0),0) - vatTu;             // chi vận hành còn lại
   const baseChi= nhanSu + vanHanh + vatTu;
@@ -6725,6 +6748,10 @@ function renderBaoCao(){
   setTxt('tc-tong-thu-panel', tongThu);
   setTxt('tc-tong-chi-panel', totChi);
   setTxt('tc-loi-nhuan-panel', loiNhuan);
+  // Tiêu đề thẻ tổng hợp theo kỳ đã chọn
+  const isoVn = iso => iso ? iso.split('-').reverse().join('/') : '';
+  const st=document.getElementById('bc-sum-title');
+  if(st) st.textContent = (bcFrom||bcTo) ? `Tổng hợp ${isoVn(bcFrom)||'…'} – ${isoVn(bcTo)||'…'}` : 'Tổng hợp (toàn bộ)';
 }
 
 // ==================== IMAGE PICKER ====================
@@ -6869,7 +6896,21 @@ function switchKhoTab(tab,el){
   renderKhoTab();
 }
 
-function renderKhoTab(){
+// Đồng bộ thanh cuộn ngang phía trên với bảng kho (mirror scrollLeft 2 chiều).
+function khoSyncTopScroll(){
+  const top=document.getElementById('kho-topscroll');
+  const spacer=document.getElementById('kho-topscroll-spacer');
+  const box=document.querySelector('#kho-main-card .table-wrap');
+  const tbl=document.getElementById('kho-table');
+  if(!top||!spacer||!box||!tbl) return;
+  spacer.style.width=tbl.scrollWidth+'px';
+  if(!top._wired){ top._wired=true;
+    top.addEventListener('scroll',()=>{ box.scrollLeft=top.scrollLeft; });
+    box.addEventListener('scroll',()=>{ top.scrollLeft=box.scrollLeft; });
+  }
+}
+function renderKhoTab(){ _renderKhoTabInner(); try{ khoSyncTopScroll(); }catch(e){} }
+function _renderKhoTabInner(){
   const tab=currentKhoTab;
   const search=(document.getElementById('kho-search')?.value||'').toLowerCase();
   const fVitri=document.getElementById('kho-f-vitri')?.value||'';
@@ -6880,15 +6921,14 @@ function renderKhoTab(){
   const items=KHO_DATA.filter(it=>it.bophan===tab&&(!search||(it.ma+it.ten).toLowerCase().includes(search))&&(!fVitri||it.vitri===fVitri));
   items.sort((a,b)=>(a.ten||'').localeCompare(b.ten||'','vi'));   // tên A→Z
   const cnt=document.getElementById('kho-count'); if(cnt) cnt.textContent=items.length+' mặt hàng';
-  document.getElementById('kho-thead').innerHTML=`<tr><th>Mã</th><th>Ảnh</th><th>Tên hàng</th><th>Vị trí</th><th>ĐVT</th><th>Tồn đầu</th><th style="color:var(--green)">Nhập</th><th style="color:var(--yellow)">Xuất</th><th style="color:var(--red)">Huỷ</th><th style="color:var(--green);font-weight:700">Còn lại</th><th>Ghi chú</th><th>Thao tác</th></tr>`;
+  document.getElementById('kho-thead').innerHTML=`<tr><th>Ảnh</th><th>Tên hàng</th><th>Vị trí</th><th>ĐVT</th><th>Tồn đầu</th><th style="color:var(--green)">Nhập</th><th style="color:var(--yellow)">Xuất</th><th style="color:var(--red)">Huỷ</th><th style="color:var(--green);font-weight:700">Còn lại</th><th>Ghi chú</th><th>Thao tác</th></tr>`;
   document.getElementById('kho-tbody').innerHTML=items.length?items.map(it=>{
     const s=calcKyStats(it);
     const cc=s.con<=0?'var(--red)':s.con<=5?'var(--yellow)':'var(--green)';
     const imgEl=it.img&&/^(https?:|data:|blob:)/.test(it.img)?`<img src="${it.img}" class="img-thumb" style="object-fit:cover;">`:`<div class="img-thumb">${esc(it.img)||'📦'}</div>`;
     return `<tr>
-      <td style="font-size:11px;font-weight:600;color:var(--text-muted);">${it.ma}</td>
       <td>${imgEl}</td>
-      <td style="font-weight:500;min-width:140px;">${it.ten} <button class="btn btn-ghost btn-sm" onclick="editKhoItem('${it.id}')" title="Sửa mặt hàng (tồn đầu, tên, ĐVT...)" style="padding:1px 5px;font-size:11px;">✏</button></td>
+      <td style="font-weight:500;min-width:140px;">${it.ten} <button class="btn btn-ghost btn-sm" onclick="editKhoItem('${it.id}')" title="Sửa mặt hàng (mã, tồn đầu, tên, ĐVT...)" style="padding:1px 5px;font-size:11px;">✏</button></td>
       <td><select class="inline-select" onchange="updateKhoVitri('${it.id}',this.value)" style="font-size:11px;">${KHO_VITRI_LIST.map(v=>`<option ${it.vitri===v?'selected':''}>${v}</option>`).join('')}</select></td>
       <td>${it.dvt}</td>
       <td style="text-align:center;font-weight:600;">${it.ton_dau}</td>
@@ -6904,7 +6944,7 @@ function renderKhoTab(){
         ${currentUser?.role==='giamdoc'?`<button class="btn btn-danger btn-sm" onclick="deleteKhoItem('${it.id}')" title="Xoá mặt hàng (chỉ Giám đốc)">🗑</button>`:''}
       </div></td>
     </tr>`;
-  }).join(''):`<tr><td colspan="12" style="text-align:center;padding:30px;color:var(--text-muted);">Kho trống — <a href="#" onclick="openKhoAddItem()" style="color:var(--gold);">+ Thêm hàng</a></td></tr>`;
+  }).join(''):`<tr><td colspan="11" style="text-align:center;padding:30px;color:var(--text-muted);">Kho trống — <a href="#" onclick="openKhoAddItem()" style="color:var(--gold);">+ Thêm hàng</a></td></tr>`;
 }
 
 // Thống kê 1 dòng kho nhưng CHỈ tính nhập/xuất/huỷ THỰC (bỏ transfer nội bộ) — dùng cho kho tổng.
