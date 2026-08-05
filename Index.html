@@ -1020,7 +1020,7 @@ textarea{resize:vertical;min-height:68px;}
             <tbody id="tbl-pt-body"></tbody></table></div>
           <div class="card"><div class="card-header"><div class="card-title">⬆ Phải Trả (NCC)</div></div>
             <div class="table-wrap">
-            <table id="tbl-ptr"><thead><tr><th>Ngày PC</th><th>Số PC</th><th>Nhà cung cấp</th><th>Tổng tiền</th><th>Hạn TT</th><th>Nguồn</th><th>Tình trạng</th></tr></thead>
+            <table id="tbl-ptr"><thead><tr><th>Ngày PC</th><th>Số PC</th><th>Số HĐ</th><th>Nhà cung cấp</th><th>Tổng tiền</th><th>Hạn TT</th><th>Nguồn</th><th>Tình trạng</th></tr></thead>
             <tbody id="tbl-ptr-body"></tbody></table></div>
           </div>
         </div>
@@ -1042,7 +1042,7 @@ textarea{resize:vertical;min-height:68px;}
           </div>
           <div id="cnpt-sub" style="font-size:12px;color:var(--text-muted);margin:0 16px 10px;"></div>
           <div class="table-wrap">
-            <table><thead><tr><th>Ngày PC</th><th>Số PC</th><th>Nhà cung cấp</th><th>Tổng tiền</th><th>Hạn TT</th><th>Nguồn</th><th>Tình trạng</th></tr></thead>
+            <table><thead><tr><th>Ngày PC</th><th>Số PC</th><th>Số HĐ</th><th>Nhà cung cấp</th><th>Tổng tiền</th><th>Hạn TT</th><th>Nguồn</th><th>Tình trạng</th></tr></thead>
             <tbody id="cnpt-body"></tbody></table>
           </div>
         </div>
@@ -1557,9 +1557,17 @@ textarea{resize:vertical;min-height:68px;}
 
         <!-- SHEET 2: THỐNG KÊ NGÀY -->
         <div id="yc-panel-tk" style="display:none;">
-          <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;">
-            <label style="font-size:13px;font-weight:500;color:var(--navy);">Ngày thống kê:</label>
-            <input type="date" id="yc-ngay-tk" style="font-size:12px;padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;" onchange="renderYeuCauStats()">
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap;">
+            <span style="font-size:12px;color:var(--text-muted);">Từ</span>
+            <input type="date" id="yc-tk-from" onchange="renderYeuCauStats()" style="font-size:12px;padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;" title="Từ ngày">
+            <span style="font-size:12px;color:var(--text-muted);">→</span>
+            <input type="date" id="yc-tk-to" onchange="renderYeuCauStats()" style="font-size:12px;padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;" title="Đến ngày">
+            <select id="yc-tk-phong" onchange="renderYeuCauStats()" style="font-size:12px;padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;"><option value="">Tất cả phòng</option></select>
+            <select id="yc-tk-loai" onchange="renderYeuCauStats()" style="font-size:12px;padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;">
+              <option value="">Tất cả loại</option>
+              <option>Dọn phòng</option><option>KO dọn phòng (NNS)</option><option>DND</option><option>Thay đồ</option><option>Thêm đồ</option>
+              <option>Laundry</option><option>Ủi đồ</option>
+            </select>
           </div>
           <!-- KPI loại yêu cầu -->
           <div id="yc-stats-loai" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px;"></div>
@@ -1568,7 +1576,7 @@ textarea{resize:vertical;min-height:68px;}
             <div class="card-header"><div class="card-title">Chi tiết yêu cầu trong ngày</div></div>
             <div class="table-wrap wide">
               <table><thead><tr>
-                <th>Giờ</th><th>Phòng</th><th>Loại YC</th><th>Chi tiết đồ</th><th>Ghi chú</th><th>Người tiếp nhận</th><th>Trạng thái</th>
+                <th>Ngày</th><th>Giờ</th><th>Phòng</th><th>Loại YC</th><th>Chi tiết đồ</th><th>Ghi chú</th><th>Người tiếp nhận</th><th>Trạng thái</th>
               </tr></thead>
               <tbody id="yc-stats-detail"></tbody>
             </table></div>
@@ -4012,6 +4020,7 @@ function cnPtrRowHtml(g){
   return `<tr style="background:var(--gold-pale);${g.paid?'opacity:.6;':''}">
     <td style="font-size:12px;white-space:nowrap;">${esc(g.first.ngay)||'—'}</td>
     <td style="font-weight:600;">${esc(g.spc)}</td>
+    <td onclick="event.stopPropagation()"><input class="inline-input" value="${esc(g.first.so_hd||'')}" placeholder="Số HĐ..." onchange="updateCnPtrSoHd('${esc(g.key)}',this.value)" style="width:100px;font-size:11px;padding:4px 6px;"></td>
     <td style="font-weight:500;">${esc(g.ncc)}</td>
     <td class="amount-neg" style="font-weight:700;white-space:nowrap;">${fmt(g.tong)}</td>
     <td><input type="date" class="inline-input" value="${esc(g.first.han_tt||'')}" onchange="updateCongNoGroupField('${esc(g.key)}','han_tt',this.value)" style="width:112px;font-size:11px;padding:4px 6px;"></td>
@@ -4022,7 +4031,7 @@ function cnPtrRowHtml(g){
 function renderCongNoPtr() {
   const rows=cnPtrGroups().map(cnPtrRowHtml);
   const tbody=document.getElementById('tbl-ptr-body');
-  if(tbody) tbody.innerHTML=rows.join('')||`<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--text-muted);">Không có công nợ phải trả</td></tr>`;
+  if(tbody) tbody.innerHTML=rows.join('')||`<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--text-muted);">Không có công nợ phải trả</td></tr>`;
   renderCongNoPthu();
   try{ renderCongNoPtrSheet(); }catch(e){}   // giữ sheet "Theo dõi Phải Trả" đồng bộ
 }
@@ -4049,12 +4058,17 @@ function renderCongNoPtrSheet(){
     if(fFrom||fTo){ const iso=vnToIso(g.first.ngay); if(fFrom&&iso<fFrom) return false; if(fTo&&iso>fTo) return false; }
     return true;
   });
-  body.innerHTML=filtered.length?filtered.map(cnPtrRowHtml).join(''):`<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--text-muted);">Không có công nợ phải trả khớp bộ lọc</td></tr>`;
+  body.innerHTML=filtered.length?filtered.map(cnPtrRowHtml).join(''):`<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--text-muted);">Không có công nợ phải trả khớp bộ lọc</td></tr>`;
   const chuaTT=filtered.filter(g=>!g.paid).reduce((s,g)=>s+g.tong,0);
   const daTra =filtered.filter(g=> g.paid).reduce((s,g)=>s+g.tong,0);
   const phatSinh=filtered.reduce((s,g)=>s+g.tong,0);
   const totEl=document.getElementById('cnpt-total'); if(totEl) totEl.textContent=fmt(chuaTT);
   const subEl=document.getElementById('cnpt-sub'); if(subEl) subEl.textContent=`Đã trả: ${fmt(daTra)} · Tổng phát sinh: ${fmt(phatSinh)} · ${filtered.length} phiếu`;
+}
+// Nhập Số HĐ ở Công nợ Phải Trả → dùng chung so_hd của phiếu (đồng bộ với Ghi Chi), rồi làm mới bảng công nợ.
+function updateCnPtrSoHd(key,val){
+  try{ updateChiGroupSoHd(key,val); }catch(e){}   // set so_hd cả phiếu + VAT-đã nhận + syncNow + renderChiTab
+  try{ renderCongNoPtr(); }catch(e){}
 }
 // Ghi 1 field (vd Hạn TT) cho mọi bản ghi Chi công nợ trong cùng phiếu chi.
 function updateCongNoGroupField(key,field,val){
@@ -6420,12 +6434,27 @@ function switchYcTab(tab, el){
 }
 
 function renderYeuCauStats(){
-  const ngayTk=document.getElementById('yc-ngay-tk')?.value||new Date().toISOString().slice(0,10);
-  const [y,m,d]=ngayTk.split('-').map(Number);
-  const ngayLabel=`${d}/${m}/${y}`;
+  const today=new Date().toISOString().slice(0,10);
+  const fromEl=document.getElementById('yc-tk-from'), toEl=document.getElementById('yc-tk-to');
+  if(fromEl && !fromEl.value) fromEl.value=today;   // mặc định hôm nay
+  if(toEl && !toEl.value) toEl.value=today;
+  const from=fromEl?.value||today, to=toEl?.value||today;
+  // Đổ dropdown phòng distinct (giữ lựa chọn)
+  const phongSel=document.getElementById('yc-tk-phong');
+  if(phongSel){ const cur=phongSel.value;
+    const phongs=[...new Set(YC_DATA.map(y=>y.phong).filter(p=>p!=null&&p!==''))].sort((a,b)=>(''+a).localeCompare(''+b,'vi',{numeric:true}));
+    phongSel.innerHTML='<option value="">Tất cả phòng</option>'+phongs.map(p=>`<option value="${esc(''+p)}">P.${esc(''+p)}</option>`).join('');
+    phongSel.value=phongs.map(String).includes(cur)?cur:''; }
+  const fPhong=phongSel?phongSel.value:'';
+  const fLoai=document.getElementById('yc-tk-loai')?.value||'';
+  const ngayLabel = from===to ? from.split('-').reverse().join('/') : `${from.split('-').reverse().join('/')} → ${to.split('-').reverse().join('/')}`;
   const ycNgay=YC_DATA.filter(yc=>{
-    const p=yc.ngay.split('/');
-    return parseInt(p[0])===d&&parseInt(p[1])===m&&parseInt(p[2])===y;
+    const iso=vnToIso(yc.ngay);
+    if(from&&iso<from) return false;
+    if(to&&iso>to) return false;
+    if(fPhong && (''+yc.phong)!==(''+fPhong)) return false;
+    if(fLoai && (yc.loaiLabel||yc.loai)!==fLoai) return false;
+    return true;
   });
 
   // === PHẦN 1: Thống kê món được yêu cầu (thay+thêm gộp chung) ===
@@ -6459,17 +6488,18 @@ function renderYeuCauStats(){
       <div style="font-size:22px;font-weight:700;color:var(--navy);">${sl}</div>
       <div style="font-size:9px;color:var(--text-muted);">món/lượt</div>
     </div>`).join('')}
-    ${ycNgay.length===0?`<div style="font-size:13px;color:var(--text-muted);padding:16px;">Ngày ${ngayLabel} chưa có yêu cầu</div>`:''}`;
+    ${ycNgay.length===0?`<div style="font-size:13px;color:var(--text-muted);padding:16px;">Không có yêu cầu trong khoảng ${ngayLabel}</div>`:''}`;
 
   document.getElementById('yc-stats-loai').innerHTML=kpiHtml;
 
   // Bảng chi tiết
   const sMap={'cho-xu-ly':['#B7860A','Chờ xử lý'],'dang-xu-ly':['#3A5FA0','Đang xử lý'],'hoan-thanh':['#2E7D5B','Hoàn thành']};
   document.getElementById('yc-stats-detail').innerHTML=ycNgay.length
-    ?ycNgay.sort((a,b)=>a.gio.localeCompare(b.gio)).map(yc=>{
+    ?ycNgay.sort((a,b)=>(vnToIso(a.ngay).localeCompare(vnToIso(b.ngay)))||a.gio.localeCompare(b.gio)).map(yc=>{
         const [sc,sl]=sMap[yc.status]||['#888',yc.status];
         const iStr=yc.items.map(i=>`${i.ten}×${i.sl}`).join(', ')||'—';
         return`<tr>
+          <td style="font-size:12px;white-space:nowrap;">${esc(yc.ngay)||'—'}</td>
           <td style="font-weight:600;color:var(--navy);">${yc.gio}</td>
           <td style="font-weight:700;">P.${yc.phong}</td>
           <td><span class="badge badge-navy" style="font-size:11px;">${yc.loaiLabel}</span></td>
@@ -6481,7 +6511,7 @@ function renderYeuCauStats(){
       }).join('')
     :`<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted);">Ngày ${ngayLabel} không có yêu cầu</td></tr>`;
 }
-function initBpPhongDropdowns(){['yc-phong','mb-phong'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML=ALL_ROOMS.map(r=>`<option>${r}</option>`).join('');});const gio=document.getElementById('yc-gio');if(gio)gio.value=new Date().toTimeString().slice(0,5);const hsd=document.getElementById('mb-hsd');if(hsd)hsd.value=new Date().toISOString().slice(0,10);const hvNs=document.getElementById('hv-ns-ngay');if(hvNs)hvNs.value=new Date().toISOString().slice(0,10);const ycTk=document.getElementById('yc-ngay-tk');if(ycTk&&!ycTk.value)ycTk.value=new Date().toISOString().slice(0,10);}
+function initBpPhongDropdowns(){['yc-phong','mb-phong'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML=ALL_ROOMS.map(r=>`<option>${r}</option>`).join('');});const gio=document.getElementById('yc-gio');if(gio)gio.value=new Date().toTimeString().slice(0,5);const hsd=document.getElementById('mb-hsd');if(hsd)hsd.value=new Date().toISOString().slice(0,10);const hvNs=document.getElementById('hv-ns-ngay');if(hvNs)hvNs.value=new Date().toISOString().slice(0,10);const _t=new Date().toISOString().slice(0,10);['yc-tk-from','yc-tk-to'].forEach(id=>{const el=document.getElementById(id);if(el&&!el.value)el.value=_t;});}
 
 function renderCaiDat(){
   ['ketoan','truong-bp'].forEach(role=>{
