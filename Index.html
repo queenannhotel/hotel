@@ -2183,27 +2183,14 @@ textarea{resize:vertical;min-height:68px;}
       </div>
     </div>
     <div class="form-row">
-      <div class="form-group"><label>Loại yêu cầu <span style="color:var(--red)">*</span></label>
-        <select id="yc-loai" onchange="ycLoaiChange()">
-          <option value="don-phong">Dọn phòng</option>
-          <option value="ko-don-phong">KO dọn phòng (NNS)</option>
-          <option value="dnd">DND</option>
-          <option value="thay-do">Thay đồ</option>
-          <option value="them-do">Thêm đồ</option>
-          <option value="laundry">Laundry</option>
-          <option value="ui-do">Ủi đồ</option>
-        </select>
-      </div>
-      <div class="form-group"><label>Người tiếp nhận</label>
+      <div class="form-group" style="flex:1;"><label>Người tiếp nhận</label>
         <input id="yc-nguoi" placeholder="Tên nhân viên / bộ phận...">
       </div>
     </div>
-    <!-- Chi tiết thay đồ / thêm đồ -->
-    <div id="yc-items-wrap" style="display:none;margin-bottom:12px;">
-      <div style="font-size:11.5px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;" id="yc-items-label">Danh sách đồ</div>
-      <div id="yc-items-list"></div>
-      <button class="btn btn-ghost btn-sm" onclick="ycAddItem()" style="margin-top:6px;">+ Thêm món</button>
-    </div>
+    <!-- Nhiều loại yêu cầu trong 1 phiếu -->
+    <div style="font-size:11.5px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Loại yêu cầu <span style="color:var(--red)">*</span></div>
+    <div id="yc-blocks" style="margin-bottom:8px;"></div>
+    <button class="btn btn-ghost btn-sm" onclick="ycAddBlock()" style="margin-bottom:12px;">+ Thêm loại yêu cầu</button>
     <div class="form-group" style="margin-bottom:12px;"><label>Ghi chú</label>
       <textarea id="yc-ghichu" placeholder="Ghi chú thêm..." style="min-height:56px;"></textarea>
     </div>
@@ -5567,17 +5554,58 @@ function exportSetupXe(){const rows=[['Tên','SL Setup','SL Thực tế','Tồn/
 const YC_THAY_DO=['Ga','Bọc mền','Áo gối','Khăn tắm','Khăn tay','Thảm chân','Kimono'];
 const YC_THEM_DO=['Gối','Mền/chăn','Khăn tắm','Khăn tay','Thảm chân','Suối free','Trà','Cà phê','Đường','Bàn chải','Lược','Chụp tóc','Tăm bông','Dao cạo râu','Giấy vệ sinh'];
 const YC_LOAI_LABEL={'don-phong':'Dọn phòng','ko-don-phong':'KO dọn phòng (NNS)','dnd':'DND','thay-do':'Thay đồ','them-do':'Thêm đồ','laundry':'Laundry','ui-do':'Ủi đồ'};
-function ycLoaiChange(){const loai=document.getElementById('yc-loai').value;const wrap=document.getElementById('yc-items-wrap');if(loai==='thay-do'||loai==='them-do'){wrap.style.display='block';document.getElementById('yc-items-label').textContent=loai==='thay-do'?'Danh sách thay đồ':'Danh sách thêm đồ';ycItemCount=0;document.getElementById('yc-items-list').innerHTML='';ycAddItem();}else{wrap.style.display='none';document.getElementById('yc-items-list').innerHTML='';ycItemCount=0;}}
-function ycAddItem(){
-  const loai=document.getElementById('yc-loai').value;
-  const list=loai==='thay-do'?YC_THAY_DO:YC_THEM_DO;
-  const id='yci-'+(ycItemCount++);
+const YC_LOAI_OPTS=[['don-phong','Dọn phòng'],['ko-don-phong','KO dọn phòng (NNS)'],['dnd','DND'],['thay-do','Thay đồ'],['them-do','Thêm đồ'],['laundry','Laundry'],['ui-do','Ủi đồ']];
+// Thêm 1 khối "loại + danh sách đồ" vào phiếu yêu cầu.
+function ycAddBlock(loai){
+  const box=document.getElementById('yc-blocks'); if(!box) return;
   const div=document.createElement('div');
-  div.id=id; div.dataset.ycItem='1';
+  div.dataset.ycBlock='1';
+  div.style.cssText='border:1.5px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px;';
+  div.innerHTML=`
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+      <select class="ycb-loai" onchange="ycBlockLoaiChange(this)" style="flex:1;font-size:13px;padding:7px 10px;border:1.5px solid var(--border);border-radius:8px;">
+        ${YC_LOAI_OPTS.map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}
+      </select>
+      <button class="btn btn-ghost btn-sm" onclick="ycRemoveBlock(this)" style="color:var(--red);" title="Xoá loại này">✕</button>
+    </div>
+    <div class="ycb-items-wrap" style="display:none;">
+      <div class="ycb-items-label" style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Danh sách đồ</div>
+      <div class="ycb-items-list"></div>
+      <button class="btn btn-ghost btn-sm" onclick="ycAddItemToBlock(this)" style="margin-top:6px;">+ Thêm món</button>
+    </div>`;
+  box.appendChild(div);
+  const sel=div.querySelector('.ycb-loai');
+  if(loai){ sel.value=loai; }
+  ycBlockLoaiChange(sel);
+}
+function ycRemoveBlock(btn){
+  const box=document.getElementById('yc-blocks');
+  if(box && box.querySelectorAll('[data-yc-block]').length<=1){ showToast('Cần ít nhất 1 loại yêu cầu',2000,'info'); return; }
+  btn.closest('[data-yc-block]')?.remove();
+}
+function ycBlockLoaiChange(sel){
+  const block=sel.closest('[data-yc-block]'); if(!block) return;
+  const loai=sel.value;
+  const wrap=block.querySelector('.ycb-items-wrap');
+  const list=block.querySelector('.ycb-items-list');
+  if(loai==='thay-do'||loai==='them-do'){
+    wrap.style.display='block';
+    block.querySelector('.ycb-items-label').textContent=loai==='thay-do'?'Danh sách thay đồ':'Danh sách thêm đồ';
+    list.innerHTML='';
+    ycAddItemToBlock(block.querySelector('.ycb-items-wrap button'));
+  } else { wrap.style.display='none'; list.innerHTML=''; }
+}
+function ycAddItemToBlock(btn){
+  const block=btn.closest('[data-yc-block]'); if(!block) return;
+  const loai=block.querySelector('.ycb-loai').value;
+  const src=loai==='thay-do'?YC_THAY_DO:YC_THEM_DO;
+  const list=block.querySelector('.ycb-items-list');
+  const div=document.createElement('div');
+  div.dataset.ycItem='1';
   div.style.cssText='display:flex;gap:6px;align-items:center;margin-bottom:6px;';
   div.innerHTML=`
     <select class="yc-item-sel" style="flex:1;font-size:13px;padding:7px 10px;border:1.5px solid var(--border);border-radius:8px;" onchange="ycItemSelChange(this)">
-      ${list.map(i=>`<option>${i}</option>`).join('')}
+      ${src.map(i=>`<option>${i}</option>`).join('')}
     </select>
     <span class="yc-size-wrap" style="display:none;">
       <select class="yc-item-size" style="font-size:13px;padding:7px 8px;border:1.5px solid var(--gold);border-radius:8px;background:var(--gold-pale);">
@@ -5585,9 +5613,8 @@ function ycAddItem(){
       </select>
     </span>
     <input type="number" min="1" value="1" style="width:60px;font-size:13px;padding:7px;border:1.5px solid var(--border);border-radius:8px;text-align:center;" title="Số lượng">
-    <button class="btn btn-ghost btn-sm" onclick="document.getElementById('${id}').remove()" style="color:var(--red);">✕</button>`;
-  document.getElementById('yc-items-list').appendChild(div);
-  // Trigger ngay để set đúng trạng thái dropdown K/Q/T
+    <button class="btn btn-ghost btn-sm" onclick="this.closest('[data-yc-item]').remove()" style="color:var(--red);">✕</button>`;
+  list.appendChild(div);
   const selEl=div.querySelector('.yc-item-sel');
   if(selEl) ycItemSelChange(selEl);
 }
@@ -5599,7 +5626,12 @@ function ycItemSelChange(sel){
   const needsSize=['Ga','Bọc mền','Mền/chăn'].some(k=>val.startsWith(k));
   sizeWrap.style.display=needsSize?'inline':'none';
 }
-function openBpYcModal(){initBpPhongDropdowns();ycItemCount=0;document.getElementById('yc-loai').value='don-phong';document.getElementById('yc-items-wrap').style.display='none';document.getElementById('yc-items-list').innerHTML='';document.getElementById('yc-ghichu').value='';openModal('modal-bp-yc');}
+function openBpYcModal(){initBpPhongDropdowns();document.getElementById('yc-blocks').innerHTML='';ycAddBlock('don-phong');document.getElementById('yc-ghichu').value='';const ng=document.getElementById('yc-nguoi');if(ng)ng.value='';openModal('modal-bp-yc');}
+// Chuẩn hoá 1 phiếu YC thành mảng dịch vụ (record mới: services[]; record cũ: 1 loại).
+function ycServices(yc){
+  if(yc && Array.isArray(yc.services) && yc.services.length) return yc.services;
+  return [{loai:yc?.loai, loaiLabel:(yc?.loaiLabel)||YC_LOAI_LABEL[yc?.loai]||yc?.loai||'', items:yc?.items||[]}];
+}
 function renderNccTable() {
   const search = (document.getElementById('ncc-search')?.value||'').toLowerCase();
   const fDm    = document.getElementById('ncc-f-dm')?.value||'';
@@ -6314,36 +6346,49 @@ function openDxDetail(id){
 
 function saveYeuCau(){
   const phong=document.getElementById('yc-phong').value;
-  const loai=document.getElementById('yc-loai').value;
   const gio=document.getElementById('yc-gio').value;
   if(!phong){showToast('Chọn phòng!',2500,'error');return;}
-  const items=[];
-  document.querySelectorAll('#yc-items-list>div[data-yc-item]').forEach(row=>{
-    const sel=row.querySelector('.yc-item-sel');
-    const sizeSel=row.querySelector('.yc-item-size');
-    const sizeWrap=row.querySelector('.yc-size-wrap');
-    const inp=row.querySelector('input[type="number"]');
-    if(sel&&inp){
-      // Chỉ ghép K/Q/T khi dropdown size đang hiển thị
-      const sizeVisible=sizeWrap&&sizeWrap.style.display!=='none';
-      const ten=sel.value+(sizeVisible&&sizeSel?' '+sizeSel.value:'');
-      items.push({ten:ten.trim(),sl:parseInt(inp.value)||1});
+  // Gom nhiều loại yêu cầu (mỗi khối 1 dịch vụ)
+  const services=[];
+  document.querySelectorAll('#yc-blocks > [data-yc-block]').forEach(block=>{
+    const loai=block.querySelector('.ycb-loai').value;
+    const items=[];
+    if(loai==='thay-do'||loai==='them-do'){
+      block.querySelectorAll('.ycb-items-list > [data-yc-item]').forEach(row=>{
+        const sel=row.querySelector('.yc-item-sel');
+        const sizeSel=row.querySelector('.yc-item-size');
+        const sizeWrap=row.querySelector('.yc-size-wrap');
+        const inp=row.querySelector('input[type="number"]');
+        if(sel&&inp){
+          const sizeVisible=sizeWrap&&sizeWrap.style.display!=='none';
+          const ten=sel.value+(sizeVisible&&sizeSel?' '+sizeSel.value:'');
+          items.push({ten:ten.trim(),sl:parseInt(inp.value)||1});
+        }
+      });
     }
+    services.push({loai,loaiLabel:YC_LOAI_LABEL[loai]||loai,items});
   });
-  const newYc={id:'YC'+Date.now(),phong,loai,loaiLabel:YC_LOAI_LABEL[loai]||loai,
+  if(!services.length){showToast('Chọn ít nhất 1 loại yêu cầu!',2500,'error');return;}
+  const flatItems=[].concat(...services.map(s=>s.items));
+  const newYc={id:'YC'+Date.now(),phong,
     gio:gio||new Date().toTimeString().slice(0,5),
-    nguoi:currentUser?.fullname||'Lễ tân',items,
+    nguoi:currentUser?.fullname||'Lễ tân',
     ghichu:document.getElementById('yc-ghichu').value.trim(),
-    status:'cho-xu-ly',ngay:new Date().toLocaleDateString('vi-VN')};
+    status:'cho-xu-ly',ngay:new Date().toLocaleDateString('vi-VN'),
+    services,
+    // mirror tương thích cho các nơi đọc trực tiếp
+    loai:services[0].loai,
+    loaiLabel:services.map(s=>s.loaiLabel).join(' + '),
+    items:flatItems};
   YC_DATA.unshift(newYc);
-  if(loai==='thay-do'||loai==='them-do') pushYcToHvAndAmenity(newYc);
+  services.forEach(svc=>{ if(svc.loai==='thay-do'||svc.loai==='them-do') pushYcToHvAndAmenity({...newYc, loai:svc.loai, loaiLabel:svc.loaiLabel, items:svc.items}); });
   notifyYeuCauMoi(phong, newYc.loaiLabel, newYc.gio);
   closeModal('modal-bp-yc');renderYeuCau();renderYeuCauStats();
 }
 function renderYeuCau(){
   const fL=document.getElementById('yc-f-loai')?.value||'';
   const fS=document.getElementById('yc-f-status')?.value||'';
-  const rows=YC_DATA.filter(yc=>(!fL||yc.loaiLabel===fL)&&(!fS||yc.status===fS));
+  const rows=YC_DATA.filter(yc=>(!fL||ycServices(yc).some(s=>s.loaiLabel===fL))&&(!fS||yc.status===fS));
   const sMap={
     'cho-xu-ly':  {cls:'badge-yellow',lbl:'Chờ xử lý',  color:'#B7860A',bg:'#FFF8E7'},
     'dang-xu-ly': {cls:'badge-blue',  lbl:'Đang xử lý', color:'#3A5FA0',bg:'#EEF3FB'},
@@ -6352,14 +6397,16 @@ function renderYeuCau(){
   const loaiBadge={'don-phong':'badge-navy','ko-don-phong':'badge-red','dnd':'badge-red','thay-do':'badge-blue','them-do':'badge-green','laundry':'badge-yellow','ui-do':'badge-navy'};
   document.getElementById('yc-list').innerHTML=rows.length?rows.map(yc=>{
     const s=sMap[yc.status]||{cls:'badge-navy',lbl:yc.status,color:'#333',bg:'#eee'};
-    const iStr=yc.items.map(i=>`<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:12px;font-size:11px;background:var(--gold-pale);color:var(--navy);margin:2px;">${i.ten} <strong>×${i.sl}</strong></span>`).join('');
+    const svcs=ycServices(yc);
+    const badges=svcs.map(sv=>`<span class="badge ${loaiBadge[sv.loai]||'badge-navy'}" style="font-size:11px;">${esc(sv.loaiLabel)}</span>`).join(' ');
+    const iStr=svcs.filter(sv=>sv.items&&sv.items.length).map(sv=>`<div style="margin:2px 0;"><span style="font-size:11px;color:var(--text-muted);">${esc(sv.loaiLabel)}:</span> ${sv.items.map(i=>`<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:12px;font-size:11px;background:var(--gold-pale);color:var(--navy);margin:2px;">${esc(i.ten)} <strong>×${i.sl}</strong></span>`).join('')}</div>`).join('');
     return `<div style="background:#fff;border:1.5px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:10px;border-left:4px solid ${s.color};">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
         <!-- Trái: thông tin -->
         <div style="flex:1;min-width:0;">
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
             <span style="font-weight:700;font-size:16px;color:var(--navy);">P.${yc.phong}</span>
-            <span class="badge ${loaiBadge[yc.loai]||'badge-navy'}" style="font-size:11px;">${yc.loaiLabel}</span>
+            ${badges}
             <span style="font-size:11px;color:var(--text-muted);">🕐 ${yc.gio} · ${yc.ngay} · ${yc.nguoi}</span>
           </div>
           ${iStr?`<div style="margin-bottom:6px;">${iStr}</div>`:''}
@@ -6452,19 +6499,19 @@ function renderYeuCauStats(){
     if(from&&iso<from) return false;
     if(to&&iso>to) return false;
     if(fPhong && (''+yc.phong)!==(''+fPhong)) return false;
-    if(fLoai && (yc.loaiLabel||yc.loai)!==fLoai) return false;
+    if(fLoai && !ycServices(yc).some(s=>s.loaiLabel===fLoai)) return false;
     return true;
   });
 
-  // === PHẦN 1: Thống kê món được yêu cầu (thay+thêm gộp chung) ===
+  // === PHẦN 1: Thống kê món được yêu cầu (thay+thêm gộp chung) — theo từng dịch vụ ===
   const monCount={};
-  ycNgay.filter(yc=>yc.loai==='thay-do'||yc.loai==='them-do').forEach(yc=>{
-    (yc.items||[]).forEach(i=>{ monCount[i.ten]=(monCount[i.ten]||0)+(i.sl||1); });
-  });
+  ycNgay.forEach(yc=>ycServices(yc).filter(s=>s.loai==='thay-do'||s.loai==='them-do').forEach(s=>{
+    (s.items||[]).forEach(i=>{ monCount[i.ten]=(monCount[i.ten]||0)+(i.sl||1); });
+  }));
 
-  // === PHẦN 2: Đếm số yêu cầu theo TỪNG hạng mục (động — mọi loại, kể cả loại mới) ===
+  // === PHẦN 2: Đếm số yêu cầu theo TỪNG hạng mục (mỗi dịch vụ trong phiếu đếm riêng) ===
   const dichVuCount={};
-  ycNgay.forEach(yc=>{ const lb=yc.loaiLabel||yc.loai; dichVuCount[lb]=(dichVuCount[lb]||0)+1; });
+  ycNgay.forEach(yc=>ycServices(yc).forEach(s=>{ const lb=s.loaiLabel||s.loai; dichVuCount[lb]=(dichVuCount[lb]||0)+1; }));
 
   const loaiColors={'Dọn phòng':'#3A5FA0','KO dọn phòng (NNS)':'#C0392B','DND':'#8E44AD','Thay đồ':'#B7860A','Thêm đồ':'#2E7D5B','Laundry':'#7B5EA7','Ủi đồ':'#C0392B'};
   const loaiBg={'Dọn phòng':'#EEF3FB','KO dọn phòng (NNS)':'#FDF0EE','DND':'#F4ECFA','Thay đồ':'#FFF8E7','Thêm đồ':'#EAF5F0','Laundry':'#F5F0FF','Ủi đồ':'#FDF0EE'};
@@ -6508,7 +6555,7 @@ function renderYeuCauStats(){
           <td><span style="padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600;color:${sc};background:${loaiBg[yc.loaiLabel]||'#eee'};">● ${sl}</span></td>
         </tr>`;
       }).join('')
-    :`<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted);">Ngày ${ngayLabel} không có yêu cầu</td></tr>`;
+    :`<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text-muted);">Ngày ${ngayLabel} không có yêu cầu</td></tr>`;
 }
 function initBpPhongDropdowns(){['yc-phong','mb-phong'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML=ALL_ROOMS.map(r=>`<option>${r}</option>`).join('');});const gio=document.getElementById('yc-gio');if(gio)gio.value=new Date().toTimeString().slice(0,5);const hsd=document.getElementById('mb-hsd');if(hsd)hsd.value=new Date().toISOString().slice(0,10);const hvNs=document.getElementById('hv-ns-ngay');if(hvNs)hvNs.value=new Date().toISOString().slice(0,10);const _t=new Date().toISOString().slice(0,10);['yc-tk-from','yc-tk-to'].forEach(id=>{const el=document.getElementById(id);if(el&&!el.value)el.value=_t;});}
 
