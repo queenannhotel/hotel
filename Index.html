@@ -6901,6 +6901,7 @@ function renderKhoTab(){
         <button class="btn btn-gold btn-sm" onclick="openTransfer('${it.id}')" title="Transfer">🔄</button>
         <button class="btn btn-ghost btn-sm" onclick="openKhoHistory('${it.id}')" title="Lịch sử">📋</button>
         <button class="btn btn-ghost btn-sm" onclick="editKhoItem('${it.id}')">✏</button>
+        ${currentUser?.role==='giamdoc'?`<button class="btn btn-danger btn-sm" onclick="deleteKhoItem('${it.id}')" title="Xoá mặt hàng (chỉ Giám đốc)">🗑</button>`:''}
       </div></td>
     </tr>`;
   }).join(''):`<tr><td colspan="12" style="text-align:center;padding:30px;color:var(--text-muted);">Kho trống — <a href="#" onclick="openKhoAddItem()" style="color:var(--gold);">+ Thêm hàng</a></td></tr>`;
@@ -7087,6 +7088,15 @@ function openKhoAddItem(){
   imgPickerClear('ki');
   openModal('modal-kho-item');
   mdRestore('modal-kho-item');
+}
+// Xoá 1 mặt hàng kho — CHỈ Giám đốc.
+function deleteKhoItem(id){
+  if(currentUser?.role!=='giamdoc'){ showToast('Chỉ Giám đốc được xoá mặt hàng kho',2500,'error'); return; }
+  const it=KHO_DATA.find(x=>x.id===id); if(!it) return;
+  if(!confirm(`Xoá mặt hàng "${it.ten}" khỏi kho? Hành động này không thể hoàn tác.`)) return;
+  KHO_DATA=KHO_DATA.filter(x=>x.id!==id);
+  renderKhoTab(); syncNow();
+  showToast(`Đã xoá "${it.ten}" khỏi kho`,2200,'info');
 }
 function editKhoItem(id){
   editingKhoId=id;
@@ -7639,20 +7649,21 @@ function openTrFulfill(id){
   const d=TR_DATA.find(x=>x.id===id); if(!d) return;
   const r=currentUser?.role;
   if(r!=='ketoan'&&r!=='giamdoc'){ showToast('Chỉ Kế toán/Giám đốc thực hiện transfer',2500,'error'); return; }
-  const destKho=trDeptKho(d.bophan);
-  if(!destKho){ showToast('Bộ phận "'+(BP_LABELS[d.bophan]||d.bophan)+'" chưa có kho để nhận transfer',3500,'error'); return; }
+  const defDest=trDeptKho(d.bophan)||'kt';   // gợi ý kho về theo bộ phận, fallback Kho KT (đổi tay được)
   fulfillingTrId=id;
   const done=d.status==='hoan-thanh';
   document.getElementById('tr-ff-title').textContent = done?'📄 Chi Tiết Transfer':'✅ Thực Hiện Transfer';
-  document.getElementById('tr-ff-info').innerHTML=`Yêu cầu <strong>${esc(d.code||d.id)}</strong> · Bộ phận: <strong>${esc(BP_LABELS[d.bophan]||d.bophan)}</strong> · Chuyển về: <strong>${KHO_BP_LABELS[destKho]}</strong>`;
+  document.getElementById('tr-ff-info').innerHTML=`Yêu cầu <strong>${esc(d.code||d.id)}</strong> · Bộ phận: <strong>${esc(BP_LABELS[d.bophan]||d.bophan)}</strong> — chọn kho chuyển về cho từng món`;
   const khoKeys=Object.keys(KHO_BP_LABELS);
+  const selStyle='font-size:12px;padding:5px 8px;border:1.5px solid var(--border);border-radius:7px;';
   document.getElementById('tr-ff-body').innerHTML=(d.items||[]).map((it,i)=>{
     const src=(done&&d.fulfill&&d.fulfill[i])?d.fulfill[i].src:'kt';
+    const dest=(done&&d.fulfill&&d.fulfill[i]&&d.fulfill[i].dest)?d.fulfill[i].dest:defDest;
     return `<tr>
       <td style="font-weight:500;">${esc(it.ten)}</td>
       <td style="text-align:center;">${esc(it.sl)} ${esc(it.dvt||'')}</td>
-      <td><select class="tr-ff-src" ${done?'disabled':''} style="font-size:12px;padding:5px 8px;border:1.5px solid var(--border);border-radius:7px;">${khoKeys.map(k=>`<option value="${k}" ${k===src?'selected':''}>${KHO_BP_LABELS[k]}</option>`).join('')}</select></td>
-      <td><span class="badge badge-navy" style="font-size:11px;">${KHO_BP_LABELS[destKho]}</span></td>
+      <td><select class="tr-ff-src" ${done?'disabled':''} style="${selStyle}">${khoKeys.map(k=>`<option value="${k}" ${k===src?'selected':''}>${KHO_BP_LABELS[k]}</option>`).join('')}</select></td>
+      <td><select class="tr-ff-dest" ${done?'disabled':''} style="${selStyle}">${khoKeys.map(k=>`<option value="${k}" ${k===dest?'selected':''}>${KHO_BP_LABELS[k]}</option>`).join('')}</select></td>
     </tr>`;
   }).join('');
   const btn=document.getElementById('tr-ff-done-btn'); if(btn) btn.style.display=done?'none':'';
@@ -7661,13 +7672,14 @@ function openTrFulfill(id){
 function confirmTrFulfill(){
   const d=TR_DATA.find(x=>x.id===fulfillingTrId); if(!d) return;
   if(d.status==='hoan-thanh'){ closeModal('modal-tr-fulfill'); return; }
-  const destKho=trDeptKho(d.bophan);
-  if(!destKho){ showToast('Bộ phận chưa có kho nhận',3000,'error'); return; }
+  const defDest=trDeptKho(d.bophan)||'kt';
   const srcSels=[...document.querySelectorAll('#tr-ff-body .tr-ff-src')];
+  const destSels=[...document.querySelectorAll('#tr-ff-body .tr-ff-dest')];
   const nguoi=currentUser?.fullname||'Kế toán';
   const fulfill=[];
   (d.items||[]).forEach((it,i)=>{
     const srcKho=srcSels[i]?.value||'kt';
+    const destKho=destSels[i]?.value||defDest;
     const note=`Transfer YC ${d.code||d.id}: ${KHO_BP_LABELS[srcKho]} → ${KHO_BP_LABELS[destKho]}`;
     khoTransferItem(it.ten,it.dvt,it.sl,srcKho,destKho,note,nguoi);
     fulfill.push({src:srcKho,dest:destKho,sl:it.sl});
