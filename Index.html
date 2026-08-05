@@ -981,6 +981,7 @@ textarea{resize:vertical;min-height:68px;}
             <select id="chi-f-bp" onchange="renderChiTab()" style="font-size:12px;padding:6px 10px;"><option value="">Tất cả bộ phận</option><option value="buong-phong">Buồng phòng</option><option value="nha-hang">Nhà hàng</option><option value="bep">Bếp</option><option value="sale">Sale</option><option value="ky-thuat">Kỹ thuật</option><option value="le-tan">Lễ tân</option><option value="hr">HR</option></select>
             <select id="chi-f-pttt" onchange="renderChiTab()" style="font-size:12px;padding:6px 10px;"><option value="">Tất cả PTTT</option><option value="TM">TM</option><option value="CK">CK</option><option value="Công nợ">Công nợ</option></select>
             <select id="chi-f-ncc" onchange="renderChiTab()" style="font-size:12px;padding:6px 10px;"><option value="">Tất cả NCC</option></select>
+            <select id="chi-f-hoadon" onchange="renderChiTab()" style="font-size:12px;padding:6px 10px;"><option value="">Tất cả HĐ</option><option value="KO VAT">KO VAT</option><option value="VAT">VAT (chưa + đã nhận)</option></select>
             <span style="font-size:12px;color:var(--text-muted);">Từ</span>
             <input type="date" id="chi-from" onchange="renderChiTab()" style="width:140px;font-size:12px;padding:6px 10px;" title="Từ ngày">
             <span style="font-size:12px;color:var(--text-muted);">→</span>
@@ -3524,6 +3525,7 @@ function chiActiveFilter(){
   const fBp     = document.getElementById('chi-f-bp')?.value||'';
   const fPttt   = document.getElementById('chi-f-pttt')?.value||'';
   const fNcc    = document.getElementById('chi-f-ncc')?.value||'';
+  const fHd     = document.getElementById('chi-f-hoadon')?.value||'';   // '' | 'KO VAT' | 'VAT'
   const fFrom   = document.getElementById('chi-from')?.value||'';   // yyyy-mm-dd (rỗng = tất cả)
   const fTo     = document.getElementById('chi-to')?.value||'';
   return r =>
@@ -3531,6 +3533,7 @@ function chiActiveFilter(){
     (!fBp||r.bophan===BP_LABELS[fBp]||r.bophan===fBp) &&
     (!fPttt||r.pttt===fPttt) &&
     (!fNcc||r.ten_ncc===fNcc) &&
+    (!fHd || (fHd==='KO VAT' ? r.hoa_don==='KO VAT' : (r.hoa_don==='VAT-chưa nhận'||r.hoa_don==='VAT-đã nhận'))) &&
     (()=>{ if(!fFrom&&!fTo) return true; const iso=vnToIso(r.ngay); if(fFrom&&iso<fFrom) return false; if(fTo&&iso>fTo) return false; return true; })();
 }
 function renderChiTab() {
