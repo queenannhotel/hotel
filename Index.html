@@ -2834,7 +2834,7 @@ function selectDxItem(id){
   const ld=document.getElementById('dx-last-date'); if(ld) ld.textContent=p.lastDate||'';
   const nccArea=document.getElementById('dx-ncc-area');
   if(nccArea){
-    const names=(it.nccIds||[]).map(nid=>{const n=(typeof NCC_LIST!=='undefined'?NCC_LIST:[]).find(x=>x.id===nid);return n?n.name:'';}).filter(Boolean);
+    const names=(it.nccIds||[]).map(nid=>nccName(nid)).filter(Boolean);
     nccArea.innerHTML = names.length
       ? names.map(n=>`<span class="badge badge-blue" style="margin:3px;">${esc(n)}</span>`).join('')
       : '<div style="padding:11px;background:var(--cream);border-radius:8px;border:1px dashed var(--border);font-size:12px;color:var(--text-muted);">Chưa có NCC gợi ý cho mặt hàng này</div>';
@@ -5668,7 +5668,9 @@ const search=(document.getElementById('catalog-search')?.value||'').toLowerCase(
 // \u0110\u1ed5 dropdown l\u1ecdc NCC (distinct t\u00ean NCC li\u00ean k\u1ebft), gi\u1eef l\u1ef1a ch\u1ecdn hi\u1ec7n t\u1ea1i
 const nccSel=document.getElementById('catalog-f-ncc');
 if(nccSel){ const cur=nccSel.value;
-  const nccs=[...new Set(catalogItems.flatMap(it=>(it.nccIds||[]).map(nccName)).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi'));
+  // Liệt kê TOÀN BỘ NCC (từ NCC_DATA) + hợp thêm tên NCC đang gắn ở mặt hàng (phòng NCC đã xoá còn gắn).
+  const linked=catalogItems.flatMap(it=>(it.nccIds||[]).map(nccName));
+  const nccs=[...new Set([...(NCC_DATA||[]).map(n=>n.ten), ...linked].filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi'));
   nccSel.innerHTML='<option value="">T\u1ea5t c\u1ea3 NCC</option>'+nccs.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('');
   nccSel.value=nccs.includes(cur)?cur:''; }
 const fNcc=nccSel?nccSel.value:'';
@@ -8221,7 +8223,7 @@ const COLLECTIONS = {
   thu:       { read:()=>_byIdDump(THU_DATA),  write:r=>{THU_DATA=r.map(x=>x.obj);},  render:()=>{try{renderThuTab();}catch(e){} try{syncThuChiSummary();}catch(e){} try{updateDashboardKPI();}catch(e){}} },
   chi:       { read:()=>_byIdDump(CHI_DATA),  write:r=>{CHI_DATA=r.map(x=>x.obj);},  render:()=>{try{syncThuChiSummary();}catch(e){} try{updateDashboardKPI();}catch(e){}} },
   dx:        { read:()=>_byIdDump(DX_DATA),   write:r=>{DX_DATA=r.map(x=>x.obj);},   render:()=>{try{renderDxTable();}catch(e){} try{renderDashDx();}catch(e){}} },
-  ncc:       { read:()=>_byIdDump(NCC_DATA),  write:r=>{NCC_DATA=r.map(x=>x.obj);},  render:()=>{try{renderNccTable();}catch(e){}} },
+  ncc:       { read:()=>_byIdDump(NCC_DATA),  write:r=>{NCC_DATA=r.map(x=>x.obj);},  render:()=>{try{renderNccTable();}catch(e){} try{renderCatalog();}catch(e){}} },
   kho:       { read:()=>_byIdDump(KHO_DATA),  write:r=>{KHO_DATA=r.map(x=>x.obj);},  render:()=>{try{renderKhoTab();}catch(e){}} },
   yc:        { read:()=>_byIdDump(YC_DATA),   write:r=>{YC_DATA=r.map(x=>x.obj);},   render:()=>{try{renderYeuCau();}catch(e){}} },
   ycDeleted: { read:()=>_byIdDump(YC_DELETED),write:r=>{YC_DELETED=r.map(x=>x.obj);},render:()=>{try{renderYcDeleted();}catch(e){}} },
