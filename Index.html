@@ -1747,7 +1747,7 @@ textarea{resize:vertical;min-height:68px;}
       <div class="form-group"><label>Địa chỉ</label><input id="ncc-diachi" placeholder="VD: 123 Lê Lợi, Q1, TP.HCM"></div>
     </div>
     <div class="form-row">
-      <div class="form-group"><label>Phương thức thanh toán</label>
+      <div class="form-group"><label>Phương thức thanh toán <span style="color:#94a3b8;font-weight:400;">(áp dụng trước các mốc đổi)</span></label>
         <select id="ncc-pttt"><option value="TM">TM — Tiền mặt</option><option value="CK">CK — Chuyển khoản</option><option value="CN">CN — Công nợ</option></select>
       </div>
       <div class="form-group"><label>Hóa đơn</label>
@@ -1761,6 +1761,11 @@ textarea{resize:vertical;min-height:68px;}
           <option value="hd-cuoi-thang">HĐ cuối tháng</option>
         </select>
       </div>
+    </div>
+    <div class="form-group" style="margin-bottom:12px;">
+      <label>Lịch đổi PTTT theo ngày <span style="color:#94a3b8;font-weight:400;">— PTTT mới áp dụng từ ngày đã chọn (phiếu chi tự hiện theo giai đoạn)</span></label>
+      <div id="ncc-pttt-sched"></div>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="nccAddPtttSchedRow()" style="margin-top:4px;">+ Thêm mốc đổi PTTT</button>
     </div>
     <div class="form-row">
       <div class="form-group"><label>Hợp đồng</label>
@@ -3969,7 +3974,7 @@ function syncChiNccDefaults(){
     if(r.nguon!=='de-xuat' || r._chi_manual) return;
     const nccRec=(NCC_DATA||[]).find(n=>(n.ten||'').trim().toLowerCase()===(r.ten_ncc||'').trim().toLowerCase());
     if(!nccRec) return;
-    const d=nccChiDefaults(nccRec);
+    const d=nccChiDefaults(nccRec, vnToIso(r.ngay));
     if(r.hoa_don!==d.hoa_don || r.pttt!==d.pttt){ r.hoa_don=d.hoa_don; r.pttt=d.pttt; changed=true; }
   });
   return changed;
@@ -4205,13 +4210,21 @@ function renderThuChi(){ syncThuChiSummary(); }
 
 // ==================== NHẢY ĐỀ XUẤT ĐÃ DUYỆT → CHI ====================
 // Suy ra giá trị mặc định 'hoa_don' (VAT) + 'pttt' cho bản ghi Chi từ thông tin 1 NCC.
-function nccChiDefaults(nccRec){
+// Mã PTTT của NCC hiệu lực tại 1 ngày (ISO): pttt gốc, ghi đè bởi mốc lịch mới nhất có from<=iso.
+function nccPtttCode(nccRec, iso){
+  let code = (nccRec && nccRec.pttt) || 'CK';
+  const sch = (nccRec && Array.isArray(nccRec.ptttSchedule)) ? nccRec.ptttSchedule : [];
+  sch.filter(s=>s&&s.from&&s.pttt).slice().sort((a,b)=>a.from.localeCompare(b.from)).forEach(s=>{ if(iso && iso>=s.from) code=s.pttt; });
+  return code;
+}
+function nccChiDefaults(nccRec, iso){
   // Hoá đơn: các nhóm có VAT → 'VAT-chưa nhận' (kế toán cập nhật 'đã nhận' sau); còn lại → 'KO VAT'.
   const vatSet = ['co-vat','sau-tt','truoc-tt','hd-lien','hd-gom','hd-cuoi-thang'];
   const hoa_don = (nccRec && vatSet.includes(nccRec.hoadon)) ? 'VAT-chưa nhận' : 'KO VAT';
-  // PTTT: NCC lưu 'TM'/'CK'/'CN' → bản ghi Chi dùng 'TM'/'CK'/'Công nợ'.
+  // PTTT theo NGÀY phiếu: 'TM'/'CK'/'CN' → bản ghi Chi dùng 'TM'/'CK'/'Công nợ'. Thiếu iso → hôm nay.
+  const isoDay = iso || new Date().toISOString().slice(0,10);
   const pMap = {TM:'TM', CK:'CK', CN:'Công nợ'};
-  const pttt = (nccRec && pMap[nccRec.pttt]) || 'CK';
+  const pttt = (nccRec && pMap[nccPtttCode(nccRec, isoDay)]) || 'CK';
   return { hoa_don, pttt };
 }
 // Kho mặc định của 1 NCC (theo tên) — rỗng nếu NCC không chọn kho.
@@ -4235,7 +4248,7 @@ function pushDxToChi(dx) {
     }
     // Kế thừa PTTT + Hoá đơn (VAT) mặc định theo thông tin NCC (kế toán vẫn chỉnh tay được sau).
     const nccRec = (NCC_DATA||[]).find(n=>(n.ten||'').trim().toLowerCase()===(tenNcc||'').trim().toLowerCase());
-    const { hoa_don: defHoaDon, pttt: defPttt } = nccChiDefaults(nccRec);
+    const { hoa_don: defHoaDon, pttt: defPttt } = nccChiDefaults(nccRec, vnToIso(ngay));
     const sl = parseFloat(it.sl)||1;
     const don_gia = dxItemPrice(it);   // ưu tiên đơn giá hiện tại (giá thực), fallback đơn giá dự kiến
     CHI_DATA.unshift({
@@ -4405,7 +4418,7 @@ function chiNccChange(){
   const ten=document.getElementById('chi-ncc').value;
   const nccRec=(NCC_DATA||[]).find(n=>(n.ten||'')===ten);
   if(!nccRec) return;
-  const d=nccChiDefaults(nccRec);
+  const d=nccChiDefaults(nccRec, document.getElementById('chi-ngay')?.value||'');
   const hdBack={'KO VAT':'KO VAT','VAT-chưa nhận':'VAT-chua-nhan','VAT-đã nhận':'VAT-da-nhan'};
   const hd=document.getElementById('chi-hoadon'); if(hd) hd.value=hdBack[d.hoa_don]||'KO VAT';
   const pt=document.getElementById('chi-pttt'); if(pt) pt.value=d.pttt;
@@ -5692,6 +5705,30 @@ function nccRemovePickedCat(i){
   renderNccPickedCats();
 }
 
+// ----- Lịch đổi PTTT theo ngày của NCC -----
+function nccAddPtttSchedRow(from='',pttt='CK'){
+  const box=document.getElementById('ncc-pttt-sched'); if(!box) return;
+  const div=document.createElement('div');
+  div.className='nps-row';
+  div.style.cssText='display:flex;gap:6px;align-items:center;margin-bottom:6px;';
+  div.innerHTML=`
+    <span style="font-size:12px;color:var(--text-muted);">Từ ngày</span>
+    <input type="date" class="nps-from" value="${esc(from)}" style="font-size:12px;padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;">
+    <span style="font-size:12px;color:var(--text-muted);">→ PTTT</span>
+    <select class="nps-pttt" style="font-size:12px;padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;">
+      <option value="TM" ${pttt==='TM'?'selected':''}>TM — Tiền mặt</option>
+      <option value="CK" ${pttt==='CK'?'selected':''}>CK — Chuyển khoản</option>
+      <option value="CN" ${pttt==='CN'?'selected':''}>CN — Công nợ</option>
+    </select>
+    <button type="button" class="btn btn-ghost btn-sm" onclick="this.closest('.nps-row').remove()" style="color:var(--red);" title="Xoá mốc">✕</button>`;
+  box.appendChild(div);
+}
+function nccReadPtttSched(){
+  return [...document.querySelectorAll('#ncc-pttt-sched .nps-row')]
+    .map(r=>({from:r.querySelector('.nps-from')?.value||'', pttt:r.querySelector('.nps-pttt')?.value||''}))
+    .filter(s=>s.from && s.pttt)
+    .sort((a,b)=>a.from.localeCompare(b.from));
+}
 function saveNcc() {
   const ten=document.getElementById('ncc-ten').value.trim();
   // Gộp danh mục đang chọn ở dropdown (nếu chưa bấm "+ Thêm") vào danh sách
@@ -5714,6 +5751,7 @@ function saveNcc() {
     hopdong:document.getElementById('ncc-hopdong').value,
     ghichu:document.getElementById('ncc-ghichu').value.trim(),
     kho:document.getElementById('ncc-kho').value,
+    ptttSchedule:nccReadPtttSched(),
   };
   if(editingNccId){
     const idx=NCC_DATA.findIndex(x=>x.id===editingNccId);
@@ -7911,11 +7949,14 @@ function openNccModal(id=null){
     document.getElementById('ncc-hopdong').value=ncc.hopdong||'co';
     document.getElementById('ncc-ghichu').value=ncc.ghichu||'';
     document.getElementById('ncc-kho').value=ncc.kho||'';
+    document.getElementById('ncc-pttt-sched').innerHTML='';
+    (ncc.ptttSchedule||[]).forEach(s=>nccAddPtttSchedRow(s.from||'', s.pttt||'CK'));
   } else {
     ['ncc-ten','ncc-tenfull','ncc-mst','ncc-sdt','ncc-email','ncc-nguoi','ncc-diachi','ncc-ghichu'].forEach(id=>{
       const el=document.getElementById(id); if(el) el.value='';
     });
     document.getElementById('ncc-kho').value='';
+    document.getElementById('ncc-pttt-sched').innerHTML='';
     populateNccDanhmuc('');
     nccPickedCats=[];
     renderNccPickedCats();
