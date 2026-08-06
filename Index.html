@@ -3110,6 +3110,10 @@ function applyPermissions(){
     if(pageId==='kho'){
       const hasKho = allowedTabs.some(t=>t==='kho'||t.startsWith('kho-'));
       el.classList.toggle('hidden-nav', !hasKho && role!=='giamdoc');
+    } else if(pageId==='chuyen-khoan'){
+      // Chuyển Khoản kế thừa quyền của Công Nợ (ai xem được Công Nợ thì thấy luôn) — khỏi cấp lại tab.
+      const ok = role==='giamdoc' || allowedTabs.includes('chuyen-khoan') || allowedTabs.includes('cong-no');
+      el.classList.toggle('hidden-nav', !ok);
     } else {
       if(role==='giamdoc' || allowedTabs.includes(pageId)) el.classList.remove('hidden-nav');
       else el.classList.add('hidden-nav');
