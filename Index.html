@@ -3535,7 +3535,10 @@ function renderChiTab() {
   try{ syncChiNccDefaults(); }catch(e){}   // căn Hoá đơn/PTTT theo NCC (trừ bản đã sửa tay)
   // Đổ dropdown lọc NCC (distinct từ dữ liệu Chi), giữ lựa chọn hiện tại — trước khi đọc predicate
   const nccSel=document.getElementById('chi-f-ncc');
-  if(nccSel){ const cur=nccSel.value; const nccs=[...new Set(CHI_DATA.map(r=>r.ten_ncc).filter(n=>n&&n!=='—'))].sort();
+  if(nccSel){ const cur=nccSel.value;
+    // Liệt kê TOÀN BỘ NCC (NCC_DATA) + hợp thêm tên đang dùng trong phiếu chi (phòng NCC đã xoá còn phiếu).
+    const used=CHI_DATA.map(r=>r.ten_ncc).filter(n=>n&&n!=='—');
+    const nccs=[...new Set([...(NCC_DATA||[]).map(n=>n.ten), ...used].filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi'));
     nccSel.innerHTML='<option value="">Tất cả NCC</option>'+nccs.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('');
     nccSel.value=nccs.includes(cur)?cur:''; }
   let rows = CHI_DATA.filter(chiActiveFilter());
@@ -8364,7 +8367,7 @@ const COLLECTIONS = {
   thu:       { read:()=>_byIdDump(THU_DATA),  write:r=>{THU_DATA=r.map(x=>x.obj);},  render:()=>{try{renderThuTab();}catch(e){} try{syncThuChiSummary();}catch(e){} try{updateDashboardKPI();}catch(e){}} },
   chi:       { read:()=>_byIdDump(CHI_DATA),  write:r=>{CHI_DATA=r.map(x=>x.obj);},  render:()=>{try{syncThuChiSummary();}catch(e){} try{updateDashboardKPI();}catch(e){}} },
   dx:        { read:()=>_byIdDump(DX_DATA),   write:r=>{DX_DATA=r.map(x=>x.obj);},   render:()=>{try{renderDxTable();}catch(e){} try{renderDashDx();}catch(e){}} },
-  ncc:       { read:()=>_byIdDump(NCC_DATA),  write:r=>{NCC_DATA=r.map(x=>x.obj);},  render:()=>{try{renderNccTable();}catch(e){} try{renderCatalog();}catch(e){}} },
+  ncc:       { read:()=>_byIdDump(NCC_DATA),  write:r=>{NCC_DATA=r.map(x=>x.obj);},  render:()=>{try{renderNccTable();}catch(e){} try{renderCatalog();}catch(e){} try{renderChiTab();}catch(e){}} },
   kho:       { read:()=>_byIdDump(KHO_DATA),  write:r=>{KHO_DATA=r.map(x=>x.obj);},  render:()=>{try{renderKhoTab();}catch(e){}} },
   yc:        { read:()=>_byIdDump(YC_DATA),   write:r=>{YC_DATA=r.map(x=>x.obj);},   render:()=>{try{renderYeuCau();}catch(e){}} },
   ycDeleted: { read:()=>_byIdDump(YC_DELETED),write:r=>{YC_DELETED=r.map(x=>x.obj);},render:()=>{try{renderYcDeleted();}catch(e){}} },
