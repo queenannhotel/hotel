@@ -770,6 +770,7 @@ textarea{resize:vertical;min-height:68px;}
     <div class="nav-item" onclick="showPage('tab-thu',this)" data-perm="ketoan,giamdoc"><span class="icon">⬆</span> Ghi Thu</div>
     <div class="nav-item" onclick="showPage('tab-chi',this)" data-perm="ketoan,giamdoc"><span class="icon">⬇</span> Ghi Chi</div>
     <div class="nav-item" onclick="showPage('cong-no',this)" data-perm="ketoan,giamdoc"><span class="icon">📋</span> Công Nợ</div>
+    <div class="nav-item" onclick="showPage('chuyen-khoan',this)" data-perm="ketoan,giamdoc"><span class="icon">💳</span> Chuyển Khoản</div>
     <div class="nav-item" onclick="showPage('nhan-su',this)" data-perm="ketoan,giamdoc"><span class="icon">👔</span> Nhân Sự & Lương</div>
     <div class="nav-section">Mua Hàng</div>
     <div class="nav-item" onclick="showPage('de-xuat',this)" data-perm="all"><span class="icon">🛒</span> Đề xuất Mua hàng<span class="notif-dot" id="notif-dx">3</span></div>
@@ -1068,6 +1069,31 @@ textarea{resize:vertical;min-height:68px;}
             <table><thead><tr><th>Ngày PC</th><th>Số HĐ</th><th>Nhà cung cấp</th><th>Tổng tiền</th><th>Thông tin TT</th><th>Tình trạng</th></tr></thead>
             <tbody id="cnck-body"></tbody></table>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CHUYỂN KHOẢN -->
+    <div class="page" id="page-chuyen-khoan">
+      <div class="section-header"><span class="section-title">💳 Chuyển Khoản</span></div>
+      <div class="card">
+        <div class="card-body" style="padding:10px 16px;">
+          <div class="filter-row">
+            <select id="cnck-ncc" onchange="renderCongNoCk()" style="font-size:12px;padding:6px 10px;"><option value="">Tất cả NCC</option></select>
+            <span style="font-size:12px;color:var(--text-muted);">Từ</span>
+            <input type="date" id="cnck-from" onchange="renderCongNoCk()" style="width:140px;font-size:12px;padding:6px 10px;" title="Từ ngày">
+            <span style="font-size:12px;color:var(--text-muted);">→</span>
+            <input type="date" id="cnck-to" onchange="renderCongNoCk()" style="width:140px;font-size:12px;padding:6px 10px;" title="Đến ngày">
+          </div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;background:var(--gold-pale);border:1px solid rgba(201,168,76,.35);border-radius:10px;padding:12px 18px;margin:0 16px 12px;">
+          <span style="font-size:13px;color:var(--text-muted);">Tổng chuyển khoản (chưa thanh toán) trong giai đoạn</span>
+          <span id="cnck-total" style="font-size:20px;font-weight:800;color:var(--red);">—</span>
+        </div>
+        <div id="cnck-sub" style="font-size:12px;color:var(--text-muted);margin:0 16px 10px;"></div>
+        <div class="table-wrap wide">
+          <table><thead><tr><th>Ngày PC</th><th>Số HĐ</th><th>Nhà cung cấp</th><th>Tổng tiền</th><th>Thông tin TT</th><th>Tình trạng</th></tr></thead>
+          <tbody id="cnck-body"></tbody></table>
         </div>
       </div>
     </div>
@@ -2962,8 +2988,8 @@ const ROLE_PERM_DESC = {
 
 // Mặc định tab theo role (nếu user không custom)
 const DEFAULT_TABS = {
-  giamdoc:    ['dashboard','thu-chi','tab-thu','tab-chi','cong-no','nhan-su','kho','kho-kt','kho-bep','kho-nha-hang','kho-hk','kho-ky-thuat','kho-van-phong','kho-le-tan','kho-xuat','kho-nhap','kho-huy','buong-phong','de-xuat','yeu-cau-transfer','nha-cung-cap','danh-muc','bao-cao','quan-ly-tk','cai-dat'],
-  ketoan:     ['thu-chi','tab-thu','tab-chi','cong-no','nhan-su','kho','kho-kt','kho-xuat','kho-nhap','de-xuat','yeu-cau-transfer','nha-cung-cap','danh-muc','bao-cao'],
+  giamdoc:    ['dashboard','thu-chi','tab-thu','tab-chi','cong-no','chuyen-khoan','nhan-su','kho','kho-kt','kho-bep','kho-nha-hang','kho-hk','kho-ky-thuat','kho-van-phong','kho-le-tan','kho-xuat','kho-nhap','kho-huy','buong-phong','de-xuat','yeu-cau-transfer','nha-cung-cap','danh-muc','bao-cao','quan-ly-tk','cai-dat'],
+  ketoan:     ['thu-chi','tab-thu','tab-chi','cong-no','chuyen-khoan','nhan-su','kho','kho-kt','kho-xuat','kho-nhap','de-xuat','yeu-cau-transfer','nha-cung-cap','danh-muc','bao-cao'],
   'truong-bp':['de-xuat','yeu-cau-transfer','kho','buong-phong'],
   hr:         ['nhan-su'],
 };
@@ -3221,6 +3247,7 @@ const AU_TAB_GROUPS = [
       {id:'tab-thu',      label:'Ghi Thu'},
       {id:'tab-chi',      label:'Ghi Chi'},
       {id:'cong-no',      label:'Công Nợ'},
+      {id:'chuyen-khoan', label:'Chuyển Khoản'},
       {id:'nhan-su',      label:'Nhân Sự & Lương'},
     ]
   },
@@ -4065,6 +4092,65 @@ function switchCnTab(tab,el){
   document.getElementById('cn-subtab-ck').classList.toggle('active',tab==='ck');
   if(tab==='ptr') renderCongNoPtrSheet();
   if(tab==='ck') renderCongNoCk();
+}
+// ===== Tab Chuyển Khoản: phiếu chi PTTT = CK =====
+function cnCkGroups(){
+  const groups=[]; const gmap={};
+  CHI_DATA.filter(r=>r.pttt==='CK').forEach(r=>{
+    const key=chiGroupKey(r);
+    let g=gmap[key]; if(!g){ g={key,recs:[]}; gmap[key]=g; groups.push(g); }
+    g.recs.push(r);
+  });
+  return groups.map(g=>{
+    const recs=g.recs, first=recs[0];
+    return {
+      key:g.key, recs, first,
+      tong:recs.reduce((s,r)=>s+(parseFloat(r.tong)||0),0),
+      ncc:[...new Set(recs.map(r=>r.ten_ncc).filter(n=>n&&n!=='—'))].join(', ')||'—',
+      paid:first.cn_status==='da',
+    };
+  }).sort((a,b)=>vnToIso(b.first.ngay).localeCompare(vnToIso(a.first.ngay)));
+}
+function renderCongNoCk(){
+  const body=document.getElementById('cnck-body'); if(!body) return;
+  const groups=cnCkGroups();
+  // Dropdown NCC (distinct từ phiếu CK), giữ lựa chọn
+  const sel=document.getElementById('cnck-ncc');
+  const nccs=[...new Set(groups.flatMap(g=>g.recs.map(r=>r.ten_ncc)).filter(n=>n&&n!=='—'))].sort();
+  if(sel){ const cur=sel.value; sel.innerHTML='<option value="">Tất cả NCC</option>'+nccs.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join(''); sel.value=nccs.includes(cur)?cur:''; }
+  const fNcc=sel?sel.value:'';
+  const fFrom=document.getElementById('cnck-from')?.value||'';
+  const fTo=document.getElementById('cnck-to')?.value||'';
+  const filtered=groups.filter(g=>{
+    if(fNcc && !g.recs.some(r=>(r.ten_ncc||'')===fNcc)) return false;
+    if(fFrom||fTo){ const iso=vnToIso(g.first.ngay); if(fFrom&&iso<fFrom) return false; if(fTo&&iso>fTo) return false; }
+    return true;
+  });
+  body.innerHTML=filtered.length?filtered.map(g=>{
+    const tt=nccTtInfo(g.first.ten_ncc);
+    return `<tr${g.paid?' style="opacity:.6;"':''}>
+      <td style="font-size:12px;white-space:nowrap;">${esc(g.first.ngay)||'—'}</td>
+      <td onclick="event.stopPropagation()"><input class="inline-input" value="${esc(g.first.so_hd||'')}" placeholder="Số HĐ..." onchange="updateCnCkSoHd('${esc(g.key)}',this.value)" style="width:100px;font-size:11px;padding:4px 6px;"></td>
+      <td style="font-weight:500;">${esc(g.ncc)}</td>
+      <td class="amount-neg" style="font-weight:700;white-space:nowrap;">${fmt(g.tong)}</td>
+      <td style="font-size:12px;white-space:pre-wrap;max-width:240px;">${esc(tt)||'—'}</td>
+      <td>${cnStatusSelect(g.first.cn_status,`updateCnCkStatus('${esc(g.key)}',this.value)`)}</td>
+    </tr>`;
+  }).join(''):`<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-muted);">Không có phiếu chi chuyển khoản khớp bộ lọc</td></tr>`;
+  const chuaTT=filtered.filter(g=>!g.paid).reduce((s,g)=>s+g.tong,0);
+  const daTra =filtered.filter(g=> g.paid).reduce((s,g)=>s+g.tong,0);
+  const phatSinh=filtered.reduce((s,g)=>s+g.tong,0);
+  const totEl=document.getElementById('cnck-total'); if(totEl) totEl.textContent=fmt(chuaTT);
+  const subEl=document.getElementById('cnck-sub'); if(subEl) subEl.textContent=`Đã TT: ${fmt(daTra)} · Tổng phát sinh: ${fmt(phatSinh)} · ${filtered.length} phiếu`;
+}
+function updateCnCkSoHd(key,val){
+  try{ updateChiGroupSoHd(key,val); }catch(e){}   // dùng chung so_hd với Ghi Chi
+  try{ renderCongNoCk(); }catch(e){}
+}
+function updateCnCkStatus(key,val){
+  CHI_DATA.filter(r=>chiGroupKey(r)===key && r.pttt==='CK').forEach(r=>{ r.cn_status=val; });
+  syncNow();
+  try{ renderCongNoCk(); }catch(e){}
 }
 // ===== Tab Chuyển Khoản: phiếu chi PTTT = CK =====
 function cnCkGroups(){
@@ -7668,7 +7754,7 @@ function exportKhoExcel(){ exportExcel('kho'); return; /* dùng exportExcel th�
   const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='Kho_QueenAnn.csv';a.click();
 }
 
-const PAGE_TITLES={dashboard:'Dashboard Tài Chính','thu-chi':'Quản Lý Thu Chi','tab-thu':'Ghi Thu','tab-chi':'Ghi Chi','cong-no':'Theo Dõi Công Nợ','nhan-su':'Nhân Sự & Lương','kho':'Quản Lý Kho','buong-phong':'Buồng Phòng','de-xuat':'Đề Xuất Mua Hàng','yeu-cau-transfer':'Yêu Cầu Transfer','nha-cung-cap':'Nhà Cung Cấp','danh-muc':'Danh Mục Hàng Hoá','bao-cao':'Báo Cáo Tài Chính','quan-ly-tk':'Quản Lý Tài Khoản','cai-dat':'Cài Đặt Hệ Thống'};
+const PAGE_TITLES={dashboard:'Dashboard Tài Chính','thu-chi':'Quản Lý Thu Chi','tab-thu':'Ghi Thu','tab-chi':'Ghi Chi','cong-no':'Theo Dõi Công Nợ','chuyen-khoan':'Chuyển Khoản','nhan-su':'Nhân Sự & Lương','kho':'Quản Lý Kho','buong-phong':'Buồng Phòng','de-xuat':'Đề Xuất Mua Hàng','yeu-cau-transfer':'Yêu Cầu Transfer','nha-cung-cap':'Nhà Cung Cấp','danh-muc':'Danh Mục Hàng Hoá','bao-cao':'Báo Cáo Tài Chính','quan-ly-tk':'Quản Lý Tài Khoản','cai-dat':'Cài Đặt Hệ Thống'};
 // Mặc định LẦN ĐẦU mở tab trong phiên: lọc theo ngày hôm nay (user đổi khoảng ngày sau thì giữ nguyên).
 let _tabDateInit={};
 function ensureTabToday(fromId,toId,key){
@@ -7693,6 +7779,7 @@ function showPage(id,el){
   if(id==='thu-chi') syncThuChiSummary();
   if(id==='nha-cung-cap') renderNccTable();
   if(id==='cong-no') renderCongNoPtr();
+  if(id==='chuyen-khoan') renderCongNoCk();
   if(id==='bao-cao') renderBaoCao();
   if(id==='cai-dat') renderCaiDat();
   if(id==='nhan-su'){ renderNsLuong(); updateNsKpi(); }
