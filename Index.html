@@ -1313,7 +1313,7 @@ textarea{resize:vertical;min-height:68px;}
           <div class="table-wrap wide">
             <table><thead><tr>
               <th>Nhân viên</th><th>Bộ phận</th><th>Lương đóng BH</th>
-              <th>Cty đóng (21.5%)</th><th>NV đóng (10.5%)</th><th>Tổng BHXH</th><th>Tháng</th><th></th>
+              <th>Cty đóng</th><th>NV đóng</th><th>Tổng BHXH</th><th>Tháng</th><th></th>
             </tr></thead>
             <tbody id="tbl-ns-bhxh"></tbody>
             </table>
@@ -1903,9 +1903,13 @@ textarea{resize:vertical;min-height:68px;}
       <div class="form-group"><label>Lương đóng BHXH (đồng) <span style="color:var(--red);">*</span></label><input type="number" id="nsbh-luong" placeholder="0" oninput="calcBhxhPreview()"></div>
       <div class="form-group"><label>Tháng</label><input type="month" id="nsbh-thang" value="2026-07"></div>
     </div>
-    <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:12px;cursor:pointer;">
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:8px;cursor:pointer;">
       <input type="checkbox" id="nsbh-ctyfull" onchange="calcBhxhPreview()" style="width:16px;height:16px;">
-      <span><strong>Cty đóng Full</strong> — NV này không đóng, công ty gánh toàn bộ (32% lương)</span>
+      <span><strong>Cty đóng Full</strong> — NV này không đóng, công ty gánh toàn bộ</span>
+    </label>
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:12px;cursor:pointer;">
+      <input type="checkbox" id="nsbh-bhytonly" onchange="calcBhxhPreview()" style="width:16px;height:16px;">
+      <span><strong>Chỉ đóng BHYT</strong> — cty 3% / NV 1.5% lương (thay cho mức đầy đủ)</span>
     </label>
     <!-- Preview tính tự động -->
     <div id="nsbh-preview" style="display:none;background:var(--green-bg);border-radius:10px;padding:13px 15px;margin-bottom:12px;">
@@ -4669,9 +4673,16 @@ let NS_TNCN = [];
 const NS_LOAI_LABELS = {luong:'💵 Lương', thuong:'🎁 Thưởng', 'phu-cap':'🏷 Phụ cấp', khac:'📌 Khác'};
 const NS_LOAI_BADGE  = {luong:'badge-green', thuong:'badge-yellow', 'phu-cap':'badge-blue', khac:'badge-navy'};
 
-// Phần công ty / nhân viên đóng BHXH cho 1 bản ghi. "Cty đóng Full" → cty gánh cả 32% (21.5%+10.5%), NV=0.
-function bhxhCtyOf(r){ const l=parseFloat(r.luong)||0; return Math.round(l*(r.ctyFull?0.32:0.215)); }
-function bhxhNvOf(r){ const l=parseFloat(r.luong)||0; return r.ctyFull?0:Math.round(l*0.105); }
+// Tỷ lệ đóng BHXH của 1 bản ghi (%). Mặc định cty 21.5% / NV 10.5%.
+//  - "Chỉ đóng BHYT": cty 3% / NV 1.5%.
+//  - "Cty đóng Full": cty gánh cả phần NV (cty = cty+nv), NV = 0.
+function bhxhRates(r){
+  const cp = r.bhytOnly ? 3 : 21.5;
+  const np = r.bhytOnly ? 1.5 : 10.5;
+  return { ctyPct: r.ctyFull ? (cp+np) : cp, nvPct: r.ctyFull ? 0 : np };
+}
+function bhxhCtyOf(r){ const l=parseFloat(r.luong)||0; return Math.round(l*bhxhRates(r).ctyPct/100); }
+function bhxhNvOf(r){ const l=parseFloat(r.luong)||0; return Math.round(l*bhxhRates(r).nvPct/100); }
 // Tính tổng chi nhân sự (lương + thưởng + phụ cấp + BHXH cty)
 function calcNsTotal(thang){
   const t = thang||'';
@@ -4767,15 +4778,15 @@ function saveNsLuong(){
 function calcBhxhPreview(){
   const luong = parseFloat(document.getElementById('nsbh-luong').value)||0;
   const prev = document.getElementById('nsbh-preview');
-  const ctyFull = !!document.getElementById('nsbh-ctyfull')?.checked;
   if(!luong){ prev.style.display='none'; return; }
-  const cty = Math.round(luong*(ctyFull?0.32:0.215));
-  const nv  = ctyFull?0:Math.round(luong*0.105);
+  const flags={ luong, ctyFull:!!document.getElementById('nsbh-ctyfull')?.checked, bhytOnly:!!document.getElementById('nsbh-bhytonly')?.checked };
+  const {ctyPct,nvPct}=bhxhRates(flags);
+  const cty = bhxhCtyOf(flags), nv = bhxhNvOf(flags);
   document.getElementById('nsbh-cty').textContent  = fmt(cty);
   document.getElementById('nsbh-nv').textContent   = fmt(nv);
   document.getElementById('nsbh-tong').textContent = fmt(cty+nv);
-  const lc=document.getElementById('nsbh-cty-lbl'); if(lc) lc.textContent = ctyFull?'Công ty đóng (32%)':'Công ty đóng (21.5%)';
-  const ln=document.getElementById('nsbh-nv-lbl'); if(ln) ln.textContent = ctyFull?'Nhân viên đóng (0%)':'Nhân viên đóng (10.5%)';
+  const lc=document.getElementById('nsbh-cty-lbl'); if(lc) lc.textContent = `Công ty đóng (${ctyPct}%)`;
+  const ln=document.getElementById('nsbh-nv-lbl'); if(ln) ln.textContent = `Nhân viên đóng (${nvPct}%)`;
   prev.style.display='block';
 }
 
@@ -4790,7 +4801,7 @@ function renderNsBhxh(){
     ? rows.map(r=>{
         const cty=bhxhCtyOf(r), nv=bhxhNvOf(r);
         return `<tr>
-          <td style="font-weight:500;">${r.ten}${r.ctyFull?` <span class="badge badge-green" style="font-size:9px;">Cty full</span>`:''}</td>
+          <td style="font-weight:500;">${r.ten}${r.ctyFull?` <span class="badge badge-green" style="font-size:9px;">Cty full</span>`:''}${r.bhytOnly?` <span class="badge badge-blue" style="font-size:9px;">Chỉ BHYT</span>`:''}</td>
           <td><span class="badge badge-navy" style="font-size:10px;">${r.bophan}</span></td>
           <td>${fmt(r.luong)}</td>
           <td class="amount-neg" style="font-weight:600;">${fmt(cty)}</td>
@@ -4815,6 +4826,7 @@ function openNsBhxhModal(){
   document.getElementById('nsbh-luong').value='';
   document.getElementById('nsbh-thang').value=document.getElementById('ns-bhxh-thang')?.value||document.getElementById('nsbh-thang').value;
   document.getElementById('nsbh-ctyfull').checked=false;
+  document.getElementById('nsbh-bhytonly').checked=false;
   document.getElementById('nsbh-preview').style.display='none';
   openModal('modal-ns-bhxh');
 }
@@ -4827,6 +4839,7 @@ function editNsBhxh(id){
   document.getElementById('nsbh-luong').value=r.luong||'';
   document.getElementById('nsbh-thang').value=r.thang||'';
   document.getElementById('nsbh-ctyfull').checked=!!r.ctyFull;
+  document.getElementById('nsbh-bhytonly').checked=!!r.bhytOnly;
   calcBhxhPreview();
   openModal('modal-ns-bhxh');
 }
@@ -4839,6 +4852,7 @@ function saveNsBhxh(){
     bophan: document.getElementById('nsbh-bophan').value,
     luong, thang: document.getElementById('nsbh-thang').value,
     ctyFull: !!document.getElementById('nsbh-ctyfull').checked,
+    bhytOnly: !!document.getElementById('nsbh-bhytonly').checked,
   };
   if(editingBhxhId){
     const i=NS_BHXH.findIndex(x=>x.id===editingBhxhId);
