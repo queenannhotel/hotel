@@ -1281,7 +1281,7 @@ textarea{resize:vertical;min-height:68px;}
           <div style="display:flex;gap:8px;align-items:center;">
             <input type="month" id="ns-f-thang" value="2026-07" onchange="renderNsLuong()" style="font-size:12px;padding:6px 10px;">
           </div>
-          <button class="btn btn-gold btn-sm" onclick="openModal('modal-ns-luong')">+ Ghi lương / thưởng</button>
+          <button class="btn btn-gold btn-sm" onclick="openNsLuongModal()">+ Ghi lương / thưởng</button>
         </div>
         <div class="card">
           <div class="table-wrap wide">
@@ -1304,7 +1304,7 @@ textarea{resize:vertical;min-height:68px;}
           <div style="display:flex;gap:8px;align-items:center;">
             <input type="month" id="ns-bhxh-thang" value="2026-07" onchange="renderNsBhxh()" style="font-size:12px;padding:6px 10px;">
           </div>
-          <button class="btn btn-gold btn-sm" onclick="openModal('modal-ns-bhxh')">+ Thêm BHXH nhân viên</button>
+          <button class="btn btn-gold btn-sm" onclick="openNsBhxhModal()">+ Thêm BHXH nhân viên</button>
         </div>
         <div style="background:var(--gold-pale);border:1px solid rgba(201,168,76,.3);border-radius:10px;padding:10px 16px;margin-bottom:14px;font-size:12px;color:var(--yellow);">
           ℹ️ Tỷ lệ BHXH: Công ty đóng <strong>21.5%</strong> (BHXH 17.5% + BHYT 3% + BHTN 1%) — Nhân viên đóng <strong>10.5%</strong> (BHXH 8% + BHYT 1.5% + BHTN 1%)
@@ -1903,12 +1903,16 @@ textarea{resize:vertical;min-height:68px;}
       <div class="form-group"><label>Lương đóng BHXH (đồng) <span style="color:var(--red);">*</span></label><input type="number" id="nsbh-luong" placeholder="0" oninput="calcBhxhPreview()"></div>
       <div class="form-group"><label>Tháng</label><input type="month" id="nsbh-thang" value="2026-07"></div>
     </div>
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:12px;cursor:pointer;">
+      <input type="checkbox" id="nsbh-ctyfull" onchange="calcBhxhPreview()" style="width:16px;height:16px;">
+      <span><strong>Cty đóng Full</strong> — NV này không đóng, công ty gánh toàn bộ (32% lương)</span>
+    </label>
     <!-- Preview tính tự động -->
     <div id="nsbh-preview" style="display:none;background:var(--green-bg);border-radius:10px;padding:13px 15px;margin-bottom:12px;">
       <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--green);margin-bottom:10px;">📊 Tính tự động</div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;font-size:13px;">
-        <div><div style="font-size:10.5px;color:var(--text-muted);">Công ty đóng (21.5%)</div><div id="nsbh-cty" style="font-weight:700;color:var(--red);">—</div></div>
-        <div><div style="font-size:10.5px;color:var(--text-muted);">Nhân viên đóng (10.5%)</div><div id="nsbh-nv" style="font-weight:700;color:var(--text-muted);">—</div></div>
+        <div><div id="nsbh-cty-lbl" style="font-size:10.5px;color:var(--text-muted);">Công ty đóng (21.5%)</div><div id="nsbh-cty" style="font-weight:700;color:var(--red);">—</div></div>
+        <div><div id="nsbh-nv-lbl" style="font-size:10.5px;color:var(--text-muted);">Nhân viên đóng (10.5%)</div><div id="nsbh-nv" style="font-weight:700;color:var(--text-muted);">—</div></div>
         <div><div style="font-size:10.5px;color:var(--text-muted);">Tổng BHXH</div><div id="nsbh-tong" style="font-weight:700;color:var(--navy);">—</div></div>
       </div>
     </div>
@@ -4665,11 +4669,14 @@ let NS_TNCN = [];
 const NS_LOAI_LABELS = {luong:'💵 Lương', thuong:'🎁 Thưởng', 'phu-cap':'🏷 Phụ cấp', khac:'📌 Khác'};
 const NS_LOAI_BADGE  = {luong:'badge-green', thuong:'badge-yellow', 'phu-cap':'badge-blue', khac:'badge-navy'};
 
+// Phần công ty / nhân viên đóng BHXH cho 1 bản ghi. "Cty đóng Full" → cty gánh cả 32% (21.5%+10.5%), NV=0.
+function bhxhCtyOf(r){ const l=parseFloat(r.luong)||0; return Math.round(l*(r.ctyFull?0.32:0.215)); }
+function bhxhNvOf(r){ const l=parseFloat(r.luong)||0; return r.ctyFull?0:Math.round(l*0.105); }
 // Tính tổng chi nhân sự (lương + thưởng + phụ cấp + BHXH cty)
 function calcNsTotal(thang){
   const t = thang||'';
   const luong = NS_LUONG.filter(r=>!t||r.thang===t).reduce((s,r)=>s+r.sotien,0);
-  const bhxhCty = NS_BHXH.filter(r=>!t||r.thang===t).reduce((s,r)=>s+Math.round(r.luong*0.215),0);
+  const bhxhCty = NS_BHXH.filter(r=>!t||r.thang===t).reduce((s,r)=>s+bhxhCtyOf(r),0);
   return {luong, bhxhCty, tong: luong+bhxhCty};
 }
 
@@ -4703,7 +4710,7 @@ function renderNsLuong(){
         <td class="amount-neg" style="font-weight:700;">${fmt(r.sotien)}</td>
         <td style="font-size:11px;color:var(--text-muted);">${r.ghichu||'—'}</td>
         <td style="font-size:12px;">${r.nguoi}</td>
-        <td><button class="btn btn-danger btn-sm" onclick="deleteNsLuong('${r.id}')">🗑</button></td>
+        <td><div style="display:flex;gap:3px;"><button class="btn btn-ghost btn-sm" onclick="editNsLuong('${r.id}')" title="Sửa">✏</button><button class="btn btn-danger btn-sm" onclick="deleteNsLuong('${r.id}')" title="Xoá">🗑</button></div></td>
       </tr>`).join('')
     : `<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted);">Chưa có bản ghi lương/thưởng nào trong tháng này</td></tr>`;
   updateNsKpi();
@@ -4711,54 +4718,86 @@ function renderNsLuong(){
 
 function deleteNsLuong(id){ NS_LUONG=NS_LUONG.filter(r=>r.id!==id); renderNsLuong(); syncNow(); }
 
+let editingLuongId=null;
+function openNsLuongModal(){
+  editingLuongId=null;
+  const t=document.querySelector('#modal-ns-luong .modal-title'); if(t) t.textContent='💵 Ghi Lương / Thưởng';
+  document.getElementById('nsl-thang').value=document.getElementById('ns-f-thang')?.value||document.getElementById('nsl-thang').value;
+  document.getElementById('nsl-loai').selectedIndex=0;
+  document.getElementById('nsl-sotien').value='';
+  document.getElementById('nsl-mota').value='';
+  document.getElementById('nsl-ghichu').value='';
+  openModal('modal-ns-luong');
+}
+function editNsLuong(id){
+  const r=NS_LUONG.find(x=>x.id===id); if(!r) return;
+  editingLuongId=id;
+  const t=document.querySelector('#modal-ns-luong .modal-title'); if(t) t.textContent='✏️ Sửa Lương / Thưởng';
+  document.getElementById('nsl-thang').value=r.thang||'';
+  document.getElementById('nsl-loai').value=r.loai||'luong';
+  document.getElementById('nsl-sotien').value=r.sotien||'';
+  document.getElementById('nsl-mota').value=r.mota||'';
+  document.getElementById('nsl-ghichu').value=r.ghichu||'';
+  openModal('modal-ns-luong');
+}
 function saveNsLuong(){
   const thang = document.getElementById('nsl-thang').value;
   const loai  = document.getElementById('nsl-loai').value;
   const sotien= parseFloat(document.getElementById('nsl-sotien').value)||0;
   const mota  = document.getElementById('nsl-mota').value.trim();
   if(!sotien||sotien<=0){ showToast('Vui lòng nhập số tiền!',2500,'error'); return; }
-  NS_LUONG.unshift({
-    id:'NL'+Date.now(), thang, loai,
+  const data={
+    thang, loai,
     mota: mota||(NS_LOAI_LABELS[loai]+' '+thang.slice(0,7).split('-').reverse().join('/')),
     sotien, ghichu:document.getElementById('nsl-ghichu').value.trim(),
-    nguoi: currentUser?.fullname||'Kế toán'
-  });
+  };
+  if(editingLuongId){
+    const i=NS_LUONG.findIndex(x=>x.id===editingLuongId);
+    if(i>-1) NS_LUONG[i]={...NS_LUONG[i],...data};
+  } else {
+    NS_LUONG.unshift({id:'NL'+Date.now(), ...data, nguoi: currentUser?.fullname||'Kế toán'});
+  }
+  editingLuongId=null;
   closeModal('modal-ns-luong');
   renderNsLuong();
+  syncNow();
 }
 
 // ===== BHXH =====
 function calcBhxhPreview(){
   const luong = parseFloat(document.getElementById('nsbh-luong').value)||0;
   const prev = document.getElementById('nsbh-preview');
+  const ctyFull = !!document.getElementById('nsbh-ctyfull')?.checked;
   if(!luong){ prev.style.display='none'; return; }
-  const cty = Math.round(luong*0.215);
-  const nv  = Math.round(luong*0.105);
+  const cty = Math.round(luong*(ctyFull?0.32:0.215));
+  const nv  = ctyFull?0:Math.round(luong*0.105);
   document.getElementById('nsbh-cty').textContent  = fmt(cty);
   document.getElementById('nsbh-nv').textContent   = fmt(nv);
   document.getElementById('nsbh-tong').textContent = fmt(cty+nv);
+  const lc=document.getElementById('nsbh-cty-lbl'); if(lc) lc.textContent = ctyFull?'Công ty đóng (32%)':'Công ty đóng (21.5%)';
+  const ln=document.getElementById('nsbh-nv-lbl'); if(ln) ln.textContent = ctyFull?'Nhân viên đóng (0%)':'Nhân viên đóng (10.5%)';
   prev.style.display='block';
 }
 
 function renderNsBhxh(){
   const fThang = document.getElementById('ns-bhxh-thang')?.value||'';
   const rows = NS_BHXH.filter(r=>!fThang||r.thang===fThang);
-  const sumCty = rows.reduce((s,r)=>s+Math.round(r.luong*0.215),0);
-  const sumNv  = rows.reduce((s,r)=>s+Math.round(r.luong*0.105),0);
+  const sumCty = rows.reduce((s,r)=>s+bhxhCtyOf(r),0);
+  const sumNv  = rows.reduce((s,r)=>s+bhxhNvOf(r),0);
   document.getElementById('ns-sum-bhxh-cty').textContent = fmt(sumCty);
   document.getElementById('ns-sum-bhxh-nv').textContent  = fmt(sumNv);
   document.getElementById('tbl-ns-bhxh').innerHTML = rows.length
     ? rows.map(r=>{
-        const cty=Math.round(r.luong*0.215), nv=Math.round(r.luong*0.105);
+        const cty=bhxhCtyOf(r), nv=bhxhNvOf(r);
         return `<tr>
-          <td style="font-weight:500;">${r.ten}</td>
+          <td style="font-weight:500;">${r.ten}${r.ctyFull?` <span class="badge badge-green" style="font-size:9px;">Cty full</span>`:''}</td>
           <td><span class="badge badge-navy" style="font-size:10px;">${r.bophan}</span></td>
           <td>${fmt(r.luong)}</td>
           <td class="amount-neg" style="font-weight:600;">${fmt(cty)}</td>
           <td style="color:var(--text-muted);">${fmt(nv)}</td>
           <td style="font-weight:600;color:var(--navy);">${fmt(cty+nv)}</td>
           <td style="font-size:12px;">${r.thang.slice(0,7).split('-').reverse().join('/')}</td>
-          <td><button class="btn btn-danger btn-sm" onclick="deleteNsBhxh('${r.id}')">🗑</button></td>
+          <td><div style="display:flex;gap:3px;"><button class="btn btn-ghost btn-sm" onclick="editNsBhxh('${r.id}')" title="Sửa">✏</button><button class="btn btn-danger btn-sm" onclick="deleteNsBhxh('${r.id}')" title="Xoá">🗑</button></div></td>
         </tr>`;
       }).join('')
     : `<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text-muted);">Chưa có bản ghi BHXH nào trong tháng này</td></tr>`;
@@ -4767,18 +4806,50 @@ function renderNsBhxh(){
 
 function deleteNsBhxh(id){ NS_BHXH=NS_BHXH.filter(r=>r.id!==id); renderNsBhxh(); syncNow(); }
 
+let editingBhxhId=null;
+function openNsBhxhModal(){
+  editingBhxhId=null;
+  const t=document.querySelector('#modal-ns-bhxh .modal-title'); if(t) t.textContent='🛡 Ghi BHXH Nhân Viên';
+  document.getElementById('nsbh-ten').value='';
+  document.getElementById('nsbh-bophan').selectedIndex=0;
+  document.getElementById('nsbh-luong').value='';
+  document.getElementById('nsbh-thang').value=document.getElementById('ns-bhxh-thang')?.value||document.getElementById('nsbh-thang').value;
+  document.getElementById('nsbh-ctyfull').checked=false;
+  document.getElementById('nsbh-preview').style.display='none';
+  openModal('modal-ns-bhxh');
+}
+function editNsBhxh(id){
+  const r=NS_BHXH.find(x=>x.id===id); if(!r) return;
+  editingBhxhId=id;
+  const t=document.querySelector('#modal-ns-bhxh .modal-title'); if(t) t.textContent='✏️ Sửa BHXH Nhân Viên';
+  document.getElementById('nsbh-ten').value=r.ten||'';
+  document.getElementById('nsbh-bophan').value=r.bophan||'Lễ tân';
+  document.getElementById('nsbh-luong').value=r.luong||'';
+  document.getElementById('nsbh-thang').value=r.thang||'';
+  document.getElementById('nsbh-ctyfull').checked=!!r.ctyFull;
+  calcBhxhPreview();
+  openModal('modal-ns-bhxh');
+}
 function saveNsBhxh(){
   const ten   = document.getElementById('nsbh-ten').value.trim();
   const luong = parseFloat(document.getElementById('nsbh-luong').value)||0;
   if(!ten||!luong){ showToast('Vui lòng nhập đủ thông tin!',2500,'error'); return; }
-  NS_BHXH.push({
-    id:'BH'+Date.now(), ten,
+  const data={
+    ten,
     bophan: document.getElementById('nsbh-bophan').value,
     luong, thang: document.getElementById('nsbh-thang').value,
-  });
+    ctyFull: !!document.getElementById('nsbh-ctyfull').checked,
+  };
+  if(editingBhxhId){
+    const i=NS_BHXH.findIndex(x=>x.id===editingBhxhId);
+    if(i>-1) NS_BHXH[i]={...NS_BHXH[i],...data};
+  } else {
+    NS_BHXH.push({id:'BH'+Date.now(), ...data});
+  }
+  editingBhxhId=null;
   closeModal('modal-ns-bhxh');
   renderNsBhxh();
-  lsSave();
+  syncNow();
 }
 
 // ===== THUẾ TNCN =====
@@ -4873,7 +4944,7 @@ function updateNsKpi(){
   const thang = (document.getElementById('ns-f-thang')||document.getElementById('ns-bhxh-thang')||{}).value||'2026-07';
   const luong   = NS_LUONG.filter(r=>r.thang===thang).reduce((s,r)=>s+r.sotien,0);
   const thuong  = NS_LUONG.filter(r=>r.thang===thang&&r.loai==='thuong').reduce((s,r)=>s+r.sotien,0);
-  const bhxhCty = NS_BHXH.filter(r=>r.thang===thang).reduce((s,r)=>s+Math.round(r.luong*0.215),0);
+  const bhxhCty = NS_BHXH.filter(r=>r.thang===thang).reduce((s,r)=>s+bhxhCtyOf(r),0);
   const tong    = luong + bhxhCty;
   const el=(id,v)=>{ const e=document.getElementById(id); if(e) e.textContent=v; };
   el('ns-kpi-luong', fmt(luong));
@@ -7029,7 +7100,7 @@ function renderBaoCao(){
   });
   // ===== Chi phí: Nhân sự (theo tháng trong khoảng) + Vận hành + Vật tư & Hàng hoá =====
   const nsLuong = NS_LUONG.filter(r=>inBcMonth(r.thang||'')).reduce((s,r)=>s+(r.sotien||0),0);
-  const nsBhxh  = NS_BHXH.filter(r=>inBcMonth(r.thang||'')).reduce((s,r)=>s+Math.round((r.luong||0)*0.215),0);
+  const nsBhxh  = NS_BHXH.filter(r=>inBcMonth(r.thang||'')).reduce((s,r)=>s+bhxhCtyOf(r),0);
   const nhanSu  = nsLuong + nsBhxh;
   const chiHT  = CHI.filter(r=>r.tinh_trang==='hoan-thanh');
   const vatTu  = chiHT.filter(r=>r.dx_id).reduce((s,r)=>s+(r.tong||0),0);   // chi từ đề xuất mua hàng
