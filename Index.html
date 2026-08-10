@@ -7385,7 +7385,7 @@ function confirmTransfer(){
   const ngay=new Date().toLocaleDateString('vi-VN');
   const nguoi=currentUser?.fullname||'Kế toán';
   it.lichSu.push({ngay,loai:'transfer-out',sl,tu:it.bophan,den:dest,lydo:`Transfer sang ${KHO_BP_LABELS[dest]}: ${lydo}`,nguoi});
-  let destItem=KHO_DATA.find(x=>x.ma===it.ma&&x.bophan===dest);
+  let destItem=KHO_DATA.find(x=>x.bophan===dest && khoNorm(x.ten)===khoNorm(it.ten) && khoDvt(x.dvt)===khoDvt(it.dvt));
   if(destItem){
     destItem.lichSu.push({ngay,loai:'transfer-in',sl,tu:it.bophan,den:dest,lydo:`KT transfer từ ${KHO_BP_LABELS[it.bophan]}: ${lydo}`,nguoi});
   } else {
@@ -7835,7 +7835,7 @@ function trBalance(dept,ten,dvt){ return khoBalance(trDeptKho(dept),ten,dvt); }
 function khoTransferItem(ten,dvt,sl,srcKho,destKho,note,nguoi){
   sl=parseFloat(sl)||0; if(!ten||sl<=0||!srcKho||!destKho||srcKho===destKho) return;
   const ngay=new Date().toLocaleDateString('vi-VN');
-  const match=x=>x.ten===ten && (!dvt||(x.dvt||'')===dvt);
+  const match=x=>khoNorm(x.ten)===khoNorm(ten) && khoDvt(x.dvt)===khoDvt(dvt);
   // Kho nguồn: chọn dòng có số dư cao nhất; chưa có thì tạo (tồn 0 → số dư âm để dễ thấy cần bù)
   let src=KHO_DATA.filter(x=>x.bophan===srcKho && match(x)).sort((a,b)=>calcKyStats(b).con-calcKyStats(a).con)[0];
   if(!src){ src={id:'KH'+Date.now()+Math.floor(Math.random()*1000),ma:'KTO-'+Date.now().toString().slice(-4)+Math.floor(Math.random()*90+10),ten,dvt:dvt||'Cái',bophan:srcKho,vitri:khoVitriDefault(srcKho),ton_dau:0,img:'📦',ghichu:'',lichSu:[]}; KHO_DATA.push(src); }
