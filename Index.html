@@ -1013,7 +1013,7 @@ textarea{resize:vertical;min-height:68px;}
       <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;">
         <div class="bp-tab active" id="cn-subtab-tq" onclick="switchCnTab('tq',this)" style="font-size:12px;padding:6px 16px;">📊 Tổng quan</div>
         <div class="bp-tab" id="cn-subtab-ptr" onclick="switchCnTab('ptr',this)" style="font-size:12px;padding:6px 16px;">⬆ Theo dõi Phải Trả</div>
-        <div class="bp-tab" id="cn-subtab-ck" onclick="switchCnTab('ck',this)" style="font-size:12px;padding:6px 16px;">💳 Chuyển Khoản</div>
+        <div class="bp-tab" id="cn-subtab-pthu" onclick="switchCnTab('pthu',this)" style="font-size:12px;padding:6px 16px;">⬇ Theo dõi Phải Thu</div>
       </div>
       <div id="cn-panel-tq">
         <div class="grid-2">
@@ -1036,6 +1036,7 @@ textarea{resize:vertical;min-height:68px;}
               <input type="date" id="cnpt-from" onchange="renderCongNoPtrSheet()" style="width:140px;font-size:12px;padding:6px 10px;" title="Từ ngày">
               <span style="font-size:12px;color:var(--text-muted);">→</span>
               <input type="date" id="cnpt-to" onchange="renderCongNoPtrSheet()" style="width:140px;font-size:12px;padding:6px 10px;" title="Đến ngày">
+              <button class="btn btn-gold btn-sm" onclick="cnPtrPayAll()" title="Đánh dấu Đã thanh toán cho tất cả phiếu đang hiển thị">✅ Thanh toán Full</button>
             </div>
           </div>
           <div id="cnpt-total-bar" style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;background:var(--gold-pale);border:1px solid rgba(201,168,76,.35);border-radius:10px;padding:12px 18px;margin:0 16px 12px;">
@@ -1049,25 +1050,26 @@ textarea{resize:vertical;min-height:68px;}
           </div>
         </div>
       </div>
-      <div id="cn-panel-ck" style="display:none;">
+      <div id="cn-panel-pthu" style="display:none;">
         <div class="card">
           <div class="card-body" style="padding:10px 16px;">
             <div class="filter-row">
-              <select id="cnck-ncc" onchange="renderCongNoCk()" style="font-size:12px;padding:6px 10px;"><option value="">Tất cả NCC</option></select>
+              <input id="cnpthu-q" oninput="renderCongNoPthuSheet()" placeholder="Khách / nội dung…" style="font-size:12px;padding:6px 10px;min-width:170px;">
               <span style="font-size:12px;color:var(--text-muted);">Từ</span>
-              <input type="date" id="cnck-from" onchange="renderCongNoCk()" style="width:140px;font-size:12px;padding:6px 10px;" title="Từ ngày">
+              <input type="date" id="cnpthu-from" onchange="renderCongNoPthuSheet()" style="width:140px;font-size:12px;padding:6px 10px;" title="Từ ngày">
               <span style="font-size:12px;color:var(--text-muted);">→</span>
-              <input type="date" id="cnck-to" onchange="renderCongNoCk()" style="width:140px;font-size:12px;padding:6px 10px;" title="Đến ngày">
+              <input type="date" id="cnpthu-to" onchange="renderCongNoPthuSheet()" style="width:140px;font-size:12px;padding:6px 10px;" title="Đến ngày">
+              <button class="btn btn-gold btn-sm" onclick="cnPthuPayAll()" title="Đánh dấu Đã thanh toán cho tất cả khoản đang hiển thị">✅ Thanh toán Full</button>
             </div>
           </div>
           <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;background:var(--gold-pale);border:1px solid rgba(201,168,76,.35);border-radius:10px;padding:12px 18px;margin:0 16px 12px;">
-            <span style="font-size:13px;color:var(--text-muted);">Tổng chuyển khoản (chưa thanh toán) trong giai đoạn</span>
-            <span id="cnck-total" style="font-size:20px;font-weight:800;color:var(--red);">—</span>
+            <span style="font-size:13px;color:var(--text-muted);">Tổng phải thu (chưa thanh toán) trong giai đoạn</span>
+            <span id="cnpthu-total" style="font-size:20px;font-weight:800;color:var(--green);">—</span>
           </div>
-          <div id="cnck-sub" style="font-size:12px;color:var(--text-muted);margin:0 16px 10px;"></div>
+          <div id="cnpthu-sub" style="font-size:12px;color:var(--text-muted);margin:0 16px 10px;"></div>
           <div class="table-wrap wide">
-            <table><thead><tr><th>Ngày PC</th><th>Số HĐ</th><th>Nhà cung cấp</th><th>Tổng tiền</th><th>Thông tin TT</th><th>Tình trạng</th></tr></thead>
-            <tbody id="cnck-body"></tbody></table>
+            <table><thead><tr><th>Khách hàng</th><th>Mô tả / Danh mục</th><th>Số tiền</th><th>Ngày</th><th>Tình trạng</th></tr></thead>
+            <tbody id="cnpthu-body"></tbody></table>
           </div>
         </div>
       </div>
@@ -1084,6 +1086,7 @@ textarea{resize:vertical;min-height:68px;}
             <input type="date" id="cnck-from" onchange="renderCongNoCk()" style="width:140px;font-size:12px;padding:6px 10px;" title="Từ ngày">
             <span style="font-size:12px;color:var(--text-muted);">→</span>
             <input type="date" id="cnck-to" onchange="renderCongNoCk()" style="width:140px;font-size:12px;padding:6px 10px;" title="Đến ngày">
+            <button class="btn btn-gold btn-sm" onclick="cnCkPayAll()" title="Đánh dấu Đã thanh toán cho tất cả phiếu đang hiển thị">✅ Thanh toán Full</button>
           </div>
         </div>
         <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;background:var(--gold-pale);border:1px solid rgba(201,168,76,.35);border-radius:10px;padding:12px 18px;margin:0 16px 12px;">
@@ -4098,12 +4101,12 @@ function renderCongNoPtr() {
 function switchCnTab(tab,el){
   document.getElementById('cn-panel-tq').style.display = tab==='tq'?'':'none';
   document.getElementById('cn-panel-ptr').style.display = tab==='ptr'?'':'none';
-  document.getElementById('cn-panel-ck').style.display = tab==='ck'?'':'none';
+  document.getElementById('cn-panel-pthu').style.display = tab==='pthu'?'':'none';
   document.getElementById('cn-subtab-tq').classList.toggle('active',tab==='tq');
   document.getElementById('cn-subtab-ptr').classList.toggle('active',tab==='ptr');
-  document.getElementById('cn-subtab-ck').classList.toggle('active',tab==='ck');
+  document.getElementById('cn-subtab-pthu').classList.toggle('active',tab==='pthu');
   if(tab==='ptr') renderCongNoPtrSheet();
-  if(tab==='ck') renderCongNoCk();
+  if(tab==='pthu') renderCongNoPthuSheet();
 }
 // ===== Tab Chuyển Khoản: phiếu chi PTTT = CK =====
 function cnCkGroups(){
@@ -4123,21 +4126,24 @@ function cnCkGroups(){
     };
   }).sort((a,b)=>vnToIso(b.first.ngay).localeCompare(vnToIso(a.first.ngay)));
 }
-function renderCongNoCk(){
-  const body=document.getElementById('cnck-body'); if(!body) return;
+// Tập phiếu CK khớp bộ lọc hiện tại (đồng thời đổ lại dropdown NCC).
+function cnCkFiltered(){
   const groups=cnCkGroups();
-  // Dropdown NCC (distinct từ phiếu CK), giữ lựa chọn
   const sel=document.getElementById('cnck-ncc');
   const nccs=[...new Set(groups.flatMap(g=>g.recs.map(r=>r.ten_ncc)).filter(n=>n&&n!=='—'))].sort();
   if(sel){ const cur=sel.value; sel.innerHTML='<option value="">Tất cả NCC</option>'+nccs.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join(''); sel.value=nccs.includes(cur)?cur:''; }
   const fNcc=sel?sel.value:'';
   const fFrom=document.getElementById('cnck-from')?.value||'';
   const fTo=document.getElementById('cnck-to')?.value||'';
-  const filtered=groups.filter(g=>{
+  return groups.filter(g=>{
     if(fNcc && !g.recs.some(r=>(r.ten_ncc||'')===fNcc)) return false;
     if(fFrom||fTo){ const iso=vnToIso(g.first.ngay); if(fFrom&&iso<fFrom) return false; if(fTo&&iso>fTo) return false; }
     return true;
   });
+}
+function renderCongNoCk(){
+  const body=document.getElementById('cnck-body'); if(!body) return;
+  const filtered=cnCkFiltered();
   body.innerHTML=filtered.length?filtered.map(g=>{
     const tt=nccTtInfo(g.first.ten_ncc);
     return `<tr${g.paid?' style="opacity:.6;"':''}>
@@ -4164,80 +4170,34 @@ function updateCnCkStatus(key,val){
   syncNow();
   try{ renderCongNoCk(); }catch(e){}
 }
-// ===== Tab Chuyển Khoản: phiếu chi PTTT = CK =====
-function cnCkGroups(){
-  const groups=[]; const gmap={};
-  CHI_DATA.filter(r=>r.pttt==='CK').forEach(r=>{
-    const key=chiGroupKey(r);
-    let g=gmap[key]; if(!g){ g={key,recs:[]}; gmap[key]=g; groups.push(g); }
-    g.recs.push(r);
-  });
-  return groups.map(g=>{
-    const recs=g.recs, first=recs[0];
-    return {
-      key:g.key, recs, first,
-      tong:recs.reduce((s,r)=>s+(parseFloat(r.tong)||0),0),
-      ncc:[...new Set(recs.map(r=>r.ten_ncc).filter(n=>n&&n!=='—'))].join(', ')||'—',
-      paid:first.cn_status==='da',
-    };
-  }).sort((a,b)=>vnToIso(b.first.ngay).localeCompare(vnToIso(a.first.ngay)));
-}
-function renderCongNoCk(){
-  const body=document.getElementById('cnck-body'); if(!body) return;
-  const groups=cnCkGroups();
-  // Dropdown NCC (distinct từ phiếu CK), giữ lựa chọn
-  const sel=document.getElementById('cnck-ncc');
-  const nccs=[...new Set(groups.flatMap(g=>g.recs.map(r=>r.ten_ncc)).filter(n=>n&&n!=='—'))].sort();
-  if(sel){ const cur=sel.value; sel.innerHTML='<option value="">Tất cả NCC</option>'+nccs.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join(''); sel.value=nccs.includes(cur)?cur:''; }
-  const fNcc=sel?sel.value:'';
-  const fFrom=document.getElementById('cnck-from')?.value||'';
-  const fTo=document.getElementById('cnck-to')?.value||'';
-  const filtered=groups.filter(g=>{
-    if(fNcc && !g.recs.some(r=>(r.ten_ncc||'')===fNcc)) return false;
-    if(fFrom||fTo){ const iso=vnToIso(g.first.ngay); if(fFrom&&iso<fFrom) return false; if(fTo&&iso>fTo) return false; }
-    return true;
-  });
-  body.innerHTML=filtered.length?filtered.map(g=>{
-    const tt=nccTtInfo(g.first.ten_ncc);
-    return `<tr${g.paid?' style="opacity:.6;"':''}>
-      <td style="font-size:12px;white-space:nowrap;">${esc(g.first.ngay)||'—'}</td>
-      <td onclick="event.stopPropagation()"><input class="inline-input" value="${esc(g.first.so_hd||'')}" placeholder="Số HĐ..." onchange="updateCnCkSoHd('${esc(g.key)}',this.value)" style="width:100px;font-size:11px;padding:4px 6px;"></td>
-      <td style="font-weight:500;">${esc(g.ncc)}</td>
-      <td class="amount-neg" style="font-weight:700;white-space:nowrap;">${fmt(g.tong)}</td>
-      <td style="font-size:12px;white-space:pre-wrap;max-width:240px;">${esc(tt)||'—'}</td>
-      <td>${cnStatusSelect(g.first.cn_status,`updateCnCkStatus('${esc(g.key)}',this.value)`)}</td>
-    </tr>`;
-  }).join(''):`<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-muted);">Không có phiếu chi chuyển khoản khớp bộ lọc</td></tr>`;
-  const chuaTT=filtered.filter(g=>!g.paid).reduce((s,g)=>s+g.tong,0);
-  const daTra =filtered.filter(g=> g.paid).reduce((s,g)=>s+g.tong,0);
-  const phatSinh=filtered.reduce((s,g)=>s+g.tong,0);
-  const totEl=document.getElementById('cnck-total'); if(totEl) totEl.textContent=fmt(chuaTT);
-  const subEl=document.getElementById('cnck-sub'); if(subEl) subEl.textContent=`Đã TT: ${fmt(daTra)} · Tổng phát sinh: ${fmt(phatSinh)} · ${filtered.length} phiếu`;
-}
-function updateCnCkSoHd(key,val){
-  try{ updateChiGroupSoHd(key,val); }catch(e){}   // dùng chung so_hd với Ghi Chi
-  try{ renderCongNoCk(); }catch(e){}
-}
-function updateCnCkStatus(key,val){
-  CHI_DATA.filter(r=>chiGroupKey(r)===key && r.pttt==='CK').forEach(r=>{ r.cn_status=val; });
+// Thanh toán Full: đánh dấu ĐÃ thanh toán mọi phiếu CK đang hiển thị (theo bộ lọc).
+function cnCkPayAll(){
+  const rows=cnCkFiltered().filter(g=>!g.paid);
+  if(!rows.length){ showToast('Không có phiếu nào để thanh toán',2200,'info'); return; }
+  if(!confirm(`Đánh dấu ĐÃ thanh toán cho ${rows.length} phiếu chuyển khoản đang hiển thị?`)) return;
+  rows.forEach(g=>CHI_DATA.filter(r=>chiGroupKey(r)===g.key && r.pttt==='CK').forEach(r=>{ r.cn_status='da'; }));
   syncNow();
-  try{ renderCongNoCk(); }catch(e){}
+  renderCongNoCk();
+  showToast(`✅ Đã thanh toán ${rows.length} phiếu chuyển khoản`,2600,'success');
 }
-function renderCongNoPtrSheet(){
-  const body=document.getElementById('cnpt-body'); if(!body) return;
+// Tập phiếu Phải Trả khớp bộ lọc hiện tại (đồng thời đổ lại dropdown NCC).
+function cnPtrFiltered(){
   const groups=cnPtrGroups();
-  // Đổ dropdown NCC (distinct từ dữ liệu công nợ), giữ lựa chọn hiện tại
   const sel=document.getElementById('cnpt-ncc');
   const nccs=[...new Set(groups.flatMap(g=>g.recs.map(r=>r.ten_ncc)).filter(n=>n&&n!=='—'))].sort();
   if(sel){ const cur=sel.value; sel.innerHTML='<option value="">Tất cả NCC</option>'+nccs.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join(''); sel.value=nccs.includes(cur)?cur:''; }
   const fNcc=sel?sel.value:'';
   const fFrom=document.getElementById('cnpt-from')?.value||'';
   const fTo=document.getElementById('cnpt-to')?.value||'';
-  const filtered=groups.filter(g=>{
+  return groups.filter(g=>{
     if(fNcc && !g.recs.some(r=>(r.ten_ncc||'')===fNcc)) return false;
     if(fFrom||fTo){ const iso=vnToIso(g.first.ngay); if(fFrom&&iso<fFrom) return false; if(fTo&&iso>fTo) return false; }
     return true;
   });
+}
+function renderCongNoPtrSheet(){
+  const body=document.getElementById('cnpt-body'); if(!body) return;
+  const filtered=cnPtrFiltered();
   body.innerHTML=filtered.length?filtered.map(cnPtrRowHtml).join(''):`<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--text-muted);">Không có công nợ phải trả khớp bộ lọc</td></tr>`;
   const chuaTT=filtered.filter(g=>!g.paid).reduce((s,g)=>s+g.tong,0);
   const daTra =filtered.filter(g=> g.paid).reduce((s,g)=>s+g.tong,0);
@@ -4262,6 +4222,17 @@ function updateCongNoGroupStatus(key,val){
   renderCongNoPtr();
   try{ syncThuChiSummary(); }catch(e){}
 }
+// Thanh toán Full: đánh dấu ĐÃ thanh toán mọi phiếu Phải Trả đang hiển thị (theo bộ lọc).
+function cnPtrPayAll(){
+  const rows=cnPtrFiltered().filter(g=>!g.paid);
+  if(!rows.length){ showToast('Không có phiếu nào để thanh toán',2200,'info'); return; }
+  if(!confirm(`Đánh dấu ĐÃ thanh toán cho ${rows.length} phiếu công nợ phải trả đang hiển thị?`)) return;
+  rows.forEach(g=>CHI_DATA.filter(r=>chiGroupKey(r)===g.key && r.pttt==='Công nợ').forEach(r=>{ r.cn_status='da'; }));
+  syncNow();
+  renderCongNoPtr();
+  try{ syncThuChiSummary(); }catch(e){}
+  showToast(`✅ Đã thanh toán ${rows.length} phiếu phải trả`,2600,'success');
+}
 // Dropdown Tình trạng công nợ (Chưa thanh toán / Đã thanh toán)
 function cnStatusSelect(val, onchange){
   const da = val==='da';
@@ -4282,7 +4253,44 @@ function renderCongNoPthu(){
     <td>${cnStatusSelect(r.cn_status,`updateThuCnStatus('${r.id}',this.value)`)}</td>
   </tr>`).join('') : `<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:16px;">Chưa có công nợ phải thu</td></tr>`;
 }
-function updateThuCnStatus(id,val){ const r=(THU_DATA||[]).find(x=>x.id===id); if(!r) return; r.cn_status=val; renderCongNoPthu(); syncNow(); }
+function updateThuCnStatus(id,val){ const r=(THU_DATA||[]).find(x=>x.id===id); if(!r) return; r.cn_status=val; renderCongNoPthu(); try{ renderCongNoPthuSheet(); }catch(e){} syncNow(); }
+// ===== Sheet Theo dõi Phải Thu: khoản Ghi Thu PTTT = Công nợ, lọc khách/nội dung + khoảng ngày =====
+function cnPthuFiltered(){
+  const q=(document.getElementById('cnpthu-q')?.value||'').trim().toLowerCase();
+  const fFrom=document.getElementById('cnpthu-from')?.value||'';
+  const fTo=document.getElementById('cnpthu-to')?.value||'';
+  return (THU_DATA||[]).filter(r=>r.pttt==='Công nợ').filter(r=>{
+    if(q && !((r.mota||'')+' '+(r.danhmuc||'')+' '+(r.bophan||'')).toLowerCase().includes(q)) return false;
+    if(fFrom||fTo){ const iso=vnToIso(r.ngay); if(fFrom&&iso<fFrom) return false; if(fTo&&iso>fTo) return false; }
+    return true;
+  }).sort((a,b)=>vnToIso(b.ngay).localeCompare(vnToIso(a.ngay)));
+}
+function renderCongNoPthuSheet(){
+  const body=document.getElementById('cnpthu-body'); if(!body) return;
+  const rows=cnPthuFiltered();
+  body.innerHTML=rows.length?rows.map(r=>`<tr${r.cn_status==='da'?' style="opacity:.6;"':''}>
+    <td style="font-weight:500;">${esc(r.mota||r.danhmuc)||'—'}</td>
+    <td style="font-size:12px;">${esc(r.danhmuc)||'—'}${r.bophan?` · <span style="color:var(--text-muted);">${esc(r.bophan)}</span>`:''}</td>
+    <td class="amount-pos" style="font-weight:600;white-space:nowrap;">${fmt(r.sotien)}</td>
+    <td style="font-size:12px;">${esc(r.ngay)||'—'}</td>
+    <td>${cnStatusSelect(r.cn_status,`updateThuCnStatus('${r.id}',this.value)`)}</td>
+  </tr>`).join(''):`<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-muted);">Không có công nợ phải thu khớp bộ lọc</td></tr>`;
+  const chuaTT=rows.filter(r=>r.cn_status!=='da').reduce((s,r)=>s+(parseFloat(r.sotien)||0),0);
+  const daTT  =rows.filter(r=>r.cn_status==='da').reduce((s,r)=>s+(parseFloat(r.sotien)||0),0);
+  const tong  =rows.reduce((s,r)=>s+(parseFloat(r.sotien)||0),0);
+  const totEl=document.getElementById('cnpthu-total'); if(totEl) totEl.textContent=fmt(chuaTT);
+  const subEl=document.getElementById('cnpthu-sub'); if(subEl) subEl.textContent=`Đã thu: ${fmt(daTT)} · Tổng phát sinh: ${fmt(tong)} · ${rows.length} khoản`;
+}
+// Thanh toán Full: đánh dấu ĐÃ thanh toán mọi khoản Phải Thu đang hiển thị (theo bộ lọc).
+function cnPthuPayAll(){
+  const rows=cnPthuFiltered().filter(r=>r.cn_status!=='da');
+  if(!rows.length){ showToast('Không có khoản nào để thanh toán',2200,'info'); return; }
+  if(!confirm(`Đánh dấu ĐÃ thanh toán cho ${rows.length} khoản phải thu đang hiển thị?`)) return;
+  rows.forEach(r=>{ r.cn_status='da'; });
+  syncNow();
+  renderCongNoPthu(); renderCongNoPthuSheet();
+  showToast(`✅ Đã thanh toán ${rows.length} khoản phải thu`,2600,'success');
+}
 function updateChiCnStatus(id,val){ const r=(CHI_DATA||[]).find(x=>x.id===id); if(!r) return; r.cn_status=val; renderCongNoPtr(); syncNow(); }
 
 // ==================== SYNC THU CHI TỔNG HỢP ====================
