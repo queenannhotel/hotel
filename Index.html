@@ -1016,13 +1016,19 @@ textarea{resize:vertical;min-height:68px;}
         <div class="bp-tab" id="cn-subtab-pthu" onclick="switchCnTab('pthu',this)" style="font-size:12px;padding:6px 16px;">⬇ Theo dõi Phải Thu</div>
       </div>
       <div id="cn-panel-tq">
+        <div class="filter-row" style="margin-bottom:12px;">
+          <span style="font-size:12px;color:var(--text-muted);">Từ</span>
+          <input type="date" id="cn-tq-from" onchange="renderCongNoTongQuan()" style="width:140px;font-size:12px;padding:6px 10px;" title="Từ ngày">
+          <span style="font-size:12px;color:var(--text-muted);">→</span>
+          <input type="date" id="cn-tq-to" onchange="renderCongNoTongQuan()" style="width:140px;font-size:12px;padding:6px 10px;" title="Đến ngày">
+        </div>
         <div class="grid-2">
-          <div class="card"><div class="card-header"><div class="card-title">⬇ Phải Thu</div></div>
-            <table id="tbl-pt"><thead><tr><th>Khách hàng</th><th>Mô tả</th><th>Số tiền</th><th>Ngày</th><th>Tình trạng</th></tr></thead>
+          <div class="card"><div class="card-header" style="display:flex;justify-content:space-between;align-items:center;"><div class="card-title">⬇ Phải Thu</div><strong class="amount-pos" id="cn-pt-total" style="font-size:15px;">—</strong></div>
+            <table id="tbl-pt"><thead><tr><th>Danh mục</th><th style="text-align:right;">Tổng phải thu (chưa TT)</th></tr></thead>
             <tbody id="tbl-pt-body"></tbody></table></div>
-          <div class="card"><div class="card-header"><div class="card-title">⬆ Phải Trả (NCC)</div></div>
+          <div class="card"><div class="card-header" style="display:flex;justify-content:space-between;align-items:center;"><div class="card-title">⬆ Phải Trả (NCC)</div><strong class="amount-neg" id="cn-ptr-total" style="font-size:15px;">—</strong></div>
             <div class="table-wrap">
-            <table id="tbl-ptr"><thead><tr><th>Ngày PC</th><th>Số HĐ</th><th>Nhà cung cấp</th><th>Tổng tiền</th><th>Hạn TT</th><th>Nguồn</th><th>Tình trạng</th></tr></thead>
+            <table id="tbl-ptr"><thead><tr><th>Nhà cung cấp</th><th style="text-align:right;">Tổng chưa TT</th></tr></thead>
             <tbody id="tbl-ptr-body"></tbody></table></div>
           </div>
         </div>
@@ -4097,11 +4103,44 @@ function cnPtrRowHtml(g){
   </tr>`;
 }
 function renderCongNoPtr() {
-  const rows=cnPtrGroups().map(cnPtrRowHtml);
-  const tbody=document.getElementById('tbl-ptr-body');
-  if(tbody) tbody.innerHTML=rows.join('')||`<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--text-muted);">Không có công nợ phải trả</td></tr>`;
-  renderCongNoPthu();
+  renderCongNoTongQuan();
   try{ renderCongNoPtrSheet(); }catch(e){}   // giữ sheet "Theo dõi Phải Trả" đồng bộ
+}
+// ===== Tổng quan Công nợ: gộp Phải Thu theo danh mục + Phải Trả theo NCC (chỉ phần chưa TT), theo kỳ =====
+function renderCongNoTongQuan(){
+  const fromEl=document.getElementById('cn-tq-from'), toEl=document.getElementById('cn-tq-to');
+  if(fromEl && !fromEl.value){ const d=new Date(); fromEl.value=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`; }
+  if(toEl && !toEl.value){ toEl.value=new Date().toISOString().slice(0,10); }
+  const from=fromEl?.value||'', to=toEl?.value||'';
+  const inRange=iso=>(!from||iso>=from)&&(!to||iso<=to);
+
+  // Phải Thu: THU công nợ chưa TT, gộp theo danh mục
+  const thuMap={};
+  (THU_DATA||[]).filter(r=>r.pttt==='Công nợ' && r.cn_status!=='da' && inRange(vnToIso(r.ngay))).forEach(r=>{
+    const k=(r.danhmuc||'—'); thuMap[k]=(thuMap[k]||0)+(parseFloat(r.sotien)||0);
+  });
+  const thuRows=Object.entries(thuMap).sort((a,b)=>b[1]-a[1]);
+  const thuTong=thuRows.reduce((s,x)=>s+x[1],0);
+  const ptBody=document.getElementById('tbl-pt-body');
+  if(ptBody) ptBody.innerHTML=thuRows.length?thuRows.map(([k,v])=>`<tr>
+    <td style="font-weight:500;">${esc(k)}</td>
+    <td class="amount-pos" style="text-align:right;font-weight:600;">${fmt(v)}</td></tr>`).join('')
+    :`<tr><td colspan="2" style="text-align:center;padding:18px;color:var(--text-muted);">Không có phải thu trong kỳ</td></tr>`;
+  const ptTot=document.getElementById('cn-pt-total'); if(ptTot) ptTot.textContent=fmt(thuTong);
+
+  // Phải Trả: phiếu công nợ chưa TT, gộp theo NCC
+  const traMap={};
+  cnPtrGroups().filter(g=>!g.paid && inRange(vnToIso(g.first.ngay))).forEach(g=>{
+    const k=g.ncc||'—'; traMap[k]=(traMap[k]||0)+(parseFloat(g.tong)||0);
+  });
+  const traRows=Object.entries(traMap).sort((a,b)=>b[1]-a[1]);
+  const traTong=traRows.reduce((s,x)=>s+x[1],0);
+  const ptrBody=document.getElementById('tbl-ptr-body');
+  if(ptrBody) ptrBody.innerHTML=traRows.length?traRows.map(([k,v])=>`<tr>
+    <td style="font-weight:500;">${esc(k)}</td>
+    <td class="amount-neg" style="text-align:right;font-weight:600;">${fmt(v)}</td></tr>`).join('')
+    :`<tr><td colspan="2" style="text-align:center;padding:18px;color:var(--text-muted);">Không có phải trả trong kỳ</td></tr>`;
+  const ptrTot=document.getElementById('cn-ptr-total'); if(ptrTot) ptrTot.textContent=fmt(traTong);
 }
 // Sheet "Theo dõi Phải Trả": lọc theo NCC + khoảng ngày phiếu chi, thanh tổng công nợ trong giai đoạn.
 function switchCnTab(tab,el){
@@ -4111,6 +4150,7 @@ function switchCnTab(tab,el){
   document.getElementById('cn-subtab-tq').classList.toggle('active',tab==='tq');
   document.getElementById('cn-subtab-ptr').classList.toggle('active',tab==='ptr');
   document.getElementById('cn-subtab-pthu').classList.toggle('active',tab==='pthu');
+  if(tab==='tq') renderCongNoTongQuan();
   if(tab==='ptr') renderCongNoPtrSheet();
   if(tab==='pthu') renderCongNoPthuSheet();
 }
@@ -4248,18 +4288,9 @@ function cnStatusSelect(val, onchange){
   </select>`;
 }
 // Phải Thu: từ các khoản Ghi Thu có PTTT = Công nợ (khách còn nợ).
-function renderCongNoPthu(){
-  const tbody=document.getElementById('tbl-pt-body'); if(!tbody) return;
-  const rows=(THU_DATA||[]).filter(r=>r.pttt==='Công nợ').sort((a,b)=>vnToIso(b.ngay).localeCompare(vnToIso(a.ngay)));   // mới → cũ
-  tbody.innerHTML=rows.length ? rows.map(r=>`<tr${r.cn_status==='da'?' style="opacity:.6;"':''}>
-    <td style="font-weight:500;">${esc(r.mota||r.danhmuc)||'—'}</td>
-    <td style="font-size:12px;">${esc(r.danhmuc)||'—'}${r.bophan?` · <span style="color:var(--text-muted);">${esc(r.bophan)}</span>`:''}</td>
-    <td class="amount-pos" style="font-weight:600;">${fmt(r.sotien)}</td>
-    <td style="font-size:12px;">${esc(r.ngay)||'—'}</td>
-    <td>${cnStatusSelect(r.cn_status,`updateThuCnStatus('${r.id}',this.value)`)}</td>
-  </tr>`).join('') : `<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:16px;">Chưa có công nợ phải thu</td></tr>`;
-}
-function updateThuCnStatus(id,val){ const r=(THU_DATA||[]).find(x=>x.id===id); if(!r) return; r.cn_status=val; renderCongNoPthu(); try{ renderCongNoPthuSheet(); }catch(e){} syncNow(); }
+// Phải Thu ở Tổng quan đã gộp theo danh mục — dùng chung renderCongNoTongQuan.
+function renderCongNoPthu(){ try{ renderCongNoTongQuan(); }catch(e){} }
+function updateThuCnStatus(id,val){ const r=(THU_DATA||[]).find(x=>x.id===id); if(!r) return; r.cn_status=val; renderCongNoTongQuan(); try{ renderCongNoPthuSheet(); }catch(e){} syncNow(); }
 // ===== Sheet Theo dõi Phải Thu: khoản Ghi Thu PTTT = Công nợ, lọc khách/nội dung + khoảng ngày =====
 function cnPthuFiltered(){
   const q=(document.getElementById('cnpthu-q')?.value||'').trim().toLowerCase();
