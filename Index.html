@@ -1406,6 +1406,15 @@ textarea{resize:vertical;min-height:68px;}
           <option>Tủ Mr Bá</option><option>Kho cầu thang B</option><option>Kho bếp</option>
           <option>Tầng B</option><option>Kho sếp</option>
         </select>
+        <select id="kho-f-loai" onchange="renderKhoTab()" style="font-size:12px;padding:7px 12px;border:1.5px solid var(--border);border-radius:8px;">
+          <option value="">Tất cả loại hàng</option>
+          <option value="tieu-dung">Tiêu dùng</option>
+          <option value="thuc-pham">Thực phẩm</option>
+          <option value="ccdc">CCDC</option>
+          <option value="vpp">VPP</option>
+          <option value="it">IT</option>
+          <option value="amenity">Amenity</option>
+        </select>
         <span id="kho-count" style="font-size:12px;color:var(--text-muted);"></span>
       </div>
 
@@ -2619,11 +2628,8 @@ textarea{resize:vertical;min-height:68px;}
       <div class="form-group"><label>Bộ phận sử dụng <span style="color:var(--text-muted);font-weight:400;font-size:11px;">— chọn nhiều</span></label><div id="ai-bophan-list" style="display:flex;flex-wrap:wrap;gap:6px 14px;padding:8px 0;"></div></div>
     </div>
     <div class="form-row full">
-      <div class="form-group"><label>Loại hàng <span style="color:var(--text-muted);font-weight:400;font-size:11px;">— chọn 1 (để trống nếu không phân loại)</span></label>
-        <div style="display:flex;gap:20px;padding:6px 0;">
-          <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;"><input type="checkbox" id="ai-loai-td" onchange="aiLoaiToggle('td')"> 📦 Hàng tiêu dùng</label>
-          <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;"><input type="checkbox" id="ai-loai-tp" onchange="aiLoaiToggle('tp')"> 🍽 Hàng thực phẩm</label>
-        </div>
+      <div class="form-group"><label>Loại hàng <span style="color:var(--text-muted);font-weight:400;font-size:11px;">— chọn nhiều loại nếu cần (để trống nếu không phân loại)</span></label>
+        <div id="ai-loai-box" style="display:flex;gap:16px;flex-wrap:wrap;padding:6px 0;"></div>
       </div>
     </div>
     <!-- NCC & GIÁ theo từng nhà cung cấp -->
@@ -6107,7 +6113,7 @@ document.getElementById('catalog-tbody').innerHTML=items.map(it=>{
   const histRows=(it.purchaseHistory||[]).slice().reverse().slice(0,3).map(h=>`<div class="purchase-row"><span>${h.date}</span><span style="font-weight:600;color:var(--navy);">${fmt(h.price)}</span>${h.note?`<span style="color:var(--text-muted);font-size:10px;">${h.note}</span>`:''}</div>`).join('');
   return `<tr>
     <td style="font-size:11px;color:var(--text-muted);font-weight:600;">${it.code}</td>
-    <td><div style="font-weight:500;">${it.name}</div>${it.loaiHang?`<span class="badge ${it.loaiHang==='thuc-pham'?'badge-green':'badge-blue'}" style="font-size:9px;margin-top:2px;display:inline-block;">${LOAI_HANG_LABEL[it.loaiHang]}</span>`:''}${it.note?`<div style="font-size:11px;color:var(--text-muted);">${it.note}</div>`:''}</td>
+    <td><div style="font-weight:500;">${it.name}</div>${itemLoaiList(it).map(k=>`<span class="badge ${k==='thuc-pham'?'badge-green':k==='tieu-dung'?'badge-blue':'badge-navy'}" style="font-size:9px;margin-top:2px;margin-right:3px;display:inline-block;">${LOAI_HANG_LABEL[k]||k}</span>`).join('')}${it.note?`<div style="font-size:11px;color:var(--text-muted);">${it.note}</div>`:''}</td>
     <td>${it.dvt}</td>
     <td>${catBophans(it).map(b=>`<span class="badge badge-navy" style="margin:1px;">${BP_LABELS[b]||b}</span>`).join('')||'—'}</td>
     <td style="max-width:180px;">${nccBadges||'\u2014'}</td>
@@ -6138,22 +6144,27 @@ function catBophans(it){
   if(it && Array.isArray(it.bophans) && it.bophans.length) return it.bophans;
   return (it && it.bophan) ? [it.bophan] : [];
 }
-// Loại hàng: 'tieu-dung' | 'thuc-pham' | '' (chọn 1). Dùng cho phân loại + xuất cuối tháng.
-const LOAI_HANG_LABEL={'tieu-dung':'Tiêu dùng','thuc-pham':'Thực phẩm'};
-function aiLoaiToggle(which){   // tick 1 loại → bỏ loại kia (chỉ 1 loại)
-  const td=document.getElementById('ai-loai-td'), tp=document.getElementById('ai-loai-tp');
-  if(which==='td' && td && td.checked && tp) tp.checked=false;
-  if(which==='tp' && tp && tp.checked && td) td.checked=false;
+// Loại hàng (chọn NHIỀU): lưu ở mảng loaiHangs. Dùng cho phân loại + lọc kho + xuất cuối tháng.
+const LOAI_HANG_LABEL={'tieu-dung':'Tiêu dùng','thuc-pham':'Thực phẩm','ccdc':'CCDC','vpp':'VPP','it':'IT','amenity':'Amenity'};
+const LOAI_HANG_KEYS=['tieu-dung','thuc-pham','ccdc','vpp','it','amenity'];
+const LOAI_HANG_EMOJI={'tieu-dung':'📦','thuc-pham':'🍽','ccdc':'🧰','vpp':'✏️','it':'💻','amenity':'🧴'};
+// Trả về mảng loại hàng của 1 mặt hàng (tương thích dữ liệu cũ dạng chuỗi loaiHang).
+function itemLoaiList(it){
+  if(Array.isArray(it?.loaiHangs)) return it.loaiHangs.filter(Boolean);
+  const s=(it?.loaiHang||'').trim();
+  return s?[s]:[];
 }
-function aiReadLoai(){
-  if(document.getElementById('ai-loai-td')?.checked) return 'tieu-dung';
-  if(document.getElementById('ai-loai-tp')?.checked) return 'thuc-pham';
-  return '';
+// Đổ 6 checkbox loại hàng vào #ai-loai-box, tick theo mảng sel.
+function aiFillLoaiBox(sel){
+  const box=document.getElementById('ai-loai-box'); if(!box) return;
+  const set=new Set(sel||[]);
+  box.innerHTML=LOAI_HANG_KEYS.map(k=>`<label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;"><input type="checkbox" class="ai-loai-cb" value="${k}" ${set.has(k)?'checked':''}> ${LOAI_HANG_EMOJI[k]||''} ${LOAI_HANG_LABEL[k]}</label>`).join('');
 }
-function aiSetLoai(v){
-  const td=document.getElementById('ai-loai-td'), tp=document.getElementById('ai-loai-tp');
-  if(td) td.checked = v==='tieu-dung';
-  if(tp) tp.checked = v==='thuc-pham';
+function aiReadLoaiList(){ return [...document.querySelectorAll('#ai-loai-box .ai-loai-cb:checked')].map(cb=>cb.value); }
+// Loại hàng của 1 tên hàng: tra Danh mục theo tên (khoNorm), trả mảng.
+function loaiListOfName(ten){
+  const c=(catalogItems||[]).find(x=>khoNorm(x.name)===khoNorm(ten));
+  return c?itemLoaiList(c):[];
 }
 // D\u1ef1ng nh\u00f3m checkbox b\u1ed9 ph\u1eadn s\u1eed d\u1ee5ng trong modal Th\u00eam/S\u1eeda m\u1eb7t h\u00e0ng (t\u1eeb CATS.bophan)
 function renderAiBophanChecks(selected){
@@ -6251,7 +6262,7 @@ const suppliers=aiReadSuppliers();
 const nccIds=[...new Set(suppliers.map(s=>s.nccId))];   // suy ra danh s\u00e1ch NCC li\u00ean k\u1ebft
 const bophans=aiReadBophans();
 if(!bophans.length){ showToast('Ch\u1ecdn \u00edt nh\u1ea5t 1 b\u1ed9 ph\u1eadn s\u1eed d\u1ee5ng!',2500,'error'); return; }
-const base={code:document.getElementById('ai-code').value.trim(),name,dvt:document.getElementById('ai-dvt').value,bophans,bophan:bophans[0],loaiHang:aiReadLoai(),nccIds,suppliers,note:document.getElementById('ai-note').value.trim()};
+const base={code:document.getElementById('ai-code').value.trim(),name,dvt:document.getElementById('ai-dvt').value,bophans,bophan:bophans[0],loaiHangs:aiReadLoaiList(),nccIds,suppliers,note:document.getElementById('ai-note').value.trim()};
 if(editingItemId){
   const idx=catalogItems.findIndex(x=>x.id===editingItemId);
   if(idx>-1) catalogItems[idx]={...catalogItems[idx],...base};
@@ -7323,7 +7334,9 @@ function switchKhoTab(tab,el){
   el.classList.add('active');
   const isMain=!['xuat','nhap','huy'].includes(tab);
   document.getElementById('kho-kpi').style.display=tab==='tong-hop'?'grid':'none';
-  document.getElementById('kho-filter-row').style.display=isMain?'flex':'none';
+  // Hiện thanh lọc ở mọi tab; riêng tab log (xuất/nhập/huỷ) ẩn lọc Vị trí (log không có vị trí).
+  document.getElementById('kho-filter-row').style.display='flex';
+  const fVitriEl=document.getElementById('kho-f-vitri'); if(fVitriEl) fVitriEl.style.display=isMain?'':'none';
   // Cập nhật nút action trong header
   const actionWrap=document.getElementById('kho-action-btns');
   if(actionWrap){
@@ -7407,11 +7420,12 @@ function _renderKhoTabInner(){
   const tab=currentKhoTab;
   const search=(document.getElementById('kho-search')?.value||'').toLowerCase();
   const fVitri=document.getElementById('kho-f-vitri')?.value||'';
-  if(tab==='tong-hop'){renderKhoTongHop(search,fVitri);return;}
+  const fLoai=document.getElementById('kho-f-loai')?.value||'';
+  if(tab==='tong-hop'){renderKhoTongHop(search,fVitri,fLoai);return;}
   if(tab==='xuat'){renderKhoLogTab('xuat');return;}
   if(tab==='nhap'){renderKhoLogTab('nhap');return;}
   if(tab==='huy'){renderKhoLogTab('huy');return;}
-  const items=KHO_DATA.filter(it=>it.bophan===tab&&(!search||(it.ma+it.ten).toLowerCase().includes(search))&&(!fVitri||it.vitri===fVitri));
+  const items=KHO_DATA.filter(it=>it.bophan===tab&&(!search||(it.ma+it.ten).toLowerCase().includes(search))&&(!fVitri||it.vitri===fVitri)&&(!fLoai||loaiListOfName(it.ten).includes(fLoai)));
   items.sort((a,b)=>(a.ten||'').localeCompare(b.ten||'','vi'));   // tên A→Z
   const cnt=document.getElementById('kho-count'); if(cnt) cnt.textContent=items.length+' mặt hàng';
   document.getElementById('kho-thead').innerHTML=`<tr><th>Ảnh</th><th>Tên hàng</th><th>Vị trí</th><th>ĐVT</th><th>Tồn đầu</th><th style="color:var(--green)">Nhập</th><th style="color:var(--yellow)">Xuất</th><th style="color:var(--red)">Huỷ</th><th style="color:var(--green);font-weight:700">Còn lại</th><th>Ghi chú</th><th>Thao tác</th></tr>`;
@@ -7458,8 +7472,8 @@ function khoGroups(){
   });
   return [...map.values()];
 }
-function renderKhoTongHop(search,fVitri){
-  let groups=khoGroups().filter(g=>!search||((g.ma||'')+(g.ten||'')).toLowerCase().includes(search));
+function renderKhoTongHop(search,fVitri,fLoai){
+  let groups=khoGroups().filter(g=>(!search||((g.ma||'')+(g.ten||'')).toLowerCase().includes(search))&&(!fLoai||loaiListOfName(g.ten).includes(fLoai)));
   groups.sort((a,b)=>(a.ten||'').localeCompare(b.ten||'','vi'));   // tên A→Z
   const cnt=document.getElementById('kho-count'); if(cnt) cnt.textContent=groups.length+' mặt hàng';
   // KPI tổng: chỉ nhập/xuất/huỷ thực toàn kho (bỏ transfer nội bộ)
@@ -7529,9 +7543,16 @@ function openKhoHistoryByMa(maOrTen){
 
 function renderKhoLogTab(type){
   const loaiSet=type==='xuat'?['xuat','transfer-out']:type==='nhap'?['nhap','transfer-in']:['huy'];
+  const search=(document.getElementById('kho-search')?.value||'').toLowerCase();
+  const fLoai=document.getElementById('kho-f-loai')?.value||'';
   const all=[];
-  KHO_DATA.forEach(it=>(it.lichSu||[]).filter(h=>loaiSet.includes(h.loai)).forEach(h=>all.push({...h,ma:it.ma,ten:it.ten,dvt:it.dvt,bophan:it.bophan})));
-  all.sort((a,b)=>(b.ngay||'').localeCompare(a.ngay||''));
+  KHO_DATA.forEach(it=>{
+    if(search && !((it.ma||'')+(it.ten||'')).toLowerCase().includes(search)) return;
+    if(fLoai && !loaiListOfName(it.ten).includes(fLoai)) return;
+    (it.lichSu||[]).filter(h=>loaiSet.includes(h.loai)).forEach(h=>all.push({...h,ma:it.ma,ten:it.ten,dvt:it.dvt,bophan:it.bophan}));
+  });
+  const parseD=s=>{const p=(s||'').split('/');return new Date(+p[2]||0,(+p[1]||1)-1,+p[0]||1).getTime();};
+  all.sort((a,b)=>parseD(b.ngay)-parseD(a.ngay));
   const thMap={xuat:['SL xuất','var(--yellow)'],nhap:['SL nhập','var(--green)'],huy:['SL huỷ','var(--red)']};
   const [slLabel,slColor]=thMap[type];
   document.getElementById('kho-thead').innerHTML=`<tr><th>Ngày</th><th>Mã</th><th>Tên hàng</th><th>Kho</th><th>${slLabel}</th><th>ĐVT</th><th>Ghi chú / Lý do</th>${type!=='nhap'?'<th>Ảnh</th>':''}<th>Người TH</th></tr>`;
@@ -7583,7 +7604,7 @@ function confirmTransfer(){
   }
   closeModal('modal-kho-transfer');
   showToast(`✅ Transfer ${sl} ${it.dvt} "${it.ten}" → ${KHO_BP_LABELS[dest]}`,2500,'success');
-  renderKhoTab();
+  renderKhoTab(); syncNow();
 }
 
 function openKhoHistory(itemId){
@@ -7821,7 +7842,7 @@ function saveKhoCommit(px,loai){
   });
   mdClear(px==='kx'?'modal-kho-xuat':'modal-kho-huy');   // đã Xác nhận → xoá nháp
   closeModal(px==='kx'?'modal-kho-xuat':'modal-kho-huy');
-  renderKhoTab();
+  renderKhoTab(); syncNow();
   showToast(`✅ Đã ${loai==='huy'?'huỷ':'xuất'} ${resolved.length} món`,2400,'success');
 }
 function saveKhoXuat(){ saveKhoCommit('kx','xuat'); }
@@ -7873,14 +7894,9 @@ function saveKhoNhap(){
 
 // ===== Xuất cuối tháng theo LOẠI (tiêu dùng / thực phẩm): xuất hết tồn ở MỌI kho, xem trước rồi xác nhận =====
 let kxtLoai='';
-// Loại hàng của 1 dòng kho: tra Danh mục theo tên (phân loại lưu ở catalogItems.loaiHang).
-function itemLoaiHang(khoRow){
-  const c=(catalogItems||[]).find(x=>(x.name||'').trim().toLowerCase()===(khoRow.ten||'').trim().toLowerCase());
-  return c?(c.loaiHang||''):'';
-}
 function khoXuatThangRows(){
   const rows=[];
-  KHO_DATA.forEach(it=>{ if(itemLoaiHang(it)===kxtLoai){ const con=calcKyStats(it).con; if(con>0) rows.push({it,con}); } });
+  KHO_DATA.forEach(it=>{ if(loaiListOfName(it.ten).includes(kxtLoai)){ const con=calcKyStats(it).con; if(con>0) rows.push({it,con}); } });
   rows.sort((a,b)=>(a.it.ten||'').localeCompare(b.it.ten||'','vi') || (KHO_BP_LABELS[a.it.bophan]||'').localeCompare(KHO_BP_LABELS[b.it.bophan]||''));
   return rows;
 }
@@ -8527,7 +8543,7 @@ function editItem(id){
   fillDvtSelect(it.dvt||'');
   dxvtMgrBtnVisibility();
   renderAiBophanChecks(catBophans(it));
-  aiSetLoai(it.loaiHang||'');
+  aiFillLoaiBox(itemLoaiList(it));
   const note=document.getElementById('ai-note'); if(note) note.value=it.note||'';
   const hist=document.getElementById('ai-history-wrap'); if(hist) hist.style.display='none';
   // Nạp các dòng NCC & Giá. Tương thích item cũ (chỉ có nccIds) → dựng suppliers từ nccIds.
@@ -8571,7 +8587,7 @@ function openAddItemModal(){
   dxvtMgrBtnVisibility();
   const hist=document.getElementById('ai-history-wrap'); if(hist) hist.style.display='none';
   renderAiBophanChecks([]);
-  aiSetLoai('');
+  aiFillLoaiBox([]);
   aiRenderSuppliers([]);
   const del=document.getElementById('ai-delete-btn'); if(del) del.style.display='none';
   openModal('modal-add-item');
