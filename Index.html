@@ -7353,7 +7353,56 @@ function khoSyncTopScroll(){
     box.addEventListener('scroll',()=>{ top.scrollLeft=box.scrollLeft; });
   }
 }
-function renderKhoTab(){ _renderKhoTabInner(); try{ khoSyncTopScroll(); }catch(e){} }
+// Gộp các dòng kho TRÙNG (cùng bộ phận + cùng tên) thành 1 dòng: cộng dồn tồn đầu + lịch sử.
+// Dữ liệu cũ có thể tạo nhiều dòng cùng tên (nhập từ Chi trước khi có dedup, hoặc ĐVT lệch
+// như "Ổ" vs "cái"). Hàm này dồn lại 1 tên = 1 dòng để kho hiển thị gọn và cộng dồn số liệu.
+function khoMergeDuplicates(){
+  const groups=new Map();
+  KHO_DATA.forEach(it=>{
+    const key=(it.bophan||'')+'|'+khoNorm(it.ten);
+    if(!groups.has(key)) groups.set(key,[]);
+    groups.get(key).push(it);
+  });
+  let merged=0; const result=[];
+  groups.forEach(rows=>{
+    if(rows.length===1){ result.push(rows[0]); return; }
+    // Dòng chính: ưu tiên dòng có 'ma', rồi id nhỏ nhất → ổn định & hội tụ giữa các máy.
+    const sorted=rows.slice().sort((a,b)=>{
+      const am=(a.ma||'').trim()?0:1, bm=(b.ma||'').trim()?0:1;
+      if(am!==bm) return am-bm;
+      return String(a.id).localeCompare(String(b.id));
+    });
+    const primary=sorted[0];
+    // ĐVT phổ biến nhất trong nhóm (tie → của dòng chính).
+    const dvtCount={};
+    rows.forEach(it=>{ const d=(it.dvt||'').trim()||'Cái'; dvtCount[d]=(dvtCount[d]||0)+1; });
+    let bestDvt=(primary.dvt||'').trim()||'Cái', bestN=-1;
+    Object.keys(dvtCount).forEach(d=>{ if(dvtCount[d]>bestN){ bestN=dvtCount[d]; bestDvt=d; } });
+    const m={
+      id:primary.id,
+      ma:rows.map(it=>(it.ma||'').trim()).find(x=>x)||'',
+      ten:primary.ten,
+      dvt:bestDvt,
+      bophan:primary.bophan,
+      vitri:primary.vitri||rows.map(it=>it.vitri).find(v=>v)||khoVitriDefault(primary.bophan),
+      ton_dau:rows.reduce((s,it)=>s+(parseFloat(it.ton_dau)||0),0),
+      img:rows.map(it=>it.img).find(im=>im&&/^(https?:|data:|blob:)/.test(im))||primary.img||'📦',
+      ghichu:rows.map(it=>(it.ghichu||'').trim()).find(g=>g)||'',
+      lichSu:[]
+    };
+    rows.forEach(it=>{ if(Array.isArray(it.lichSu)) m.lichSu.push(...it.lichSu); });
+    result.push(m);
+    merged+=rows.length-1;
+  });
+  if(merged>0) KHO_DATA=result;
+  return merged;
+}
+let _khoMergeSyncT=null;
+function _khoScheduleMergeSync(){ clearTimeout(_khoMergeSyncT); _khoMergeSyncT=setTimeout(()=>{ try{ syncNow(); }catch(e){} },400); }
+function renderKhoTab(){
+  try{ if(khoMergeDuplicates()>0) _khoScheduleMergeSync(); }catch(e){}
+  _renderKhoTabInner(); try{ khoSyncTopScroll(); }catch(e){}
+}
 function _renderKhoTabInner(){
   const tab=currentKhoTab;
   const search=(document.getElementById('kho-search')?.value||'').toLowerCase();
