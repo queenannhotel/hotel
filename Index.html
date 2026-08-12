@@ -2172,12 +2172,15 @@ textarea{resize:vertical;min-height:68px;}
     <div class="form-row">
       <div class="form-group"><label>Ngày nhập</label><input type="date" id="kn-ngay"></div>
       <div class="form-group"><label>Nhập vào kho</label>
-        <select id="kn-bophan" onchange="khoRefreshBalances('kn')">
+        <select id="kn-bophan" onchange="khoNhapKhoChange()">
           <option value="kt">Kho KT</option><option value="bep">Kho Bếp</option>
           <option value="nha-hang">Kho Nhà hàng</option><option value="hk">Kho HK</option>
           <option value="ky-thuat">Kho Kỹ thuật</option><option value="van-phong">Kho Văn phòng</option>
           <option value="le-tan">Kho Lễ tân</option>
         </select>
+      </div>
+      <div class="form-group"><label>Vị trí lưu <span style="color:#94a3b8;font-weight:400;">— áp cho mọi món</span></label>
+        <select id="kn-vitri"></select>
       </div>
     </div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin:6px 0 8px;">
@@ -7776,10 +7779,22 @@ function saveKhoXuat(){ saveKhoCommit('kx','xuat'); }
 function saveKhoHuy(){ saveKhoCommit('kh','huy'); }
 
 // ===== Nhập hàng thủ công: nhiều món vào 1 kho, cộng tồn (mặt hàng chưa có → tự tạo trong kho đó) =====
+// Đổ danh sách vị trí vào #kn-vitri và chọn 'sel'.
+function knFillVitri(sel){
+  const el=document.getElementById('kn-vitri'); if(!el) return;
+  el.innerHTML=KHO_VITRI_LIST.map(v=>`<option ${v===sel?'selected':''}>${v}</option>`).join('');
+  el.value=sel;
+}
+// Đổi kho → làm mới số dư + gợi ý lại vị trí mặc định của kho đó.
+function khoNhapKhoChange(){
+  khoRefreshBalances('kn');
+  knFillVitri(khoVitriDefault(document.getElementById('kn-bophan').value));
+}
 function openKhoModalNhap(){
   document.getElementById('kn-ngay').value=new Date().toISOString().slice(0,10);
   const bp=!['tong-hop','xuat','nhap','huy'].includes(currentKhoTab)?currentKhoTab:'kt';
   document.getElementById('kn-bophan').value=bp;
+  knFillVitri(khoVitriDefault(bp));
   document.getElementById('kn-items').innerHTML=''; khoAddRow('kn');
   imgPickerClear('kn');
   openModal('modal-kho-nhap');
@@ -7787,6 +7802,7 @@ function openKhoModalNhap(){
 }
 function saveKhoNhap(){
   const kho=document.getElementById('kn-bophan').value;
+  const vitri=document.getElementById('kn-vitri').value||khoVitriDefault(kho);
   const ngay=(document.getElementById('kn-ngay').value||'').split('-').reverse().join('/')||new Date().toLocaleDateString('vi-VN');
   const img=document.getElementById('kn-img').value.trim();
   const nguoi=currentUser?.fullname||'Kế toán';
@@ -7795,7 +7811,8 @@ function saveKhoNhap(){
   rows.forEach(r=>{
     const dvt=(r.dvt||'').trim()||'Cái';
     let it=KHO_DATA.find(x=>x.bophan===kho && khoNorm(x.ten)===khoNorm(r.ten) && khoDvt(x.dvt)===khoDvt(dvt));
-    if(!it){ it={id:'KH'+Date.now()+Math.floor(Math.random()*1000),ma:'',ten:r.ten,dvt,bophan:kho,vitri:khoVitriDefault(kho),ton_dau:0,img:'📦',ghichu:'',lichSu:[]}; KHO_DATA.push(it); }
+    if(!it){ it={id:'KH'+Date.now()+Math.floor(Math.random()*1000),ma:'',ten:r.ten,dvt,bophan:kho,vitri,ton_dau:0,img:'📦',ghichu:'',lichSu:[]}; KHO_DATA.push(it); }
+    else it.vitri=vitri;
     if(!Array.isArray(it.lichSu)) it.lichSu=[];
     it.lichSu.push({ngay,loai:'nhap',sl:r.sl,tu:'',den:kho,lydo:r.lydo||'Nhập hàng',img,nguoi});
   });
