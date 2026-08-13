@@ -118,6 +118,7 @@ function _lsSaveRaw(){
       nsBhxh:NS_BHXH,nsTncn:NS_TNCN,cats:CATS,dvtList:DVT_LIST,
     };
     localStorage.setItem(LS_KEY,JSON.stringify(data));
+    try{ _dirty=true; }catch(e){}   // đánh dấu có thay đổi để vòng đồng bộ 4s quét
     return true;
   }catch(e){return false;}
 }
@@ -7243,10 +7244,29 @@ function imgPickerClear(prefix){
   if(fileInput) fileInput.value='';
 }
 
+// Nén ảnh trước khi lưu: thu cạnh dài ≤1024px, xuất JPEG ~72%. Ảnh nhỏ/URL/emoji → giữ nguyên.
+function downscaleImage(dataUrl, cb, maxDim=1024, quality=0.72){
+  if(typeof dataUrl!=='string' || !dataUrl.startsWith('data:image')){ cb(dataUrl); return; }
+  const img=new Image();
+  img.onload=()=>{
+    try{
+      const w=img.naturalWidth||img.width, h=img.naturalHeight||img.height;
+      if(w<=maxDim && h<=maxDim && dataUrl.length<200000){ cb(dataUrl); return; }   // đã đủ nhỏ
+      const scale=Math.min(1, maxDim/Math.max(w,h));
+      const cw=Math.max(1,Math.round(w*scale)), ch=Math.max(1,Math.round(h*scale));
+      const cv=document.createElement('canvas'); cv.width=cw; cv.height=ch;
+      cv.getContext('2d').drawImage(img,0,0,cw,ch);
+      const out=cv.toDataURL('image/jpeg',quality);
+      cb(out.length<dataUrl.length?out:dataUrl);
+    }catch(e){ cb(dataUrl); }
+  };
+  img.onerror=()=>cb(dataUrl);
+  img.src=dataUrl;
+}
 function imgPickerFile(event, prefix){
   const file = event.target.files[0]; if(!file) return;
   const reader = new FileReader();
-  reader.onload = e => imgPickerSet(prefix, e.target.result);
+  reader.onload = e => downscaleImage(e.target.result, out=>imgPickerSet(prefix, out));
   reader.readAsDataURL(file);
 }
 
@@ -7273,7 +7293,7 @@ function imgPickerDrop(event, prefix){
   const file = event.dataTransfer?.files[0];
   if(file&&file.type.startsWith('image/')){
     const reader = new FileReader();
-    reader.onload = e => imgPickerSet(prefix, e.target.result);
+    reader.onload = e => downscaleImage(e.target.result, out=>imgPickerSet(prefix, out));
     reader.readAsDataURL(file);
     return;
   }
@@ -7294,7 +7314,7 @@ document.addEventListener('paste', e=>{
       const modalId = activeModal.id;
       const prefix = modalId==='modal-kho-item'?'ki':modalId==='modal-kho-xuat'?'kx':modalId==='modal-kho-huy'?'kh':null;
       if(!prefix) return;
-      reader.onload = ev => imgPickerSet(prefix, ev.target.result);
+      reader.onload = ev => downscaleImage(ev.target.result, out=>imgPickerSet(prefix, out));
       reader.readAsDataURL(file);
       e.preventDefault();
       return;
@@ -8876,7 +8896,7 @@ async function cloudPullAll(){
 }
 
 // ----- ĐẨY LÊN: so sánh snapshot, chỉ gửi bản ghi mới/đổi/xoá -----
-let _flushTimer=null, _flushing=false;
+let _flushTimer=null, _flushing=false, _dirty=false;   // _dirty: có thay đổi cục bộ chưa đẩy → vòng 4s mới quét
 function scheduleFlush(){ if(!sb||!cloudReady) return; clearTimeout(_flushTimer); _flushTimer=setTimeout(flushToCloud, 1500); }
 // Lưu cục bộ + đẩy cloud NGAY (dùng sau khi xoá để soft-delete lên cloud tức thì, khỏi chờ 4s)
 function syncNow(){ _lsSaveRaw(); if(sb&&cloudReady) flushToCloud(); }
@@ -8932,7 +8952,7 @@ async function flushToCloud(){
           if(error) throw error;
           chunk.forEach(u=>{ lastSnapshot[name]=lastSnapshot[name]||{}; if(u.deleted) delete lastSnapshot[name][u.id]; else lastSnapshot[name][u.id]=JSON.stringify(u.data); });
         }
-      }catch(e){ anyErr=true; _lastSyncErr=(e&&(e.message||e.hint||e.details||e.error_description))||String(e); _lastSyncErrColl=name; console.error('flush nhóm',name,e); /* giữ snapshot nhóm này -> thử lại sau */ }
+      }catch(e){ anyErr=true; _dirty=true; _lastSyncErr=(e&&(e.message||e.hint||e.details||e.error_description))||String(e); _lastSyncErrColl=name; console.error('flush nhóm',name,e); /* giữ snapshot nhóm này + đánh dấu bẩn -> thử lại vòng sau */ }
     }
     if(anyChange) setSyncStatus(anyErr?'err':'ok');
     if(anyErr) _notifySyncErr();
@@ -8948,6 +8968,9 @@ function _notifySyncErr(force){
 // ----- REALTIME: áp thay đổi từ máy khác vào bộ nhớ, cập nhật snapshot để không đẩy dội lại -----
 let _renderQ=new Set(), _renderTimer=null;
 function _scheduleRender(name){ _renderQ.add(name); clearTimeout(_renderTimer); _renderTimer=setTimeout(()=>{ const q=[..._renderQ]; _renderQ.clear(); q.forEach(n=>{ try{ COLLECTIONS[n].render(); }catch(e){} }); try{ updateDashboardKPI(); }catch(e){} }, 300); }
+// Gộp nhiều sự kiện realtime liên tiếp thành 1 lần ghi localStorage (đỡ serialize toàn bộ dữ liệu mỗi bản ghi).
+let _lsSaveT=null;
+function _lsSaveRawDebounced(){ clearTimeout(_lsSaveT); _lsSaveT=setTimeout(()=>{ try{ _lsSaveRaw(); }catch(e){} }, 500); }
 function startRealtime(){
   if(!sb) return;
   sb.channel('records-sync')
@@ -8972,7 +8995,7 @@ function startRealtime(){
         c.write(rows);
         lastSnapshot[name]=lastSnapshot[name]||{}; lastSnapshot[name][id]=JSON.stringify(obj);
       }
-      _lsSaveRaw();
+      _lsSaveRawDebounced();
       _scheduleRender(name);
     })
     .subscribe(status=>{ if(status==='CHANNEL_ERROR'||status==='TIMED_OUT') setSyncStatus('err'); });
@@ -8993,7 +9016,7 @@ async function initCloud(){
   }catch(e){}
   startRealtime();
   // Xương sống: quét diff định kỳ để bắt mọi thay đổi (kể cả chỗ không gọi lsSave)
-  setInterval(()=>{ if(sb&&cloudReady) flushToCloud(); }, 4000);
+  setInterval(()=>{ if(sb&&cloudReady&&_dirty){ _dirty=false; flushToCloud(); } }, 4000);
   // Kéo lại khi mạng có lại
   window.addEventListener('online', ()=>{ cloudPullAll(); });
 }
