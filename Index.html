@@ -2267,6 +2267,18 @@ textarea{resize:vertical;min-height:68px;}
   </div>
 </div>
 
+<!-- ===== MODAL KIỂM TRA BỘ NHỚ MÁY ===== -->
+<div class="modal-overlay" id="modal-kho-storage">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title">🔍 Kiểm tra bộ nhớ máy</span><button class="close-btn" onclick="closeModal('modal-kho-storage')">✕</button></div>
+    <div id="ks-body" style="font-size:13px;">Đang kiểm tra…</div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
+      <button class="btn btn-ghost" onclick="closeModal('modal-kho-storage')">Đóng</button>
+      <button class="btn btn-gold" onclick="closeModal('modal-kho-storage');khoCompressOldImages()">🗜 Nén ảnh cũ ngay</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===== MODAL ĐỒNG BỘ KHO PHIẾU CHI THEO NCC ===== -->
 <div class="modal-overlay" id="modal-chi-sync-kho">
   <div class="modal modal-lg">
@@ -7324,6 +7336,53 @@ async function khoCompressOldImages(){
   showToast(count?`✅ Đã nén ${count} ảnh, tiết kiệm ~${savedKB} KB`:'Không có ảnh cũ cần nén',2800,'success');
 }
 
+// ===== Kiểm tra bộ nhớ máy (localStorage): dữ liệu app chiếm bao nhiêu, ảnh nặng cỡ nào, còn ghi được không =====
+async function khoStorageReport(){
+  openModal('modal-kho-storage');
+  const body=document.getElementById('ks-body'); if(!body) return;
+  body.innerHTML='Đang kiểm tra…';
+  const mb=b=>(b/1048576).toFixed(2), kb=b=>Math.round(b/1024);
+  // Dữ liệu app + tổng localStorage
+  const appBytes=(localStorage.getItem(LS_KEY)||'').length;
+  let totalBytes=0; for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); totalBytes+=k.length+(localStorage.getItem(k)||'').length; }
+  // Ảnh trong kho
+  let imgCount=0, imgBytes=0; const per=[];
+  (KHO_DATA||[]).forEach(it=>{
+    let b=0;
+    if(typeof it.img==='string' && it.img.startsWith('data:image')){ b+=it.img.length; imgCount++; }
+    (it.lichSu||[]).forEach(h=>{ if(h&&typeof h.img==='string'&&h.img.startsWith('data:image')){ b+=h.img.length; imgCount++; } });
+    if(b>0) per.push({ten:it.ten||'(không tên)', b});
+    imgBytes+=b;
+  });
+  per.sort((a,b)=>b.b-a.b);
+  // Phép thử ghi trực tiếp (~0.5MB) → tín hiệu "đầy" thật
+  let writeOk=true;
+  try{ localStorage.setItem('__qah_probe__','x'.repeat(500000)); }catch(e){ writeOk=false; }
+  try{ localStorage.removeItem('__qah_probe__'); }catch(e){}
+  // Ước lượng hạn mức thiết bị (tham khảo)
+  let est=null; try{ if(navigator.storage&&navigator.storage.estimate) est=await navigator.storage.estimate(); }catch(e){}
+  const CAP=5*1048576;   // localStorage thường ~5MB
+  const pct=Math.min(100, Math.round(totalBytes/CAP*100));
+  const verdict = !writeOk
+    ? `<div style="padding:10px 12px;background:var(--red-bg);border:1px solid var(--red);border-radius:8px;color:var(--red);font-weight:700;margin-bottom:10px;">⚠️ Bộ nhớ ĐẦY — máy không ghi thêm được. Hãy bấm “🗜 Nén ảnh cũ” hoặc xoá bớt ảnh để không mất dữ liệu.</div>`
+    : `<div style="padding:10px 12px;background:var(--green-bg);border:1px solid var(--green);border-radius:8px;color:var(--green);font-weight:700;margin-bottom:10px;">✅ Bộ nhớ còn ghi được bình thường (đang dùng ~${pct}% giới hạn ~5MB).</div>`;
+  const rows=[
+    ['Dữ liệu app (Queen Ann)', mb(appBytes)+' MB'],
+    ['Tổng bộ nhớ trình duyệt (localStorage)', mb(totalBytes)+` MB / ~5 MB (${pct}%)`],
+    ['Ảnh trong kho', `${imgCount} ảnh · ~${mb(imgBytes)} MB`],
+  ];
+  if(est&&est.quota) rows.push(['Hạn mức thiết bị (tham khảo)', `${mb(est.usage||0)} MB / ${mb(est.quota)} MB`]);
+  const topHtml = per.length
+    ? `<div style="margin-top:10px;font-weight:600;">Mặt hàng nặng ảnh nhất:</div><ul style="margin:4px 0 0 18px;padding:0;">`+
+      per.slice(0,5).map(p=>`<li style="margin:2px 0;">${esc(p.ten)} — <b>${kb(p.b)} KB</b></li>`).join('')+`</ul>`
+    : `<div style="margin-top:10px;color:var(--text-muted);">Kho hiện không có ảnh base64 nào.</div>`;
+  body.innerHTML = verdict +
+    `<table style="width:100%;font-size:13px;border-collapse:collapse;">`+
+    rows.map(r=>`<tr><td style="padding:5px 6px;color:var(--text-muted);">${r[0]}</td><td style="padding:5px 6px;text-align:right;font-weight:600;">${r[1]}</td></tr>`).join('')+
+    `</table>`+ topHtml +
+    (imgBytes>1048576?`<div style="margin-top:10px;font-size:12px;color:var(--text-muted);">💡 Ảnh đang chiếm nhiều — bấm “🗜 Nén ảnh cũ ngay” để giải phóng.</div>`:'');
+}
+
 // ===== Khôi phục món kho đã xoá từ cloud (đọc cả dòng deleted=true còn dữ liệu) =====
 let _krCandidates=[];
 function _khoImgCount(o){
@@ -7506,7 +7565,8 @@ function switchKhoTab(tab,el){
       <input type="file" id="kho-import-excel" accept=".xlsx,.xls,.csv" style="display:none;" onchange="importKhoExcel(this)">
       <button class="btn btn-excel btn-sm" onclick="exportKhoExcel()">📊 Xuất Excel</button>
       ${(currentUser?.role==='giamdoc'||currentUser?.role==='ketoan')?`<button class="btn btn-ghost btn-sm" onclick="khoCompressOldImages()" title="Nén mọi ảnh cũ đã lưu để nhẹ bộ nhớ">🗜 Nén ảnh cũ</button>
-      <button class="btn btn-ghost btn-sm" onclick="openKhoRecover()" title="Khôi phục món kho đã xoá còn lưu trên máy chủ">🛟 Khôi phục từ cloud</button>`:''}
+      <button class="btn btn-ghost btn-sm" onclick="openKhoRecover()" title="Khôi phục món kho đã xoá còn lưu trên máy chủ">🛟 Khôi phục từ cloud</button>
+      <button class="btn btn-ghost btn-sm" onclick="khoStorageReport()" title="Xem dung lượng bộ nhớ máy đang dùng, ảnh chiếm bao nhiêu, còn ghi được không">🔍 Kiểm tra bộ nhớ</button>`:''}
       <button class="btn btn-gold btn-sm" onclick="openKhoAddItem()">+ Thêm hàng</button>`;
   }
   renderKhoTab();
