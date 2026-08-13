@@ -120,7 +120,13 @@ function _lsSaveRaw(){
     localStorage.setItem(LS_KEY,JSON.stringify(data));
     try{ _dirty=true; }catch(e){}   // đánh dấu có thay đổi để vòng đồng bộ 4s quét
     return true;
-  }catch(e){return false;}
+  }catch(e){ try{ _warnLsQuota(); }catch(_){}; return false; }
+}
+// Cảnh báo tràn bộ nhớ máy (≤1 lần/30s) — trước đây lỗi này bị nuốt âm thầm gây mất dữ liệu.
+let _lsQuotaWarnAt=0;
+function _warnLsQuota(){
+  const now=Date.now(); if(now-_lsQuotaWarnAt<30000) return; _lsQuotaWarnAt=now;
+  try{ showToast('⚠️ Bộ nhớ máy đầy — dữ liệu chưa lưu được. Hãy bấm "🗜 Nén ảnh cũ" ở tab Kho hoặc xoá bớt ảnh.',6500,'error'); }catch(e){}
 }
 function lsLoad(){
   try{
@@ -2243,6 +2249,24 @@ textarea{resize:vertical;min-height:68px;}
   </div>
 </div>
 
+<!-- ===== MODAL KHÔI PHỤC KHO TỪ CLOUD ===== -->
+<div class="modal-overlay" id="modal-kho-recover">
+  <div class="modal modal-lg">
+    <div class="modal-header"><span class="modal-title">🛟 Khôi phục món kho từ máy chủ</span><button class="close-btn" onclick="closeModal('modal-kho-recover')">✕</button></div>
+    <div id="kr-summary" style="padding:8px 12px;background:var(--gold-pale);border-radius:8px;font-weight:600;color:var(--yellow);margin-bottom:8px;">Đang quét…</div>
+    <div style="font-size:12px;color:var(--text-muted);margin:2px 0 8px;">Các món kho <b>đã bị xoá</b> nhưng máy chủ vẫn còn dữ liệu. Tick chọn rồi bấm Khôi phục. Món bị mất dữ liệu (chỉ còn dấu vết) không khôi phục được từ đây.</div>
+    <div class="table-wrap" style="max-height:360px;overflow:auto;">
+      <table><thead><tr><th style="width:34px;"><input type="checkbox" id="kr-all" onchange="krToggleAll(this)"></th><th>Tên hàng</th><th>Kho</th><th style="text-align:center;">Tồn</th><th style="text-align:center;">Ảnh</th><th>Trạng thái</th></tr></thead>
+      <tbody id="kr-body"></tbody></table>
+    </div>
+    <div id="kr-unrec" style="font-size:12px;color:var(--red);margin-top:8px;"></div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
+      <button class="btn btn-ghost" onclick="closeModal('modal-kho-recover')">Đóng</button>
+      <button class="btn btn-gold" id="kr-restore-btn" onclick="khoRecoverRestoreSelected()">♻️ Khôi phục món đã chọn</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===== MODAL ĐỒNG BỘ KHO PHIẾU CHI THEO NCC ===== -->
 <div class="modal-overlay" id="modal-chi-sync-kho">
   <div class="modal modal-lg">
@@ -3897,9 +3921,16 @@ function addChiKhoEntry(r){
 }
 // Rút mặt hàng Chi khỏi mọi kho (xoá entry gắn ref_chi).
 function removeChiKhoEntry(r){
-  KHO_DATA.forEach(it=>{ if(Array.isArray(it.lichSu)) it.lichSu=it.lichSu.filter(h=>h.ref_chi!==r.id); });
-  // Dọn dòng kho MỒ CÔI do addChiKhoEntry tạo (ma rỗng, tồn 0, hết lịch sử) — tránh dòng cùng tên rải rác.
-  KHO_DATA=KHO_DATA.filter(it=>!((it.ma||'')==='' && (parseFloat(it.ton_dau)||0)===0 && (!it.lichSu||!it.lichSu.length)));
+  // Chỉ đụng những dòng THỰC SỰ có entry của phiếu chi này (tránh xoá nhầm món nhập tay cùng hình dạng).
+  const touched=new Set();
+  KHO_DATA.forEach(it=>{
+    if(Array.isArray(it.lichSu) && it.lichSu.some(h=>h.ref_chi===r.id)){
+      touched.add(it.id);
+      it.lichSu=it.lichSu.filter(h=>h.ref_chi!==r.id);
+    }
+  });
+  // Dọn dòng kho MỒ CÔI do addChiKhoEntry tạo (ma rỗng, tồn 0, hết lịch sử) — CHỈ trong các dòng vừa gỡ.
+  KHO_DATA=KHO_DATA.filter(it=>!(touched.has(it.id) && (it.ma||'')==='' && (parseFloat(it.ton_dau)||0)===0 && (!it.lichSu||!it.lichSu.length)));
   r.kho_pushed=false; r.kho_pushed_to=null;
 }
 // Đồng bộ 1 bản ghi Chi với kho: hoàn thành→nhập, bỏ hoàn thành/đổi kho→rút+nhập lại.
@@ -7251,7 +7282,8 @@ function downscaleImage(dataUrl, cb, maxDim=1024, quality=0.72){
   img.onload=()=>{
     try{
       const w=img.naturalWidth||img.width, h=img.naturalHeight||img.height;
-      if(w<=maxDim && h<=maxDim && dataUrl.length<200000){ cb(dataUrl); return; }   // đã đủ nhỏ
+      // Đã trong khổ + đã là JPEG (định dạng đích) HOẶC vốn nhỏ → giữ nguyên (tránh nén lặp mỗi lần chạy).
+      if(w<=maxDim && h<=maxDim && (dataUrl.startsWith('data:image/jpeg') || dataUrl.length<200000)){ cb(dataUrl); return; }
       const scale=Math.min(1, maxDim/Math.max(w,h));
       const cw=Math.max(1,Math.round(w*scale)), ch=Math.max(1,Math.round(h*scale));
       const cv=document.createElement('canvas'); cv.width=cw; cv.height=ch;
@@ -7262,6 +7294,111 @@ function downscaleImage(dataUrl, cb, maxDim=1024, quality=0.72){
   };
   img.onerror=()=>cb(dataUrl);
   img.src=dataUrl;
+}
+// Bọc Promise cho downscaleImage để dùng với await trong migration.
+function downscaleImageAsync(src){ return new Promise(res=>{ try{ downscaleImage(src, res); }catch(e){ res(src); } }); }
+// Nén MỌI ảnh cũ đã lưu trong kho (item.img + lichSu[].img). Idempotent (ảnh nhỏ được bỏ qua).
+async function compressExistingKhoImages(){
+  let count=0, saved=0;
+  for(const it of (KHO_DATA||[])){
+    if(typeof it.img==='string' && it.img.startsWith('data:image')){
+      const out=await downscaleImageAsync(it.img);
+      if(out && out.length<it.img.length){ saved+=it.img.length-out.length; it.img=out; count++; }
+    }
+    if(Array.isArray(it.lichSu)){
+      for(const h of it.lichSu){
+        if(h && typeof h.img==='string' && h.img.startsWith('data:image')){
+          const out=await downscaleImageAsync(h.img);
+          if(out && out.length<h.img.length){ saved+=h.img.length-out.length; h.img=out; count++; }
+        }
+      }
+    }
+  }
+  if(count>0){ try{ renderKhoTab(); }catch(e){} syncNow(); }
+  return {count, savedKB:Math.round(saved/1024)};
+}
+// Nút thủ công: nén ảnh cũ + báo kết quả.
+async function khoCompressOldImages(){
+  showToast('🗜 Đang nén ảnh cũ trong kho…',2000,'info');
+  const {count,savedKB}=await compressExistingKhoImages();
+  showToast(count?`✅ Đã nén ${count} ảnh, tiết kiệm ~${savedKB} KB`:'Không có ảnh cũ cần nén',2800,'success');
+}
+
+// ===== Khôi phục món kho đã xoá từ cloud (đọc cả dòng deleted=true còn dữ liệu) =====
+let _krCandidates=[];
+function _khoImgCount(o){
+  let n=0;
+  if(typeof o.img==='string' && o.img.startsWith('data:image')) n++;
+  (o.lichSu||[]).forEach(h=>{ if(h&&typeof h.img==='string' && h.img.startsWith('data:image')) n++; });
+  return n;
+}
+async function openKhoRecover(){
+  openModal('modal-kho-recover');
+  document.getElementById('kr-summary').textContent='Đang quét máy chủ…';
+  document.getElementById('kr-body').innerHTML='';
+  document.getElementById('kr-unrec').textContent='';
+  await khoRecoverScan();
+}
+async function khoRecoverScan(){
+  if(!sb){ document.getElementById('kr-summary').textContent='Chưa kết nối máy chủ (offline) — không quét được.'; return; }
+  try{
+    let all=[]; const PAGE=1000; let from=0;
+    while(true){
+      const {data,error}=await sb.from('records').select('id,data,deleted').eq('collection','kho').range(from,from+PAGE-1);
+      if(error) throw error;
+      all=all.concat(data||[]);
+      if(!data || data.length<PAGE) break;
+      from+=PAGE;
+    }
+    const localIds=new Set((KHO_DATA||[]).map(x=>String(x.id)));
+    _krCandidates=[]; let unrec=0;
+    all.forEach(row=>{
+      const id=String(row.id), d=row.data||{}, hasData=d && typeof d==='object' && Object.keys(d).length>0 && (d.ten||d.ma);
+      const missingLocal=!localIds.has(id);
+      if(row.deleted && !hasData){ unrec++; return; }                 // đã bị ghi rỗng → không cứu được
+      if(hasData && (row.deleted || missingLocal)) _krCandidates.push({id,data:d,deleted:!!row.deleted});
+    });
+    renderKhoRecover();
+    document.getElementById('kr-unrec').textContent = unrec?`⚠️ ${unrec} món đã mất hẳn dữ liệu trên máy chủ (chỉ còn dấu vết) — cần bản sao lưu Supabase nếu muốn cứu.`:'';
+  }catch(e){ document.getElementById('kr-summary').textContent='Lỗi quét máy chủ: '+(e&&e.message||e); }
+}
+function renderKhoRecover(){
+  const body=document.getElementById('kr-body');
+  document.getElementById('kr-summary').textContent = _krCandidates.length?`Tìm thấy ${_krCandidates.length} món có thể khôi phục`:'Không có món nào để khôi phục';
+  body.innerHTML=_krCandidates.length? _krCandidates.map((c,i)=>{
+    let con=0; try{ con=calcKyStats(c.data).con; }catch(e){}
+    const imgs=_khoImgCount(c.data);
+    return `<tr>
+      <td style="text-align:center;"><input type="checkbox" class="kr-chk" value="${i}" checked></td>
+      <td style="font-weight:500;">${esc(c.data.ten||'(không tên)')}</td>
+      <td><span class="badge badge-navy" style="font-size:10px;">${esc(KHO_BP_LABELS[c.data.bophan]||c.data.bophan||'—')}</span></td>
+      <td style="text-align:center;font-weight:600;">${con}</td>
+      <td style="text-align:center;">${imgs||'—'}</td>
+      <td style="font-size:12px;color:${c.deleted?'var(--red)':'var(--text-muted)'};">${c.deleted?'Đã xoá':'Chỉ có ở cloud'}</td>
+    </tr>`;
+  }).join(''):`<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted);">Không có món kho đã xoá còn dữ liệu trên máy chủ.</td></tr>`;
+  const btn=document.getElementById('kr-restore-btn'); if(btn) btn.style.display=_krCandidates.length?'':'none';
+}
+function krToggleAll(el){ document.querySelectorAll('#kr-body .kr-chk').forEach(c=>c.checked=el.checked); }
+async function khoRecoverRestoreSelected(){
+  const idxs=[...document.querySelectorAll('#kr-body .kr-chk:checked')].map(c=>parseInt(c.value));
+  if(!idxs.length){ showToast('Chưa chọn món nào',2200,'info'); return; }
+  const picks=idxs.map(i=>_krCandidates[i]).filter(Boolean);
+  let ok=0;
+  for(const c of picks){
+    try{
+      const {error}=await sb.from('records').upsert({collection:'kho',id:c.id,data:c.data,deleted:false,updated_at:new Date().toISOString()},{onConflict:'collection,id'});
+      if(error) throw error;
+      const idx=KHO_DATA.findIndex(x=>String(x.id)===c.id);
+      if(idx>=0) KHO_DATA[idx]=c.data; else KHO_DATA.push(c.data);
+      lastSnapshot.kho=lastSnapshot.kho||{}; lastSnapshot.kho[c.id]=JSON.stringify(c.data);
+      ok++;
+    }catch(e){ console.error('restore',c.id,e); }
+  }
+  closeModal('modal-kho-recover');
+  try{ renderKhoTab(); }catch(e){}
+  syncNow();
+  showToast(ok?`✅ Đã khôi phục ${ok}/${picks.length} món kho`:'Không khôi phục được món nào (lỗi máy chủ)',3000, ok?'success':'error');
 }
 function imgPickerFile(event, prefix){
   const file = event.target.files[0]; if(!file) return;
@@ -7368,6 +7505,8 @@ function switchKhoTab(tab,el){
     else actionWrap.innerHTML=`<button class="btn btn-ghost btn-sm" onclick="document.getElementById('kho-import-excel').click()">📥 Import Excel</button>
       <input type="file" id="kho-import-excel" accept=".xlsx,.xls,.csv" style="display:none;" onchange="importKhoExcel(this)">
       <button class="btn btn-excel btn-sm" onclick="exportKhoExcel()">📊 Xuất Excel</button>
+      ${(currentUser?.role==='giamdoc'||currentUser?.role==='ketoan')?`<button class="btn btn-ghost btn-sm" onclick="khoCompressOldImages()" title="Nén mọi ảnh cũ đã lưu để nhẹ bộ nhớ">🗜 Nén ảnh cũ</button>
+      <button class="btn btn-ghost btn-sm" onclick="openKhoRecover()" title="Khôi phục món kho đã xoá còn lưu trên máy chủ">🛟 Khôi phục từ cloud</button>`:''}
       <button class="btn btn-gold btn-sm" onclick="openKhoAddItem()">+ Thêm hàng</button>`;
   }
   renderKhoTab();
@@ -9012,6 +9151,13 @@ async function initCloud(){
     if((currentUser?.role==='giamdoc'||currentUser?.role==='ketoan') && !localStorage.getItem('qah_vitri_default_v1')){
       if(applyKhoVitriDefaults()){ try{renderKhoTab();}catch(e){} syncNow(); }
       localStorage.setItem('qah_vitri_default_v1','1');
+    }
+  }catch(e){}
+  // Nén ảnh cũ 1 lần/thiết bị (giảm tải bộ nhớ + đồng bộ). Chỉ vai trò ghi được 'kho'.
+  try{
+    if((currentUser?.role==='giamdoc'||currentUser?.role==='ketoan') && !localStorage.getItem('qah_img_compress_v1')){
+      localStorage.setItem('qah_img_compress_v1','1');
+      compressExistingKhoImages().then(({count,savedKB})=>{ if(count) showToast(`🗜 Đã tối ưu ${count} ảnh cũ (~${savedKB} KB)`,2600,'success'); }).catch(()=>{});
     }
   }catch(e){}
   startRealtime();
