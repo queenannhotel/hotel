@@ -2226,7 +2226,7 @@ textarea{resize:vertical;min-height:68px;}
     <div class="modal-header"><span class="modal-title" id="kho-hist-title">📋 Lịch Sử Hàng Hoá</span><button class="close-btn" onclick="closeModal('modal-kho-history')">✕</button></div>
     <div id="kho-hist-summary" style="display:flex;gap:16px;margin-bottom:14px;flex-wrap:wrap;"></div>
     <div class="table-wrap wide">
-      <table><thead><tr><th>Ngày</th><th>Loại</th><th>SL</th><th>Từ/Đến</th><th>Lý do / Ghi chú</th><th>Người thực hiện</th></tr></thead>
+      <table><thead><tr><th>Ngày</th><th>Loại</th><th>SL</th><th>Vị trí</th><th>Từ/Đến</th><th>Lý do / Ghi chú</th><th>Người thực hiện</th></tr></thead>
       <tbody id="kho-hist-body"></tbody></table>
     </div>
   </div>
@@ -2239,12 +2239,15 @@ textarea{resize:vertical;min-height:68px;}
     <div class="form-row">
       <div class="form-group"><label>Ngày xuất</label><input type="date" id="kx-ngay"></div>
       <div class="form-group"><label>Kho xuất từ</label>
-        <select id="kx-bophan" onchange="khoRefreshBalances('kx')">
+        <select id="kx-bophan" onchange="khoXvKhoChange('kx')">
           <option value="kt">Kho KT</option><option value="bep">Kho Bếp</option>
           <option value="nha-hang">Kho Nhà hàng</option><option value="hk">Kho HK</option>
           <option value="ky-thuat">Kho Kỹ thuật</option><option value="van-phong">Kho Văn phòng</option>
           <option value="le-tan">Kho Lễ tân</option>
         </select>
+      </div>
+      <div class="form-group"><label>Vị trí lưu <span style="color:#94a3b8;font-weight:400;">— xuất đúng vị trí</span></label>
+        <select id="kx-vitri"></select>
       </div>
     </div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin:6px 0 8px;">
@@ -2284,12 +2287,15 @@ textarea{resize:vertical;min-height:68px;}
     <div class="form-row">
       <div class="form-group"><label>Ngày huỷ</label><input type="date" id="kh-ngay"></div>
       <div class="form-group"><label>Kho</label>
-        <select id="kh-bophan" onchange="khoRefreshBalances('kh')">
+        <select id="kh-bophan" onchange="khoXvKhoChange('kh')">
           <option value="kt">Kho KT</option><option value="bep">Kho Bếp</option>
           <option value="nha-hang">Kho Nhà hàng</option><option value="hk">Kho HK</option>
           <option value="ky-thuat">Kho Kỹ thuật</option><option value="van-phong">Kho Văn phòng</option>
           <option value="le-tan">Kho Lễ tân</option>
         </select>
+      </div>
+      <div class="form-group"><label>Vị trí lưu <span style="color:#94a3b8;font-weight:400;">— huỷ đúng vị trí</span></label>
+        <select id="kh-vitri"></select>
       </div>
     </div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin:6px 0 8px;">
@@ -3935,8 +3941,10 @@ function migrateChiKho(){
 function khoNorm(s){ return (s||'').normalize('NFC').trim().toLowerCase().replace(/\s+/g,' '); }
 // ĐVT chuẩn để so khớp: rỗng ≡ 'Cái' (mặc định dùng khi tạo dòng) — tránh lệch tìm/tạo gây trùng.
 function khoDvt(d){ return khoNorm((d||'').trim()||'Cái'); }
+// Vị trí chuẩn để so khớp — mỗi vị trí là 1 dòng riêng (không gộp các vị trí khác nhau).
+function khoVi(v){ return khoNorm(v||''); }
 function mergeKhoDuplicates(){
-  const keyOf=it=>`${it.bophan||''}|${khoNorm(it.ten)}|${khoDvt(it.dvt)}`;
+  const keyOf=it=>`${it.bophan||''}|${khoNorm(it.ten)}|${khoDvt(it.dvt)}|${khoVi(it.vitri)}`;
   const keep=new Map(); const removeIds=new Set();
   [...KHO_DATA].sort((a,b)=>String(a.id)<String(b.id)?-1:1).forEach(it=>{
     const k=keyOf(it), g=keep.get(k);
@@ -4062,11 +4070,12 @@ function addChiKhoEntry(r){
   const dvt=(r.dvt||'').trim()||'Cái';   // cùng 1 giá trị ĐVT cho cả TÌM và TẠO (chống sinh dòng trùng)
   const sl=parseFloat(r.sl)||0;
   const ngay=r.ngay||new Date().toLocaleDateString('vi-VN');
-  let it=KHO_DATA.find(x=>x.bophan===kho && khoNorm(x.ten)===khoNorm(ten) && khoDvt(x.dvt)===khoDvt(dvt));
-  if(!it){ it={id:'KH'+Date.now()+Math.floor(Math.random()*1000),ma:'',ten,dvt,bophan:kho,vitri:khoVitriDefault(kho),ton_dau:0,img:'📦',ghichu:'',lichSu:[]}; KHO_DATA.push(it); }
+  const vitri=khoVitriDefault(kho);   // hàng nhập tự động từ Chi → vào vị trí mặc định của kho
+  let it=KHO_DATA.find(x=>x.bophan===kho && khoNorm(x.ten)===khoNorm(ten) && khoDvt(x.dvt)===khoDvt(dvt) && khoVi(x.vitri)===khoVi(vitri));
+  if(!it){ it={id:'KH'+Date.now()+Math.floor(Math.random()*1000),ma:'',ten,dvt,bophan:kho,vitri,ton_dau:0,img:'📦',ghichu:'',lichSu:[]}; KHO_DATA.push(it); }
   if(!Array.isArray(it.lichSu)) it.lichSu=[];
   if(sl>0 && !it.lichSu.some(h=>h.ref_chi===r.id)){
-    it.lichSu.push({ngay,loai:'nhap',sl,tu:'',den:kho,lydo:`Nhập từ Chi${r.ten_ncc&&r.ten_ncc!=='—'?' ('+r.ten_ncc+')':''}`,ref_chi:r.id,nguoi:currentUser?.fullname||'Kế toán'});
+    it.lichSu.push({ngay,loai:'nhap',sl,tu:'',den:kho,lydo:`Nhập từ Chi${r.ten_ncc&&r.ten_ncc!=='—'?' ('+r.ten_ncc+')':''}`,ref_chi:r.id,nguoi:currentUser?.fullname||'Kế toán',vitri});
   }
   r.kho_pushed=true; r.kho_pushed_to=kho;
 }
@@ -7973,7 +7982,7 @@ function khoSyncTopScroll(){
 function khoMergeDuplicates(){
   const groups=new Map();
   KHO_DATA.forEach(it=>{
-    const key=(it.bophan||'')+'|'+khoNorm(it.ten);
+    const key=(it.bophan||'')+'|'+khoNorm(it.ten)+'|'+khoDvt(it.dvt)+'|'+khoVi(it.vitri);
     if(!groups.has(key)) groups.set(key,[]);
     groups.get(key).push(it);
   });
@@ -8028,32 +8037,67 @@ function _renderKhoTabInner(){
   if(tab==='huy'){renderKhoLogTab('huy');return;}
   const items=KHO_DATA.filter(it=>it.bophan===tab&&(!search||(it.ma+it.ten).toLowerCase().includes(search))&&(!fVitri||it.vitri===fVitri)&&(!fLoai||loaiListOfName(it.ten).includes(fLoai)));
   items.sort((a,b)=>(a.ten||'').localeCompare(b.ten||'','vi'));   // tên A→Z
-  const cnt=document.getElementById('kho-count'); if(cnt) cnt.textContent=items.length+' mặt hàng';
+  // Gộp HIỂN THỊ theo tên+ĐVT; món nhiều vị trí → dòng tổng có thể xổ ra chi tiết từng vị trí.
+  const gmap=new Map();
+  items.forEach(it=>{ const k=khoNorm(it.ten)+'|'+khoDvt(it.dvt); if(!gmap.has(k)) gmap.set(k,{key:k,ten:it.ten,dvt:it.dvt,rows:[]}); gmap.get(k).rows.push(it); });
+  const groups=[...gmap.values()];
+  const cnt=document.getElementById('kho-count'); if(cnt) cnt.textContent=groups.length+' mặt hàng';
   document.getElementById('kho-thead').innerHTML=`<tr><th>Ảnh</th><th>Tên hàng</th><th>Vị trí</th><th>ĐVT</th><th>Tồn đầu</th><th style="color:var(--green)">Nhập</th><th style="color:var(--yellow)">Xuất</th><th style="color:var(--red)">Huỷ</th><th style="color:var(--green);font-weight:700">Còn lại</th><th>Ghi chú</th><th>Thao tác</th></tr>`;
-  document.getElementById('kho-tbody').innerHTML=items.length?items.map(it=>{
-    const s=calcKyStats(it);
-    const cc=s.con<=0?'var(--red)':s.con<=5?'var(--yellow)':'var(--green)';
-    const imgEl=it.img&&/^(https?:|data:|blob:)/.test(it.img)?`<img src="${it.img}" class="img-thumb" style="object-fit:cover;">`:`<div class="img-thumb">${esc(it.img)||'📦'}</div>`;
-    return `<tr>
+  document.getElementById('kho-tbody').innerHTML=groups.length?groups.map(g=>{
+    if(g.rows.length===1) return _khoDeptRow(g.rows[0], false);
+    // Món nhiều vị trí → dòng tổng (xổ ▾) + dòng con mỗi vị trí
+    const open=khoExpanded.has(g.key);
+    let td=0,nh=0,xu=0,hu=0,co=0;
+    g.rows.forEach(it=>{ const s=calcKyStats(it); td+=parseFloat(it.ton_dau)||0; nh+=s.nhap; xu+=s.xuat; hu+=s.huy; co+=s.con; });
+    const cc=co<=0?'var(--red)':co<=5?'var(--yellow)':'var(--green)';
+    const first=g.rows[0];
+    const imgEl=first.img&&/^(https?:|data:|blob:)/.test(first.img)?`<img src="${first.img}" class="img-thumb" style="object-fit:cover;">`:`<div class="img-thumb">${esc(first.img)||'📦'}</div>`;
+    const master=`<tr style="cursor:pointer;background:var(--cream);" onclick="toggleKhoExpand('${esc(g.key).replace(/'/g,"\\'")}')">
       <td>${imgEl}</td>
-      <td style="font-weight:500;min-width:140px;">${it.ten} <button class="btn btn-ghost btn-sm" onclick="editKhoItem('${it.id}')" title="Sửa mặt hàng (mã, tồn đầu, tên, ĐVT...)" style="padding:1px 5px;font-size:11px;">✏</button></td>
-      <td><select class="inline-select" onchange="updateKhoVitri('${it.id}',this.value)" style="font-size:11px;">${KHO_VITRI_LIST.map(v=>`<option ${it.vitri===v?'selected':''}>${v}</option>`).join('')}</select></td>
-      <td>${it.dvt}</td>
-      <td style="text-align:center;font-weight:600;">${it.ton_dau}</td>
-      <td style="text-align:center;color:var(--green);font-weight:600;">${s.nhap||'—'}</td>
-      <td style="text-align:center;color:var(--yellow);">${s.xuat||'—'}</td>
-      <td style="text-align:center;color:var(--red);">${s.huy||'—'}</td>
-      <td style="text-align:center;font-weight:700;font-size:15px;color:${cc};">${s.con}</td>
-      <td style="font-size:11px;color:var(--text-muted);">${it.ghichu||'—'}</td>
-      <td><div style="display:flex;gap:3px;">
-        <button class="btn btn-gold btn-sm" onclick="openTransfer('${it.id}')" title="Transfer">🔄</button>
-        <button class="btn btn-ghost btn-sm" onclick="openKhoHistory('${it.id}')" title="Lịch sử">📋</button>
-        <button class="btn btn-ghost btn-sm" onclick="editKhoItem('${it.id}')">✏</button>
-        ${currentUser?.role==='giamdoc'?`<button class="btn btn-danger btn-sm" onclick="deleteKhoItem('${it.id}')" title="Xoá mặt hàng (chỉ Giám đốc)">🗑</button>`:''}
-      </div></td>
+      <td style="font-weight:600;min-width:140px;">${open?'▾':'▸'} ${esc(g.ten)}</td>
+      <td><span class="badge badge-navy" style="font-size:10px;">${g.rows.length} vị trí</span></td>
+      <td>${esc(g.dvt)}</td>
+      <td style="text-align:center;font-weight:600;">${td}</td>
+      <td style="text-align:center;color:var(--green);font-weight:600;">${nh||'—'}</td>
+      <td style="text-align:center;color:var(--yellow);">${xu||'—'}</td>
+      <td style="text-align:center;color:var(--red);">${hu||'—'}</td>
+      <td style="text-align:center;font-weight:700;font-size:15px;color:${cc};">${co}</td>
+      <td style="font-size:11px;color:var(--text-muted);">—</td>
+      <td style="font-size:11px;color:var(--text-muted);">bấm để xổ</td>
     </tr>`;
+    const kids=open ? g.rows.slice().sort((a,b)=>(a.vitri||'').localeCompare(b.vitri||'','vi')).map(it=>_khoDeptRow(it,true)).join('') : '';
+    return master+kids;
   }).join(''):`<tr><td colspan="11" style="text-align:center;padding:30px;color:var(--text-muted);">Kho trống — <a href="#" onclick="openKhoAddItem()" style="color:var(--gold);">+ Thêm hàng</a></td></tr>`;
 }
+// 1 dòng mặt hàng tại 1 vị trí (isChild=true → thụt lề, làm dòng con trong nhóm nhiều vị trí).
+function _khoDeptRow(it, isChild){
+  const s=calcKyStats(it);
+  const cc=s.con<=0?'var(--red)':s.con<=5?'var(--yellow)':'var(--green)';
+  const imgEl=it.img&&/^(https?:|data:|blob:)/.test(it.img)?`<img src="${it.img}" class="img-thumb" style="object-fit:cover;">`:`<div class="img-thumb">${esc(it.img)||'📦'}</div>`;
+  const nameCell = isChild
+    ? `<td style="font-size:12px;color:var(--text-muted);padding-left:24px;">↳ ${esc(it.ten)}</td>`
+    : `<td style="font-weight:500;min-width:140px;">${it.ten} <button class="btn btn-ghost btn-sm" onclick="editKhoItem('${it.id}')" title="Sửa mặt hàng" style="padding:1px 5px;font-size:11px;">✏</button></td>`;
+  return `<tr${isChild?' style="background:var(--bg);"':''}>
+    <td>${isChild?'':imgEl}</td>
+    ${nameCell}
+    <td><select class="inline-select" onchange="updateKhoVitri('${it.id}',this.value)" style="font-size:11px;">${KHO_VITRI_LIST.map(v=>`<option ${it.vitri===v?'selected':''}>${v}</option>`).join('')}</select></td>
+    <td>${it.dvt}</td>
+    <td style="text-align:center;font-weight:600;">${it.ton_dau}</td>
+    <td style="text-align:center;color:var(--green);font-weight:600;">${s.nhap||'—'}</td>
+    <td style="text-align:center;color:var(--yellow);">${s.xuat||'—'}</td>
+    <td style="text-align:center;color:var(--red);">${s.huy||'—'}</td>
+    <td style="text-align:center;font-weight:700;font-size:15px;color:${cc};">${s.con}</td>
+    <td style="font-size:11px;color:var(--text-muted);">${it.ghichu||'—'}</td>
+    <td><div style="display:flex;gap:3px;">
+      <button class="btn btn-gold btn-sm" onclick="openTransfer('${it.id}')" title="Transfer">🔄</button>
+      <button class="btn btn-ghost btn-sm" onclick="openKhoHistory('${it.id}')" title="Lịch sử">📋</button>
+      <button class="btn btn-ghost btn-sm" onclick="editKhoItem('${it.id}')">✏</button>
+      ${currentUser?.role==='giamdoc'?`<button class="btn btn-danger btn-sm" onclick="deleteKhoItem('${it.id}')" title="Xoá mặt hàng (chỉ Giám đốc)">🗑</button>`:''}
+    </div></td>
+  </tr>`;
+}
+let khoExpanded=new Set();
+function toggleKhoExpand(k){ if(khoExpanded.has(k)) khoExpanded.delete(k); else khoExpanded.add(k); renderKhoTab(); }
 
 // Thống kê 1 dòng kho nhưng CHỈ tính nhập/xuất/huỷ THỰC (bỏ transfer nội bộ) — dùng cho kho tổng.
 function calcKyStatsReal(item){
@@ -8123,7 +8167,7 @@ function openKhoHistoryByMa(maOrTen){
   document.getElementById('kho-hist-summary').innerHTML=rows.map(it=>{const s=calcKyStats(it);return `<div style="padding:8px 14px;background:var(--cream);border-radius:8px;font-size:13px;"><div style="font-size:10px;color:var(--text-muted);">${KHO_BP_LABELS[it.bophan]||it.bophan}</div><div style="font-weight:700;color:var(--green);">${s.con} ${dvt}</div></div>`;}).join('')+`<div style="padding:8px 14px;background:var(--green-bg);border-radius:8px;font-size:13px;"><div style="font-size:10px;color:var(--text-muted);">TỔNG CÒN</div><div style="font-weight:700;color:var(--green);">${con} ${dvt}</div></div>`;
   const loaiMap={nhap:'Nhập vào',xuat:'Xuất ra','transfer-in':'Nhận Transfer','transfer-out':'Transfer đi',huy:'Huỷ'};
   const all=[];
-  rows.forEach(it=>(it.lichSu||[]).forEach(h=>all.push({...h,bophan:it.bophan})));
+  rows.forEach(it=>(it.lichSu||[]).forEach(h=>all.push({...h,bophan:it.bophan,_vitri:it.vitri})));
   const parseD=s=>{const p=(s||'').split('/');return new Date(+p[2]||0,(+p[1]||1)-1,+p[0]||1).getTime();};
   all.sort((a,b)=>parseD(b.ngay)-parseD(a.ngay));
   document.getElementById('kho-hist-body').innerHTML=all.map(h=>{
@@ -8134,11 +8178,12 @@ function openKhoHistoryByMa(maOrTen){
       <td style="font-size:12px;">${h.ngay}</td>
       <td><span class="badge badge-navy" style="font-size:10px;">${loaiMap[h.loai]||h.loai}</span> <span style="font-size:10px;color:var(--text-muted);">[${KHO_BP_LABELS[h.bophan]||h.bophan}]</span></td>
       <td style="font-weight:700;color:${sc};">${sg}${h.sl}</td>
+      <td style="font-size:11px;">${esc(h.vitri||h._vitri||'—')}</td>
       <td style="font-size:11px;color:var(--text-muted);">${route||'—'}</td>
       <td style="font-size:12px;">${esc(h.lydo)||'—'}</td>
       <td style="font-size:12px;">${esc(h.nguoi)||'—'}</td>
     </tr>`;
-  }).join('')||`<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted);">Chưa có lịch sử</td></tr>`;
+  }).join('')||`<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted);">Chưa có lịch sử</td></tr>`;
   openModal('modal-kho-history');
 }
 
@@ -8195,13 +8240,14 @@ function confirmTransfer(){
   if(sl<=0||sl>s.con){showToast(`Tối đa còn ${s.con} ${it.dvt}`,2500,'success');return;}
   const ngay=new Date().toLocaleDateString('vi-VN');
   const nguoi=currentUser?.fullname||'Kế toán';
-  it.lichSu.push({ngay,loai:'transfer-out',sl,tu:it.bophan,den:dest,lydo:`Transfer sang ${KHO_BP_LABELS[dest]}: ${lydo}`,nguoi});
-  let destItem=KHO_DATA.find(x=>x.bophan===dest && khoNorm(x.ten)===khoNorm(it.ten) && khoDvt(x.dvt)===khoDvt(it.dvt));
+  it.lichSu.push({ngay,loai:'transfer-out',sl,tu:it.bophan,den:dest,lydo:`Transfer sang ${KHO_BP_LABELS[dest]}: ${lydo}`,nguoi,vitri:it.vitri});
+  const destVi=khoVitriDefault(dest);   // hàng transfer sang kho khác → vào vị trí mặc định của kho đó
+  let destItem=KHO_DATA.find(x=>x.bophan===dest && khoNorm(x.ten)===khoNorm(it.ten) && khoDvt(x.dvt)===khoDvt(it.dvt) && khoVi(x.vitri)===khoVi(destVi));
   if(destItem){
-    destItem.lichSu.push({ngay,loai:'transfer-in',sl,tu:it.bophan,den:dest,lydo:`KT transfer từ ${KHO_BP_LABELS[it.bophan]}: ${lydo}`,nguoi});
+    destItem.lichSu.push({ngay,loai:'transfer-in',sl,tu:it.bophan,den:dest,lydo:`KT transfer từ ${KHO_BP_LABELS[it.bophan]}: ${lydo}`,nguoi,vitri:destVi});
   } else {
-    KHO_DATA.push({id:'KH'+Date.now(),ma:it.ma,ten:it.ten,dvt:it.dvt,bophan:dest,vitri:khoVitriDefault(dest),ton_dau:0,img:it.img,ghichu:it.ghichu,
-      lichSu:[{ngay,loai:'transfer-in',sl,tu:it.bophan,den:dest,lydo:`KT transfer từ ${KHO_BP_LABELS[it.bophan]}: ${lydo}`,nguoi}]});
+    KHO_DATA.push({id:'KH'+Date.now(),ma:it.ma,ten:it.ten,dvt:it.dvt,bophan:dest,vitri:destVi,ton_dau:0,img:it.img,ghichu:it.ghichu,
+      lichSu:[{ngay,loai:'transfer-in',sl,tu:it.bophan,den:dest,lydo:`KT transfer từ ${KHO_BP_LABELS[it.bophan]}: ${lydo}`,nguoi,vitri:destVi}]});
   }
   closeModal('modal-kho-transfer');
   showToast(`✅ Transfer ${sl} ${it.dvt} "${it.ten}" → ${KHO_BP_LABELS[dest]}`,2500,'success');
@@ -8224,11 +8270,12 @@ function openKhoHistory(itemId){
       <td style="font-size:12px;">${h.ngay}</td>
       <td><span class="badge badge-navy" style="font-size:10px;">${loaiMap[h.loai]||h.loai}</span></td>
       <td style="font-weight:700;color:${sc};">${sg}${h.sl}</td>
+      <td style="font-size:11px;">${esc(h.vitri||it.vitri||'—')}</td>
       <td style="font-size:11px;color:var(--text-muted);">${h.tu?KHO_BP_LABELS[h.tu]||h.tu:''}${h.den?' → '+(KHO_BP_LABELS[h.den]||h.den):''}</td>
       <td style="font-size:12px;">${h.lydo||'—'}</td>
       <td style="font-size:12px;">${h.nguoi||'—'}</td>
     </tr>`;
-  }).join('')||`<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-muted);">Chưa có lịch sử</td></tr>`;
+  }).join('')||`<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--text-muted);">Chưa có lịch sử</td></tr>`;
   openModal('modal-kho-history');
 }
 
@@ -8296,8 +8343,8 @@ function saveKhoItem(){
     const idx=KHO_DATA.findIndex(x=>x.id===editingKhoId);
     if(idx>-1)KHO_DATA[idx]={...KHO_DATA[idx],...data};
   } else {
-    // Đã có mặt hàng cùng kho + tên + ĐVT → CỘNG vào tồn đầu món có sẵn (không tạo dòng trùng)
-    const dup=KHO_DATA.find(x=>x.bophan===data.bophan && khoNorm(x.ten)===khoNorm(data.ten) && khoDvt(x.dvt)===khoDvt(data.dvt));
+    // Đã có mặt hàng cùng kho + tên + ĐVT + VỊ TRÍ → CỘNG vào tồn đầu món có sẵn (khác vị trí = dòng riêng)
+    const dup=KHO_DATA.find(x=>x.bophan===data.bophan && khoNorm(x.ten)===khoNorm(data.ten) && khoDvt(x.dvt)===khoDvt(data.dvt) && khoVi(x.vitri)===khoVi(data.vitri));
     if(dup){
       dup.ton_dau=(parseFloat(dup.ton_dau)||0)+data.ton_dau;
       if(!Array.isArray(dup.lichSu)) dup.lichSu=[];
@@ -8407,6 +8454,8 @@ function khoReadRows(px){
 
 function openKhoModalXuat(){
   document.getElementById('kx-ngay').value=new Date().toISOString().slice(0,10);
+  const bp=!['tong-hop','xuat','nhap','huy'].includes(currentKhoTab)?currentKhoTab:'kt';
+  document.getElementById('kx-bophan').value=bp; kxvFill('kx', khoVitriDefault(bp));
   document.getElementById('kx-items').innerHTML=''; khoAddRow('kx');
   imgPickerClear('kx');
   openModal('modal-kho-xuat');
@@ -8414,6 +8463,8 @@ function openKhoModalXuat(){
 }
 function openKhoModalHuy(){
   document.getElementById('kh-ngay').value=new Date().toISOString().slice(0,10);
+  const bp=!['tong-hop','xuat','nhap','huy'].includes(currentKhoTab)?currentKhoTab:'kt';
+  document.getElementById('kh-bophan').value=bp; kxvFill('kh', khoVitriDefault(bp));
   document.getElementById('kh-items').innerHTML=''; khoAddRow('kh');
   imgPickerClear('kh');
   openModal('modal-kho-huy');
@@ -8422,24 +8473,29 @@ function openKhoModalHuy(){
 // Xuất/Huỷ nhiều món trong 1 lần; ảnh minh chứng chung cho cả phiếu.
 function saveKhoCommit(px,loai){
   const kho=document.getElementById(px+'-bophan').value;
+  const vitri=document.getElementById(px+'-vitri')?.value||'';
   const ngay=document.getElementById(px+'-ngay').value.split('-').reverse().join('/');
   const img=document.getElementById(px+'-img').value.trim();
   const nguoi=currentUser?.fullname||'Kế toán';
   const rows=khoReadRows(px);
   if(!rows.length){ showToast('Vui lòng nhập ít nhất 1 món (tên + số lượng)!',2600,'error'); return; }
   if(loai==='huy' && rows.some(r=>!r.lydo)){ showToast('Huỷ hàng cần nhập lý do cho từng món!',2800,'error'); return; }
-  // Validate tồn kho trước khi ghi (không ghi 1 phần nếu có dòng sai)
+  // Validate tồn kho trước khi ghi (không ghi 1 phần nếu có dòng sai) — trừ ĐÚNG vị trí đã chọn.
+  const viLabel = vitri||'(mọi vị trí)';
   const resolved=[];
   for(const r of rows){
-    const it=KHO_DATA.find(x=>x.bophan===kho && khoNorm(x.ten)===khoNorm(r.ten) && khoDvt(x.dvt)===khoDvt(r.dvt))
-          || KHO_DATA.filter(x=>x.bophan===kho && khoNorm(x.ten)===khoNorm(r.ten)).sort((a,b)=>calcKyStats(b).con-calcKyStats(a).con)[0];
-    if(!it){ showToast(`Không tìm thấy "${r.ten}" trong ${KHO_BP_LABELS[kho]||kho}`,3000,'error'); return; }
+    // Ưu tiên khớp đúng vị trí đã chọn; nếu không chọn vị trí thì lấy dòng nhiều tồn nhất (tương thích cũ).
+    const it = (vitri
+        ? KHO_DATA.find(x=>x.bophan===kho && khoNorm(x.ten)===khoNorm(r.ten) && khoDvt(x.dvt)===khoDvt(r.dvt) && khoVi(x.vitri)===khoVi(vitri))
+        : (KHO_DATA.find(x=>x.bophan===kho && khoNorm(x.ten)===khoNorm(r.ten) && khoDvt(x.dvt)===khoDvt(r.dvt))
+           || KHO_DATA.filter(x=>x.bophan===kho && khoNorm(x.ten)===khoNorm(r.ten)).sort((a,b)=>calcKyStats(b).con-calcKyStats(a).con)[0]));
+    if(!it){ showToast(`Không tìm thấy "${r.ten}" ở ${viLabel} — ${KHO_BP_LABELS[kho]||kho}`,3200,'error'); return; }
     const con=calcKyStats(it).con;
-    if(r.sl>con){ showToast(`"${r.ten}" chỉ còn ${con} trong kho`,3000,'error'); return; }
+    if(r.sl>con){ showToast(`"${r.ten}" ở ${it.vitri||viLabel} chỉ còn ${con}`,3200,'error'); return; }
     resolved.push({it,r});
   }
   resolved.forEach(({it,r})=>{
-    it.lichSu.push({ngay,loai,sl:r.sl,tu:kho,den:'',lydo:r.lydo||(loai==='huy'?'Huỷ':'Xuất dùng'),img,nguoi});
+    it.lichSu.push({ngay,loai,sl:r.sl,tu:kho,den:'',lydo:r.lydo||(loai==='huy'?'Huỷ':'Xuất dùng'),img,nguoi,vitri:it.vitri||vitri});
   });
   mdClear(px==='kx'?'modal-kho-xuat':'modal-kho-huy');   // đã Xác nhận → xoá nháp
   closeModal(px==='kx'?'modal-kho-xuat':'modal-kho-huy');
@@ -8461,6 +8517,16 @@ function khoNhapKhoChange(){
   khoRefreshBalances('kn');
   knFillVitri(khoVitriDefault(document.getElementById('kn-bophan').value));
 }
+// Đổ vị trí cho modal Xuất/Huỷ (px='kx'|'kh'): có thêm lựa chọn "(mọi vị trí)" đầu danh sách.
+function kxvFill(px, sel){
+  const el=document.getElementById(px+'-vitri'); if(!el) return;
+  el.innerHTML='<option value="">(mọi vị trí)</option>'+KHO_VITRI_LIST.map(v=>`<option ${v===sel?'selected':''}>${v}</option>`).join('');
+  el.value=sel||'';
+}
+function khoXvKhoChange(px){
+  khoRefreshBalances(px);
+  kxvFill(px, khoVitriDefault(document.getElementById(px+'-bophan').value));
+}
 function openKhoModalNhap(){
   document.getElementById('kn-ngay').value=new Date().toISOString().slice(0,10);
   const bp=!['tong-hop','xuat','nhap','huy'].includes(currentKhoTab)?currentKhoTab:'kt';
@@ -8481,11 +8547,11 @@ function saveKhoNhap(){
   if(!rows.length){ showToast('Vui lòng nhập ít nhất 1 món (tên + số lượng)!',2600,'error'); return; }
   rows.forEach(r=>{
     const dvt=(r.dvt||'').trim()||'Cái';
-    let it=KHO_DATA.find(x=>x.bophan===kho && khoNorm(x.ten)===khoNorm(r.ten) && khoDvt(x.dvt)===khoDvt(dvt));
+    // Khớp theo ĐÚNG vị trí → nhập vào vị trí mới tạo dòng mới, không dồn vào vị trí khác.
+    let it=KHO_DATA.find(x=>x.bophan===kho && khoNorm(x.ten)===khoNorm(r.ten) && khoDvt(x.dvt)===khoDvt(dvt) && khoVi(x.vitri)===khoVi(vitri));
     if(!it){ it={id:'KH'+Date.now()+Math.floor(Math.random()*1000),ma:'',ten:r.ten,dvt,bophan:kho,vitri,ton_dau:0,img:'📦',ghichu:'',lichSu:[]}; KHO_DATA.push(it); }
-    else it.vitri=vitri;
     if(!Array.isArray(it.lichSu)) it.lichSu=[];
-    it.lichSu.push({ngay,loai:'nhap',sl:r.sl,tu:'',den:kho,lydo:r.lydo||'Nhập hàng',img,nguoi});
+    it.lichSu.push({ngay,loai:'nhap',sl:r.sl,tu:'',den:kho,lydo:r.lydo||'Nhập hàng',img,nguoi,vitri});
   });
   mdClear('modal-kho-nhap');
   closeModal('modal-kho-nhap');
@@ -8662,11 +8728,12 @@ function khoTransferItem(ten,dvt,sl,srcKho,destKho,note,nguoi){
   // Kho nguồn: chọn dòng có số dư cao nhất; chưa có thì tạo (tồn 0 → số dư âm để dễ thấy cần bù)
   let src=KHO_DATA.filter(x=>x.bophan===srcKho && match(x)).sort((a,b)=>calcKyStats(b).con-calcKyStats(a).con)[0];
   if(!src){ src={id:'KH'+Date.now()+Math.floor(Math.random()*1000),ma:'KTO-'+Date.now().toString().slice(-4)+Math.floor(Math.random()*90+10),ten,dvt:dvt||'Cái',bophan:srcKho,vitri:khoVitriDefault(srcKho),ton_dau:0,img:'📦',ghichu:'',lichSu:[]}; KHO_DATA.push(src); }
-  src.lichSu.push({ngay,loai:'transfer-out',sl,tu:srcKho,den:destKho,lydo:note,nguoi});
-  // Kho đích: tìm dòng khớp; chưa có thì tạo mới
-  let dest=KHO_DATA.find(x=>x.bophan===destKho && match(x));
-  if(dest){ dest.lichSu.push({ngay,loai:'transfer-in',sl,tu:srcKho,den:destKho,lydo:note,nguoi}); }
-  else{ KHO_DATA.push({id:'KH'+Date.now()+Math.floor(Math.random()*1000),ma:src.ma,ten,dvt:dvt||'Cái',bophan:destKho,vitri:khoVitriDefault(destKho),ton_dau:0,img:src.img||'📦',ghichu:'',lichSu:[{ngay,loai:'transfer-in',sl,tu:srcKho,den:destKho,lydo:note,nguoi}]}); }
+  src.lichSu.push({ngay,loai:'transfer-out',sl,tu:srcKho,den:destKho,lydo:note,nguoi,vitri:src.vitri});
+  // Kho đích: hàng về vị trí mặc định của kho đích
+  const destVi=khoVitriDefault(destKho);
+  let dest=KHO_DATA.find(x=>x.bophan===destKho && match(x) && khoVi(x.vitri)===khoVi(destVi));
+  if(dest){ dest.lichSu.push({ngay,loai:'transfer-in',sl,tu:srcKho,den:destKho,lydo:note,nguoi,vitri:destVi}); }
+  else{ KHO_DATA.push({id:'KH'+Date.now()+Math.floor(Math.random()*1000),ma:src.ma,ten,dvt:dvt||'Cái',bophan:destKho,vitri:destVi,ton_dau:0,img:src.img||'📦',ghichu:'',lichSu:[{ngay,loai:'transfer-in',sl,tu:srcKho,den:destKho,lydo:note,nguoi,vitri:destVi}]}); }
 }
 let editingTrId=null;
 function trStatusBadge(s){
