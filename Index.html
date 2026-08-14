@@ -108,10 +108,24 @@ function lsSave(){
   try{ if(typeof scheduleFlush==='function') scheduleFlush(); }catch(e){}
   return ok;
 }
+// Bản kho "nhẹ" cho localStorage: BỎ ảnh base64 (data:) để không làm tràn bộ nhớ ~5MB.
+// Ảnh vẫn ở trong bộ nhớ RAM + trên máy chủ (cloud là nguồn chính); khi tải lại sẽ lấy ảnh từ cloud.
+function _khoLite(arr){
+  return (arr||[]).map(it=>{
+    if(!it||typeof it!=='object') return it;
+    const itImg = typeof it.img==='string' && it.img.startsWith('data:');
+    const hisImg = Array.isArray(it.lichSu) && it.lichSu.some(h=>h&&typeof h.img==='string'&&h.img.startsWith('data:'));
+    if(!itImg && !hisImg) return it;
+    const c={...it};
+    if(itImg) c.img='';   // đánh dấu "có ảnh nhưng lấy từ cloud"
+    if(hisImg) c.lichSu=it.lichSu.map(h=>(h&&typeof h.img==='string'&&h.img.startsWith('data:'))?{...h,img:''}:h);
+    return c;
+  });
+}
 function _lsSaveRaw(){
   try{
     const data={
-      thu:THU_DATA,chi:CHI_DATA,dx:DX_DATA,ncc:NCC_DATA,kho:KHO_DATA,yc:YC_DATA,ycDeleted:YC_DELETED,transferReq:TR_DATA,
+      thu:THU_DATA,chi:CHI_DATA,dx:DX_DATA,ncc:NCC_DATA,kho:_khoLite(KHO_DATA),yc:YC_DATA,ycDeleted:YC_DELETED,transferReq:TR_DATA,
       hvLinen:HV_LINEN,hvRewash:HV_REWASH_DATA,hvCols:HV_REWASH_COLS,
       wsData:WS_DATA_BY_DATE,roomStatus:ROOM_STATUS_BY_DATE,
       amData:AM_DATA_BY_DATE,mbData:MB_DATE_DATA,nsLuong:NS_LUONG,sxData:SX_DATA,
