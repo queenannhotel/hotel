@@ -53,6 +53,7 @@ async function clearLocalData(){
   YC_DATA=[];HV_LINEN=[];NS_LUONG=[];NS_BHXH=[];NS_TNCN=[];catalogItems=[];
   WS_DATA_BY_DATE={};ROOM_STATUS_BY_DATE={};AM_DATA_BY_DATE={};
   HV_REWASH_DATA={};HV_REWASH_COLS=[];
+  QUY_TX=[];QUY_UNG=[];QUY_TQ_DAU={amount:0};
   showToast('✅ Đã xóa toàn bộ dữ liệu — trang sẽ tải lại',2000,'success');
   setTimeout(()=>location.reload(),1500);
 }
@@ -133,6 +134,7 @@ function _lsSaveRaw(){
       wsData:WS_DATA_BY_DATE,roomStatus:ROOM_STATUS_BY_DATE,
       amData:AM_DATA_BY_DATE,mbData:MB_DATE_DATA,nsLuong:NS_LUONG,sxData:SX_DATA,
       nsBhxh:NS_BHXH,nsTncn:NS_TNCN,cats:CATS,dvtList:DVT_LIST,
+      quyTx:QUY_TX,quyUng:QUY_UNG,quyTqDau:QUY_TQ_DAU,
     };
     const str=JSON.stringify(data);
     try{
@@ -165,6 +167,9 @@ function lsLoad(){
     if(d.yc?.length)     YC_DATA=d.yc;
     if(d.ycDeleted?.length) YC_DELETED=d.ycDeleted;
     if(d.transferReq?.length) TR_DATA=d.transferReq;
+    if(d.quyTx?.length)  QUY_TX=d.quyTx;
+    if(d.quyUng?.length) QUY_UNG=d.quyUng;
+    if(d.quyTqDau)       QUY_TQ_DAU=d.quyTqDau;
     if(d.hvLinen)        HV_LINEN=d.hvLinen;
     if(d.hvRewash)       HV_REWASH_DATA=d.hvRewash;
     if(d.hvCols)         HV_REWASH_COLS=d.hvCols;
@@ -799,6 +804,7 @@ textarea{resize:vertical;min-height:68px;}
     <div class="nav-item active" onclick="showPage('dashboard',this)" data-perm="all"><span class="icon">📊</span> Dashboard</div>
     <div class="nav-section" data-perm="ketoan,giamdoc">Thu Chi</div>
     <div class="nav-item" onclick="showPage('thu-chi',this)" data-perm="ketoan,giamdoc"><span class="icon">💰</span> Quản lý Thu Chi</div>
+    <div class="nav-item" onclick="showPage('quy-tien-mat',this)" data-perm="ketoan,giamdoc"><span class="icon">🏦</span> Quỹ tiền mặt</div>
     <div class="nav-item" onclick="showPage('tab-thu',this)" data-perm="ketoan,giamdoc"><span class="icon">⬆</span> Ghi Thu</div>
     <div class="nav-item" onclick="showPage('tab-chi',this)" data-perm="ketoan,giamdoc"><span class="icon">⬇</span> Ghi Chi</div>
     <div class="nav-item" onclick="showPage('cong-no',this)" data-perm="ketoan,giamdoc"><span class="icon">📋</span> Công Nợ</div>
@@ -1136,6 +1142,111 @@ textarea{resize:vertical;min-height:68px;}
         <div class="table-wrap wide">
           <table><thead><tr><th>Ngày PC</th><th>Số HĐ</th><th>Nhà cung cấp</th><th>Tổng tiền</th><th>Thông tin TT</th><th>Tình trạng</th></tr></thead>
           <tbody id="cnck-body"></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- QUỸ TIỀN MẶT -->
+    <div class="page" id="page-quy-tien-mat">
+      <div class="section-header"><span class="section-title">🏦 Quỹ Tiền Mặt</span></div>
+      <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;">
+        <div class="bp-tab active" id="qtm-subtab-kt"  onclick="switchQtmTab('kt',this)"  style="font-size:12px;padding:6px 16px;">🧾 Quỹ TM Kế toán</div>
+        <div class="bp-tab"        id="qtm-subtab-tq"  onclick="switchQtmTab('tq',this)"  style="font-size:12px;padding:6px 16px;">🔐 Quỹ TM Thủ quỹ</div>
+        <div class="bp-tab"        id="qtm-subtab-ung" onclick="switchQtmTab('ung',this)" style="font-size:12px;padding:6px 16px;">📝 Yêu cầu ứng tiền</div>
+      </div>
+
+      <!-- Sheet Kế toán -->
+      <div id="qtm-panel-kt">
+        <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;background:var(--gold-pale);border:1px solid rgba(201,168,76,.35);border-radius:10px;padding:12px 18px;margin-bottom:12px;">
+          <div><div style="font-size:12px;color:var(--text-muted);">Số dư Quỹ TM Kế toán</div><div id="qtm-kt-balance" style="font-size:22px;font-weight:800;color:var(--yellow);">—</div></div>
+          <div style="text-align:right;font-size:11px;color:var(--text-muted);">Tiền mặt thực tế: <span id="qtm-kt-cash">—</span><br>Đã nộp Thủ quỹ: <span id="qtm-kt-nop">—</span> · Đã ứng: <span id="qtm-kt-ung">—</span></div>
+        </div>
+        <div class="card"><div class="card-body" style="padding:10px 16px;">
+          <div class="filter-row">
+            <span style="font-size:12px;color:var(--text-muted);">Từ</span>
+            <input type="date" id="qtm-kt-from" onchange="renderQuyKt()" style="width:140px;font-size:12px;padding:6px 10px;">
+            <span style="font-size:12px;color:var(--text-muted);">→</span>
+            <input type="date" id="qtm-kt-to" onchange="renderQuyKt()" style="width:140px;font-size:12px;padding:6px 10px;">
+            <select id="qtm-kt-loai" onchange="renderQuyKt()" style="font-size:12px;padding:6px 10px;"><option value="">Tất cả</option><option value="nop">Nộp tiền</option><option value="ung">Ứng tiền</option></select>
+            <button class="btn btn-gold btn-sm" onclick="openQuyTx('nop')">⬆ Nộp tiền</button>
+            <button class="btn btn-ghost btn-sm" onclick="openQuyUng()">📝 Yêu cầu ứng tiền</button>
+          </div>
+        </div>
+        <div class="table-wrap wide"><table><thead><tr><th>Ngày</th><th>Loại</th><th>Số tiền</th><th>Lý do</th><th>Người</th><th>Thao tác</th></tr></thead><tbody id="qtm-kt-body"></tbody></table></div>
+        </div>
+      </div>
+
+      <!-- Sheet Thủ quỹ (chỉ Giám đốc) -->
+      <div id="qtm-panel-tq" style="display:none;">
+        <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;background:var(--gold-pale);border:1px solid rgba(201,168,76,.35);border-radius:10px;padding:12px 18px;margin-bottom:12px;">
+          <div><div style="font-size:12px;color:var(--text-muted);">Số dư Quỹ TM Thủ quỹ</div><div id="qtm-tq-balance" style="font-size:22px;font-weight:800;color:var(--yellow);">—</div></div>
+          <div style="text-align:right;font-size:11px;color:var(--text-muted);">Số dư đầu kỳ: <span id="qtm-tq-dau">—</span> <button class="btn btn-ghost btn-sm" onclick="editQuyTqDau()" style="padding:1px 6px;">✏</button><br>Nhận: <span id="qtm-tq-in">—</span> · Xuất: <span id="qtm-tq-out">—</span></div>
+        </div>
+        <div class="card"><div class="card-body" style="padding:10px 16px;">
+          <div class="filter-row">
+            <span style="font-size:12px;color:var(--text-muted);">Từ</span>
+            <input type="date" id="qtm-tq-from" onchange="renderQuyTq()" style="width:140px;font-size:12px;padding:6px 10px;">
+            <span style="font-size:12px;color:var(--text-muted);">→</span>
+            <input type="date" id="qtm-tq-to" onchange="renderQuyTq()" style="width:140px;font-size:12px;padding:6px 10px;">
+            <select id="qtm-tq-loai" onchange="renderQuyTq()" style="font-size:12px;padding:6px 10px;"><option value="">Tất cả</option><option value="in">Nhận / Nhập</option><option value="out">Xuất</option></select>
+            <button class="btn btn-gold btn-sm" onclick="openQuyTx('tq-in')">⬆ Nhập tiền</button>
+            <button class="btn btn-ghost btn-sm" onclick="openQuyTx('tq-out')">⬇ Xuất tiền tay</button>
+          </div>
+        </div>
+        <div class="table-wrap wide"><table><thead><tr><th>Ngày</th><th>Loại</th><th>Số tiền</th><th>Lý do</th><th>Thao tác</th></tr></thead><tbody id="qtm-tq-body"></tbody></table></div>
+        </div>
+      </div>
+
+      <!-- Sheet Yêu cầu ứng tiền -->
+      <div id="qtm-panel-ung" style="display:none;">
+        <div class="card"><div class="card-body" style="padding:10px 16px;">
+          <div class="filter-row">
+            <button class="btn btn-gold btn-sm" onclick="openQuyUng()">📝 Yêu cầu ứng tiền</button>
+            <span id="qtm-ung-sub" style="font-size:12px;color:var(--text-muted);"></span>
+          </div>
+        </div>
+        <div class="table-wrap wide"><table><thead><tr><th>Ngày ứng</th><th>Số cần ứng</th><th>Khoản chi dự kiến</th><th>Tổng dự chi</th><th>Trạng thái</th><th>Số duyệt</th><th>Thao tác</th></tr></thead><tbody id="qtm-ung-body"></tbody></table></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL nộp/nhập/xuất quỹ -->
+    <div class="modal-overlay" id="modal-quy-tx">
+      <div class="modal">
+        <div class="modal-header"><span class="modal-title" id="qtx-title">Nộp tiền</span><button class="close-btn" onclick="closeModal('modal-quy-tx')">✕</button></div>
+        <input type="hidden" id="qtx-mode"><input type="hidden" id="qtx-edit">
+        <div class="form-row">
+          <div class="form-group"><label>Ngày</label><input type="date" id="qtx-ngay"></div>
+          <div class="form-group"><label>Số tiền</label><input type="number" id="qtx-sotien" min="0" placeholder="VNĐ"></div>
+        </div>
+        <div class="form-group"><label>Lý do</label><input id="qtx-lydo" placeholder="Nội dung"></div>
+        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
+          <button class="btn btn-ghost" onclick="closeModal('modal-quy-tx')">Huỷ</button>
+          <button class="btn btn-gold" onclick="saveQuyTx()">✅ Lưu</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL yêu cầu ứng tiền -->
+    <div class="modal-overlay" id="modal-quy-ung">
+      <div class="modal modal-lg">
+        <div class="modal-header"><span class="modal-title" id="qung-title">Yêu cầu ứng tiền</span><button class="close-btn" onclick="closeModal('modal-quy-ung')">✕</button></div>
+        <input type="hidden" id="qung-edit">
+        <div class="form-row">
+          <div class="form-group"><label>Ngày ứng tiền</label><input type="date" id="qung-ngay" onchange="qungLoadChi()"></div>
+          <div class="form-group"><label>Số tiền cần ứng</label><input type="number" id="qung-socan" min="0" placeholder="VNĐ"></div>
+        </div>
+        <div class="form-group"><label>Khoản chi dự kiến (ghi chú)</label><textarea id="qung-text" rows="2" placeholder="Mô tả khoản chi dự kiến..." style="width:100%;font-size:13px;padding:8px;border:1px solid var(--border);border-radius:8px;"></textarea></div>
+        <div class="form-group"><label>Chọn phiếu chi trong ngày <span style="color:#94a3b8;font-weight:400;">— tick để cộng vào tổng dự chi</span></label>
+          <div id="qung-chi-list" style="max-height:180px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:6px;font-size:12px;"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Số dự chi khác (nhập tay)</label><input type="number" id="qung-khac" min="0" value="0" oninput="qungCalcTong()"></div>
+          <div class="form-group"><label>Tổng tiền dự chi</label><div id="qung-tong" style="padding:8px 12px;background:var(--gold-pale);border-radius:8px;font-weight:700;color:var(--yellow);">—</div></div>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
+          <button class="btn btn-ghost" onclick="closeModal('modal-quy-ung')">Huỷ</button>
+          <button class="btn btn-gold" onclick="saveQuyUng()">✅ Lưu yêu cầu</button>
         </div>
       </div>
     </div>
@@ -3083,8 +3194,8 @@ const ROLE_PERM_DESC = {
 
 // Mặc định tab theo role (nếu user không custom)
 const DEFAULT_TABS = {
-  giamdoc:    ['dashboard','thu-chi','tab-thu','tab-chi','cong-no','chuyen-khoan','nhan-su','kho','kho-kt','kho-bep','kho-nha-hang','kho-hk','kho-ky-thuat','kho-van-phong','kho-le-tan','kho-xuat','kho-nhap','kho-huy','buong-phong','de-xuat','yeu-cau-transfer','nha-cung-cap','danh-muc','bao-cao','quan-ly-tk','cai-dat'],
-  ketoan:     ['thu-chi','tab-thu','tab-chi','cong-no','chuyen-khoan','nhan-su','kho','kho-kt','kho-xuat','kho-nhap','de-xuat','yeu-cau-transfer','nha-cung-cap','danh-muc','bao-cao'],
+  giamdoc:    ['dashboard','thu-chi','quy-tien-mat','tab-thu','tab-chi','cong-no','chuyen-khoan','nhan-su','kho','kho-kt','kho-bep','kho-nha-hang','kho-hk','kho-ky-thuat','kho-van-phong','kho-le-tan','kho-xuat','kho-nhap','kho-huy','buong-phong','de-xuat','yeu-cau-transfer','nha-cung-cap','danh-muc','bao-cao','quan-ly-tk','cai-dat'],
+  ketoan:     ['thu-chi','quy-tien-mat','tab-thu','tab-chi','cong-no','chuyen-khoan','nhan-su','kho','kho-kt','kho-xuat','kho-nhap','de-xuat','yeu-cau-transfer','nha-cung-cap','danh-muc','bao-cao'],
   'truong-bp':['de-xuat','yeu-cau-transfer','kho','buong-phong'],
   hr:         ['nhan-su'],
 };
@@ -3343,6 +3454,7 @@ const AU_TAB_GROUPS = [
     group: '💰 Thu Chi',
     tabs: [
       {id:'thu-chi',      label:'Quản lý Thu Chi'},
+      {id:'quy-tien-mat', label:'Quỹ tiền mặt'},
       {id:'tab-thu',      label:'Ghi Thu'},
       {id:'tab-chi',      label:'Ghi Chi'},
       {id:'cong-no',      label:'Công Nợ'},
@@ -4115,6 +4227,209 @@ function confirmChiSplit(){
   closeModal('modal-chi-split');
   renderChiTab(); syncNow();
   showToast('✅ Đã tách '+ids.length+' mặt hàng ra phiếu chi mới',2400,'success');
+}
+
+// ==================== QUỸ TIỀN MẶT ====================
+// Số dư tiền mặt THỰC TẾ (luỹ kế): tổng Thu TM (VND) − tổng Chi TM đã hoàn thành.
+function cashActual(){
+  const thuTM=THU_DATA.flatMap(r=>thuLines(r)).filter(l=>l.pttt==='TM'&&(!l.currency||l.currency==='VND')).reduce((s,l)=>s+(parseFloat(l.sotien)||0),0);
+  const chiTM=CHI_DATA.filter(r=>r.tinh_trang==='hoan-thanh'&&r.pttt==='TM').reduce((s,r)=>s+chiAmt(r),0);
+  return thuTM-chiTM;
+}
+function quySumKind(...kinds){ return QUY_TX.filter(t=>kinds.includes(t.kind)).reduce((s,t)=>s+(parseFloat(t.sotien)||0),0); }
+function quyKtBalance(){ return cashActual() - quySumKind('nop') + quySumKind('ung'); }
+function quyTqBalance(){ return (parseFloat(QUY_TQ_DAU.amount)||0) + quySumKind('nop','tq-in') - quySumKind('ung','tq-out'); }
+
+function switchQtmTab(tab,el){
+  if(tab==='tq' && currentUser?.role!=='giamdoc') tab='kt';
+  currentQtmTab=tab;
+  document.getElementById('qtm-panel-kt').style.display  = tab==='kt'?'':'none';
+  document.getElementById('qtm-panel-tq').style.display  = tab==='tq'?'':'none';
+  document.getElementById('qtm-panel-ung').style.display = tab==='ung'?'':'none';
+  ['kt','tq','ung'].forEach(t=>{ const b=document.getElementById('qtm-subtab-'+t); if(b) b.classList.toggle('active',t===tab); });
+  if(tab==='kt') renderQuyKt();
+  if(tab==='tq') renderQuyTq();
+  if(tab==='ung') renderQuyUng();
+}
+function renderQuyTienMat(){
+  const isGd=currentUser?.role==='giamdoc';
+  const tqBtn=document.getElementById('qtm-subtab-tq'); if(tqBtn) tqBtn.style.display=isGd?'':'none';
+  if(currentQtmTab==='tq' && !isGd) currentQtmTab='kt';
+  switchQtmTab(currentQtmTab, null);
+}
+function renderQuyKt(){
+  const setT=(id,v)=>{const e=document.getElementById(id); if(e) e.textContent=v;};
+  setT('qtm-kt-balance', fmt(quyKtBalance()));
+  setT('qtm-kt-cash', fmt(cashActual()));
+  setT('qtm-kt-nop', fmt(quySumKind('nop')));
+  setT('qtm-kt-ung', fmt(quySumKind('ung')));
+  const from=document.getElementById('qtm-kt-from')?.value||'', to=document.getElementById('qtm-kt-to')?.value||'', loai=document.getElementById('qtm-kt-loai')?.value||'';
+  let rows=QUY_TX.filter(t=>['nop','ung'].includes(t.kind)).filter(t=>{const iso=vnToIso(t.ngay);return (!from||iso>=from)&&(!to||iso<=to);});
+  if(loai) rows=rows.filter(t=>t.kind===loai);
+  rows.sort((a,b)=>vnToIso(b.ngay).localeCompare(vnToIso(a.ngay)));
+  const label={nop:'⬆ Nộp cho Thủ quỹ',ung:'⬇ Ứng từ Thủ quỹ'}, color={nop:'var(--red)',ung:'var(--green)'}, sign={nop:'-',ung:'+'};
+  const body=document.getElementById('qtm-kt-body');
+  body.innerHTML=rows.length?rows.map(t=>`<tr>
+    <td style="font-size:12px;">${t.ngay}</td>
+    <td><span class="badge badge-navy" style="font-size:10px;">${label[t.kind]}</span></td>
+    <td style="font-weight:700;color:${color[t.kind]};">${sign[t.kind]}${fmt(t.sotien)}</td>
+    <td style="font-size:12px;">${esc(t.lydo)||'—'}</td>
+    <td style="font-size:12px;">${esc(t.nguoi)||'—'}</td>
+    <td><button class="btn btn-danger btn-sm" onclick="deleteQuyTx('${t.id}')" title="Xoá">🗑</button></td>
+  </tr>`).join(''):`<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted);">Chưa có giao dịch</td></tr>`;
+}
+function renderQuyTq(){
+  const setT=(id,v)=>{const e=document.getElementById(id); if(e) e.textContent=v;};
+  setT('qtm-tq-balance', fmt(quyTqBalance()));
+  setT('qtm-tq-dau', fmt(QUY_TQ_DAU.amount));
+  setT('qtm-tq-in', fmt(quySumKind('nop','tq-in')));
+  setT('qtm-tq-out', fmt(quySumKind('ung','tq-out')));
+  const from=document.getElementById('qtm-tq-from')?.value||'', to=document.getElementById('qtm-tq-to')?.value||'', loai=document.getElementById('qtm-tq-loai')?.value||'';
+  let rows=QUY_TX.filter(t=>{const iso=vnToIso(t.ngay);return (!from||iso>=from)&&(!to||iso<=to);});
+  if(loai==='in') rows=rows.filter(t=>['nop','tq-in'].includes(t.kind));
+  else if(loai==='out') rows=rows.filter(t=>['ung','tq-out'].includes(t.kind));
+  rows.sort((a,b)=>vnToIso(b.ngay).localeCompare(vnToIso(a.ngay)));
+  const label={nop:'Nhận từ Kế toán','tq-in':'Nhập tay',ung:'Xuất ứng cho Kế toán','tq-out':'Xuất tay'}, isIn=k=>['nop','tq-in'].includes(k);
+  const body=document.getElementById('qtm-tq-body');
+  body.innerHTML=rows.length?rows.map(t=>`<tr>
+    <td style="font-size:12px;">${t.ngay}</td>
+    <td><span class="badge badge-navy" style="font-size:10px;">${label[t.kind]||t.kind}</span></td>
+    <td style="font-weight:700;color:${isIn(t.kind)?'var(--green)':'var(--red)'};">${isIn(t.kind)?'+':'-'}${fmt(t.sotien)}</td>
+    <td style="font-size:12px;">${esc(t.lydo)||'—'}</td>
+    <td><div style="display:flex;gap:3px;"><button class="btn btn-ghost btn-sm" onclick="editQuyTx('${t.id}')" title="Sửa">✏</button><button class="btn btn-danger btn-sm" onclick="deleteQuyTx('${t.id}')" title="Xoá">🗑</button></div></td>
+  </tr>`).join(''):`<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted);">Chưa có giao dịch</td></tr>`;
+}
+function canEditQuyUng(d){ const r=currentUser?.role; if(r==='giamdoc') return true; return r==='ketoan' && d.status==='cho'; }
+function canApproveQuyUng(d){ return currentUser?.role==='giamdoc' && d.status==='cho'; }
+function renderQuyUng(){
+  const rows=QUY_UNG.slice().sort((a,b)=>vnToIso(b.ngay).localeCompare(vnToIso(a.ngay)));
+  const stLabel={cho:['Chờ duyệt','var(--yellow)'],duyet:['Đã duyệt','var(--green)'],khong:['Không duyệt','var(--red)']};
+  const body=document.getElementById('qtm-ung-body');
+  body.innerHTML=rows.length?rows.map(d=>{
+    const nChi=(d.chiIds||[]).length;
+    const khoan=(esc(d.khoanChiText)||'')+(nChi?` <span style="color:var(--text-muted);">(+${nChi} phiếu chi)</span>`:'');
+    const [stTxt,stColor]=stLabel[d.status]||['?','var(--text-muted)'];
+    const btns=[];
+    if(canApproveQuyUng(d)){ btns.push(`<button class="btn btn-gold btn-sm" onclick="approveQuyUng('${d.id}')" title="Duyệt">✓</button>`); btns.push(`<button class="btn btn-danger btn-sm" onclick="rejectQuyUng('${d.id}')" title="Không duyệt">✗</button>`); }
+    if(canEditQuyUng(d)){ btns.push(`<button class="btn btn-ghost btn-sm" onclick="openQuyUng('${d.id}')" title="Sửa">✏</button>`); btns.push(`<button class="btn btn-danger btn-sm" onclick="deleteQuyUng('${d.id}')" title="Xoá">🗑</button>`); }
+    return `<tr>
+      <td style="font-size:12px;">${d.ngay}</td>
+      <td style="font-weight:600;">${fmt(d.soCanUng)}</td>
+      <td style="font-size:12px;max-width:220px;">${khoan||'—'}</td>
+      <td style="font-weight:600;color:var(--yellow);">${fmt(d.tongDuChi)}</td>
+      <td><span class="badge" style="font-size:10px;background:${stColor}22;color:${stColor};">${stTxt}</span></td>
+      <td style="font-weight:700;color:var(--green);">${d.status==='duyet'?fmt(d.soDuyet):'—'}</td>
+      <td><div style="display:flex;gap:3px;flex-wrap:wrap;">${btns.join('')||'—'}</div></td>
+    </tr>`;
+  }).join(''):`<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted);">Chưa có yêu cầu ứng tiền</td></tr>`;
+  const sub=document.getElementById('qtm-ung-sub'); if(sub) sub.textContent=`${rows.length} yêu cầu · ${rows.filter(d=>d.status==='cho').length} chờ duyệt`;
+}
+const QTX_TITLE={nop:'Nộp tiền cho Thủ quỹ','tq-in':'Nhập tiền (Thủ quỹ)','tq-out':'Xuất tiền tay (Thủ quỹ)'};
+function openQuyTx(mode){
+  document.getElementById('qtx-mode').value=mode;
+  document.getElementById('qtx-edit').value='';
+  document.getElementById('qtx-title').textContent=QTX_TITLE[mode]||'Giao dịch quỹ';
+  document.getElementById('qtx-ngay').value=new Date().toISOString().slice(0,10);
+  document.getElementById('qtx-sotien').value='';
+  document.getElementById('qtx-lydo').value='';
+  openModal('modal-quy-tx');
+}
+function editQuyTx(id){
+  const t=QUY_TX.find(x=>x.id===id); if(!t) return;
+  document.getElementById('qtx-mode').value=t.kind;
+  document.getElementById('qtx-edit').value=id;
+  document.getElementById('qtx-title').textContent='Sửa giao dịch';
+  document.getElementById('qtx-ngay').value=vnToIso(t.ngay);
+  document.getElementById('qtx-sotien').value=t.sotien;
+  document.getElementById('qtx-lydo').value=t.lydo||'';
+  openModal('modal-quy-tx');
+}
+function saveQuyTx(){
+  const mode=document.getElementById('qtx-mode').value, editId=document.getElementById('qtx-edit').value;
+  const iso=document.getElementById('qtx-ngay').value; if(!iso){ showToast('Chọn ngày',2000,'error'); return; }
+  const sotien=parseFloat(document.getElementById('qtx-sotien').value)||0; if(sotien<=0){ showToast('Nhập số tiền > 0',2200,'error'); return; }
+  const lydo=document.getElementById('qtx-lydo').value.trim(), ngay=iso.split('-').reverse().join('/');
+  if(editId){ const t=QUY_TX.find(x=>x.id===editId); if(t){ t.ngay=ngay; t.sotien=sotien; t.lydo=lydo; } }
+  else QUY_TX.push({id:'CF'+Date.now(), ngay, kind:mode, sotien, lydo, nguoi:currentUser?.fullname||currentUser?.role||''});
+  closeModal('modal-quy-tx');
+  renderQuyTienMat(); syncNow();
+  showToast('✅ Đã lưu giao dịch quỹ',2200,'success');
+}
+function deleteQuyTx(id){
+  const t=QUY_TX.find(x=>x.id===id); if(!t) return;
+  if(!confirm('Xoá giao dịch này?')) return;
+  QUY_TX=QUY_TX.filter(x=>x.id!==id);
+  renderQuyTienMat(); syncNow();
+}
+function editQuyTqDau(){
+  if(currentUser?.role!=='giamdoc'){ showToast('Chỉ Giám đốc sửa được',2200,'error'); return; }
+  const v=prompt('Số dư đầu kỳ Thủ quỹ (VNĐ):', parseFloat(QUY_TQ_DAU.amount)||0);
+  if(v===null) return;
+  QUY_TQ_DAU={amount:parseFloat(String(v).replace(/[^\d.-]/g,''))||0};
+  renderQuyTienMat(); syncNow();
+}
+function openQuyUng(id){
+  const d=id?QUY_UNG.find(x=>x.id===id):null;
+  document.getElementById('qung-edit').value=id||'';
+  document.getElementById('qung-title').textContent=id?'Sửa yêu cầu ứng tiền':'Yêu cầu ứng tiền';
+  document.getElementById('qung-ngay').value=d?vnToIso(d.ngay):new Date().toISOString().slice(0,10);
+  document.getElementById('qung-socan').value=d?d.soCanUng:'';
+  document.getElementById('qung-text').value=d?(d.khoanChiText||''):'';
+  document.getElementById('qung-khac').value=d?(d.khacAmount||0):0;
+  qungLoadChi(d?d.chiIds:[]);
+  openModal('modal-quy-ung');
+}
+function qungCheckedIds(){ return [...document.querySelectorAll('#qung-chi-list .qung-chi:checked')].map(c=>c.value); }
+function qungLoadChi(preselect){
+  const iso=document.getElementById('qung-ngay').value||'', box=document.getElementById('qung-chi-list');
+  const sel=new Set(preselect||qungCheckedIds());
+  const rows=CHI_DATA.filter(r=>vnToIso(r.ngay)===iso);
+  box.innerHTML=rows.length?rows.map(r=>`<label style="display:flex;align-items:center;gap:8px;padding:3px 4px;cursor:pointer;">
+    <input type="checkbox" class="qung-chi" value="${r.id}" data-amt="${parseFloat(r.tong)||0}" ${sel.has(r.id)?'checked':''} onchange="qungCalcTong()">
+    <span style="flex:1;">${esc(r.ten_ncc||r.ten_hang||r.mota||'—')}</span>
+    <span style="font-weight:600;">${fmt(r.tong)}</span>
+  </label>`).join(''):`<div style="color:var(--text-muted);padding:6px;">Không có phiếu chi trong ngày này</div>`;
+  qungCalcTong();
+}
+function qungCalcTong(){
+  let sum=[...document.querySelectorAll('#qung-chi-list .qung-chi:checked')].reduce((s,c)=>s+(parseFloat(c.dataset.amt)||0),0);
+  sum+=parseFloat(document.getElementById('qung-khac').value)||0;
+  document.getElementById('qung-tong').textContent=fmt(sum);
+  return sum;
+}
+function saveQuyUng(){
+  const iso=document.getElementById('qung-ngay').value; if(!iso){ showToast('Chọn ngày ứng',2000,'error'); return; }
+  const soCanUng=parseFloat(document.getElementById('qung-socan').value)||0; if(soCanUng<=0){ showToast('Nhập số tiền cần ứng',2200,'error'); return; }
+  const chiIds=qungCheckedIds(), khacAmount=parseFloat(document.getElementById('qung-khac').value)||0, tongDuChi=qungCalcTong();
+  const khoanChiText=document.getElementById('qung-text').value.trim(), ngay=iso.split('-').reverse().join('/'), editId=document.getElementById('qung-edit').value;
+  if(editId){ const d=QUY_UNG.find(x=>x.id===editId); if(d&&canEditQuyUng(d)) Object.assign(d,{ngay,soCanUng,chiIds,khacAmount,tongDuChi,khoanChiText}); }
+  else QUY_UNG.push({id:'AR'+Date.now(), ngay, soCanUng, chiIds, khoanChiText, khacAmount, tongDuChi, status:'cho', soDuyet:0, nguoi:currentUser?.fullname||currentUser?.role||''});
+  closeModal('modal-quy-ung');
+  renderQuyTienMat(); syncNow();
+  showToast('✅ Đã lưu yêu cầu ứng tiền',2200,'success');
+}
+function deleteQuyUng(id){
+  const d=QUY_UNG.find(x=>x.id===id); if(!d) return;
+  if(!canEditQuyUng(d)){ showToast('Không có quyền xoá',2200,'error'); return; }
+  if(!confirm('Xoá yêu cầu ứng tiền này?')) return;
+  QUY_UNG=QUY_UNG.filter(x=>x.id!==id);
+  renderQuyTienMat(); syncNow();
+}
+function approveQuyUng(id){
+  const d=QUY_UNG.find(x=>x.id===id); if(!d||!canApproveQuyUng(d)) return;
+  const v=prompt('Số tiền cho ứng (VNĐ):', d.soCanUng||0);
+  if(v===null) return;
+  const soDuyet=parseFloat(String(v).replace(/[^\d.-]/g,''))||0;
+  if(soDuyet<=0){ showToast('Số tiền không hợp lệ',2200,'error'); return; }
+  d.status='duyet'; d.soDuyet=soDuyet;
+  QUY_TX.push({id:'CF'+Date.now(), ngay:d.ngay, kind:'ung', sotien:soDuyet, lydo:'Ứng theo YC ngày '+d.ngay, ref:d.id, nguoi:currentUser?.fullname||''});
+  renderQuyTienMat(); syncNow();
+  showToast('✅ Đã duyệt ứng '+fmt(soDuyet),2600,'success');
+}
+function rejectQuyUng(id){
+  const d=QUY_UNG.find(x=>x.id===id); if(!d||!canApproveQuyUng(d)) return;
+  d.status='khong';
+  renderQuyTienMat(); syncNow();
 }
 
 function updateChiField(id, field, val) {
@@ -5172,6 +5487,10 @@ let SX_DATA=[
 let YC_DATA=[];
 let YC_DELETED=[];   // Yêu cầu đã xoá (kèm lý do) — đồng bộ đa thiết bị
 let TR_DATA=[];      // Yêu cầu Transfer (chuyển kho) — đồng bộ đa thiết bị
+let QUY_TX=[];       // Quỹ tiền mặt: giao dịch nộp/ứng/nhập tay/xuất tay — đồng bộ đa thiết bị
+let QUY_UNG=[];      // Quỹ tiền mặt: yêu cầu ứng tiền (Kế toán tạo, Giám đốc duyệt)
+let QUY_TQ_DAU={amount:0};   // Số dư đầu kỳ Thủ quỹ (chỉ Giám đốc sửa)
+let currentQtmTab='kt';
 let currentBpTab='worksheet',wsFilter='A',mbView='date',hvView='linen',ycItemCount=0;
 
 function switchBpTab(tab,el){
@@ -8224,7 +8543,7 @@ function exportKhoExcel(){ exportExcel('kho'); return; /* dùng exportExcel th�
   const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='Kho_QueenAnn.csv';a.click();
 }
 
-const PAGE_TITLES={dashboard:'Dashboard Tài Chính','thu-chi':'Quản Lý Thu Chi','tab-thu':'Ghi Thu','tab-chi':'Ghi Chi','cong-no':'Theo Dõi Công Nợ','chuyen-khoan':'Chuyển Khoản','nhan-su':'Nhân Sự & Lương','kho':'Quản Lý Kho','buong-phong':'Buồng Phòng','de-xuat':'Đề Xuất Mua Hàng','yeu-cau-transfer':'Yêu Cầu Transfer','nha-cung-cap':'Nhà Cung Cấp','danh-muc':'Danh Mục Hàng Hoá','bao-cao':'Báo Cáo Tài Chính','quan-ly-tk':'Quản Lý Tài Khoản','cai-dat':'Cài Đặt Hệ Thống'};
+const PAGE_TITLES={dashboard:'Dashboard Tài Chính','thu-chi':'Quản Lý Thu Chi','quy-tien-mat':'Quỹ Tiền Mặt','tab-thu':'Ghi Thu','tab-chi':'Ghi Chi','cong-no':'Theo Dõi Công Nợ','chuyen-khoan':'Chuyển Khoản','nhan-su':'Nhân Sự & Lương','kho':'Quản Lý Kho','buong-phong':'Buồng Phòng','de-xuat':'Đề Xuất Mua Hàng','yeu-cau-transfer':'Yêu Cầu Transfer','nha-cung-cap':'Nhà Cung Cấp','danh-muc':'Danh Mục Hàng Hoá','bao-cao':'Báo Cáo Tài Chính','quan-ly-tk':'Quản Lý Tài Khoản','cai-dat':'Cài Đặt Hệ Thống'};
 // Mặc định LẦN ĐẦU mở tab trong phiên: lọc theo ngày hôm nay (user đổi khoảng ngày sau thì giữ nguyên).
 let _tabDateInit={};
 function ensureTabToday(fromId,toId,key){
@@ -8250,6 +8569,7 @@ function showPage(id,el){
   if(id==='nha-cung-cap') renderNccTable();
   if(id==='cong-no') renderCongNoPtr();
   if(id==='chuyen-khoan') renderCongNoCk();
+  if(id==='quy-tien-mat'){ ensureTabToday('qtm-kt-from','qtm-kt-to','qtmkt'); ensureTabToday('qtm-tq-from','qtm-tq-to','qtmtq'); renderQuyTienMat(); }
   if(id==='bao-cao') renderBaoCao();
   if(id==='cai-dat') renderCaiDat();
   if(id==='nhan-su'){ renderNsLuong(); updateNsKpi(); }
@@ -9092,6 +9412,9 @@ const COLLECTIONS = {
   yc:        { read:()=>_byIdDump(YC_DATA),   write:r=>{YC_DATA=r.map(x=>x.obj);},   render:()=>{try{renderYeuCau();}catch(e){}} },
   ycDeleted: { read:()=>_byIdDump(YC_DELETED),write:r=>{YC_DELETED=r.map(x=>x.obj);},render:()=>{try{renderYcDeleted();}catch(e){}} },
   transferReq:{ read:()=>_byIdDump(TR_DATA), write:r=>{TR_DATA=r.map(x=>x.obj);}, render:()=>{try{renderTrTab();}catch(e){}} },
+  quyTx:     { read:()=>_byIdDump(QUY_TX),   write:r=>{QUY_TX=r.map(x=>x.obj);},   render:()=>{try{renderQuyTienMat();}catch(e){}} },
+  quyUng:    { read:()=>_byIdDump(QUY_UNG),  write:r=>{QUY_UNG=r.map(x=>x.obj);},  render:()=>{try{renderQuyTienMat();}catch(e){}} },
+  quyTqDau:  { read:()=>[{id:'_', obj:QUY_TQ_DAU}], write:r=>{const x=r.find(v=>v.id==='_'); QUY_TQ_DAU=x?x.obj:{amount:0};}, render:()=>{try{renderQuyTienMat();}catch(e){}} },
   nsLuong:   { read:()=>_byIdDump(NS_LUONG),  write:r=>{NS_LUONG=r.map(x=>x.obj);},  render:()=>{try{renderNsLuong();}catch(e){} try{updateNsKpi();}catch(e){}} },
   bhxh:      { read:()=>_byIdDump(NS_BHXH),   write:r=>{NS_BHXH=r.map(x=>x.obj);},   render:()=>{try{renderNsBhxh();}catch(e){} try{updateNsKpi();}catch(e){}} },
   tncn:      { read:()=>_byIdDump(NS_TNCN),   write:r=>{NS_TNCN=r.map(x=>x.obj);},   render:()=>{try{renderNsTncn();}catch(e){} try{updateNsKpi();}catch(e){}} },
@@ -9163,12 +9486,14 @@ const WRITE_MATRIX = {
   wsData:['giamdoc','truong-bp'], roomStatus:['giamdoc','truong-bp'], amData:['giamdoc','truong-bp'],
   mbData:['giamdoc','truong-bp'], hvLinen:['giamdoc','truong-bp'], hvRewash:['giamdoc','truong-bp'],
   hvCols:['giamdoc','truong-bp'], sx:['giamdoc','truong-bp'],
+  quyTx:['giamdoc','ketoan'], quyUng:['giamdoc','ketoan'], quyTqDau:['giamdoc'],
 };
 // Ánh xạ collection → tab: ai được CẤP TAB tương ứng cũng được ghi/đồng bộ nhóm đó (ngoài quyền theo role).
 const COLLECTION_TAB = {
   thu:'tab-thu', chi:'tab-chi', ncc:'nha-cung-cap', catalog:'danh-muc', dvtList:'danh-muc',
   nsLuong:'nhan-su', bhxh:'nhan-su', tncn:'nhan-su',
   dx:'de-xuat', kho:'kho', transferReq:'yeu-cau-transfer',
+  quyTx:'quy-tien-mat', quyUng:'quy-tien-mat',
   yc:'buong-phong', ycDeleted:'buong-phong', wsData:'buong-phong', roomStatus:'buong-phong',
   amData:'buong-phong', mbData:'buong-phong', hvLinen:'buong-phong', hvRewash:'buong-phong',
   hvCols:'buong-phong', sx:'buong-phong',
