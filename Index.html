@@ -1219,6 +1219,7 @@ textarea{resize:vertical;min-height:68px;}
           <div class="form-group"><label>Ngày</label><input type="date" id="qtx-ngay"></div>
           <div class="form-group"><label>Số tiền</label><input type="number" id="qtx-sotien" min="0" placeholder="VNĐ"></div>
         </div>
+        <div id="qtx-avail-row" style="display:none;align-items:center;gap:10px;font-size:12px;color:var(--text-muted);margin:-4px 0 8px;">Số dư hiện có: <b id="qtx-avail" style="color:var(--yellow);">—</b> <button type="button" class="btn btn-ghost btn-sm" id="qtx-fill-btn" onclick="qtxFillAll()">Nộp hết</button></div>
         <div class="form-group"><label>Lý do</label><input id="qtx-lydo" placeholder="Nội dung"></div>
         <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
           <button class="btn btn-ghost" onclick="closeModal('modal-quy-tx')">Huỷ</button>
@@ -4325,6 +4326,25 @@ function renderQuyUng(){
   const sub=document.getElementById('qtm-ung-sub'); if(sub) sub.textContent=`${rows.length} yêu cầu · ${rows.filter(d=>d.status==='cho').length} chờ duyệt`;
 }
 const QTX_TITLE={nop:'Nộp tiền cho Thủ quỹ','tq-in':'Nhập tiền (Thủ quỹ)','tq-out':'Xuất tiền tay (Thủ quỹ)'};
+// Số dư có thể trừ cho giao dịch xuất (nộp → số dư KT; xuất tay → số dư Thủ quỹ). Khi SỬA thì cộng lại số cũ.
+function qtxAvail(mode, editId){
+  let base = mode==='nop' ? quyKtBalance() : mode==='tq-out' ? quyTqBalance() : Infinity;
+  if(editId && isFinite(base)){ const t=QUY_TX.find(x=>x.id===editId); if(t && t.kind===mode) base += (parseFloat(t.sotien)||0); }
+  return base;
+}
+function qtxUpdateAvailRow(){
+  const mode=document.getElementById('qtx-mode').value, editId=document.getElementById('qtx-edit').value;
+  const row=document.getElementById('qtx-avail-row');
+  if(mode==='nop'||mode==='tq-out'){
+    row.style.display='flex';
+    document.getElementById('qtx-avail').textContent=fmt(qtxAvail(mode, editId));
+    document.getElementById('qtx-fill-btn').textContent = mode==='nop'?'Nộp hết':'Xuất hết';
+  } else row.style.display='none';
+}
+function qtxFillAll(){
+  const mode=document.getElementById('qtx-mode').value, editId=document.getElementById('qtx-edit').value;
+  document.getElementById('qtx-sotien').value=Math.max(0, Math.floor(qtxAvail(mode, editId)));
+}
 function openQuyTx(mode){
   document.getElementById('qtx-mode').value=mode;
   document.getElementById('qtx-edit').value='';
@@ -4332,6 +4352,7 @@ function openQuyTx(mode){
   document.getElementById('qtx-ngay').value=new Date().toISOString().slice(0,10);
   document.getElementById('qtx-sotien').value='';
   document.getElementById('qtx-lydo').value='';
+  qtxUpdateAvailRow();
   openModal('modal-quy-tx');
 }
 function editQuyTx(id){
@@ -4342,12 +4363,16 @@ function editQuyTx(id){
   document.getElementById('qtx-ngay').value=vnToIso(t.ngay);
   document.getElementById('qtx-sotien').value=t.sotien;
   document.getElementById('qtx-lydo').value=t.lydo||'';
+  qtxUpdateAvailRow();
   openModal('modal-quy-tx');
 }
 function saveQuyTx(){
   const mode=document.getElementById('qtx-mode').value, editId=document.getElementById('qtx-edit').value;
   const iso=document.getElementById('qtx-ngay').value; if(!iso){ showToast('Chọn ngày',2000,'error'); return; }
   const sotien=parseFloat(document.getElementById('qtx-sotien').value)||0; if(sotien<=0){ showToast('Nhập số tiền > 0',2200,'error'); return; }
+  // Chặn nộp/xuất quá số dư → tránh âm quỹ ngoài ý muốn.
+  const avail=qtxAvail(mode, editId);
+  if(isFinite(avail) && sotien > avail+1){ showToast(`Số tiền (${fmt(sotien)}) vượt quá số dư hiện có (${fmt(avail)}).`,3400,'error'); return; }
   const lydo=document.getElementById('qtx-lydo').value.trim(), ngay=iso.split('-').reverse().join('/');
   if(editId){ const t=QUY_TX.find(x=>x.id===editId); if(t){ t.ngay=ngay; t.sotien=sotien; t.lydo=lydo; } }
   else QUY_TX.push({id:'CF'+Date.now(), ngay, kind:mode, sotien, lydo, nguoi:currentUser?.fullname||currentUser?.role||''});
