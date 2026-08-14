@@ -126,34 +126,34 @@ function _khoLite(arr){
     return c;
   });
 }
-function _lsSaveRaw(){
-  try{
-    const data={
-      thu:THU_DATA,chi:CHI_DATA,dx:DX_DATA,ncc:NCC_DATA,kho:_khoLite(KHO_DATA),yc:YC_DATA,ycDeleted:YC_DELETED,transferReq:TR_DATA,
-      hvLinen:HV_LINEN,hvRewash:HV_REWASH_DATA,hvCols:HV_REWASH_COLS,
-      wsData:WS_DATA_BY_DATE,roomStatus:ROOM_STATUS_BY_DATE,
-      amData:AM_DATA_BY_DATE,mbData:MB_DATE_DATA,nsLuong:NS_LUONG,sxData:SX_DATA,
-      nsBhxh:NS_BHXH,nsTncn:NS_TNCN,cats:CATS,dvtList:DVT_LIST,
-      quyTx:QUY_TX,quyUng:QUY_UNG,quyTqDau:QUY_TQ_DAU,
-    };
-    const str=JSON.stringify(data);
-    try{
-      localStorage.setItem(LS_KEY,str);
-    }catch(e1){
-      // iOS/Safari: ghi ĐÈ khi bộ nhớ gần đầy có thể lỗi dù dữ liệu mới nhỏ hơn (kẹt với blob cũ to).
-      // Xoá hẳn key cũ để giải phóng rồi ghi lại → gỡ kẹt, blob mới (đã bỏ ảnh) luôn vừa.
-      try{ localStorage.removeItem(LS_KEY); }catch(_){}
-      localStorage.setItem(LS_KEY,str);
-    }
-    try{ _dirty=true; }catch(e){}   // đánh dấu có thay đổi để vòng đồng bộ 4s quét
-    return true;
-  }catch(e){ try{ _warnLsQuota(); }catch(_){}; return false; }
+// Ghi 1 chuỗi vào LS_KEY; iOS/Safari khi gần đầy có thể lỗi lúc ghi đè → xoá key cũ rồi ghi lại (gỡ kẹt).
+function _lsPut(str){
+  try{ localStorage.setItem(LS_KEY,str); return true; }
+  catch(e1){ try{ localStorage.removeItem(LS_KEY); }catch(_){}; localStorage.setItem(LS_KEY,str); return true; }
 }
-// Cảnh báo tràn bộ nhớ máy (≤1 lần/30s) — trước đây lỗi này bị nuốt âm thầm gây mất dữ liệu.
+function _lsSaveRaw(){
+  try{ _dirty=true; }catch(e){}   // LUÔN đánh dấu để vòng đồng bộ nền đẩy lên cloud, kể cả khi lưu cục bộ lỗi
+  const base={
+    thu:THU_DATA,chi:CHI_DATA,dx:DX_DATA,ncc:NCC_DATA,kho:_khoLite(KHO_DATA),yc:YC_DATA,ycDeleted:YC_DELETED,transferReq:TR_DATA,
+    hvLinen:HV_LINEN,hvRewash:HV_REWASH_DATA,hvCols:HV_REWASH_COLS,
+    nsLuong:NS_LUONG,sxData:SX_DATA,nsBhxh:NS_BHXH,nsTncn:NS_TNCN,cats:CATS,dvtList:DVT_LIST,
+    quyTx:QUY_TX,quyUng:QUY_UNG,quyTqDau:QUY_TQ_DAU,
+  };
+  // Bậc 1: đầy đủ (kèm map buồng phòng theo ngày). Bậc 2: lược các map đó (chúng có sẵn trên cloud) để cache
+  // phần tài chính vẫn vừa bộ nhớ máy nhỏ (iPad ~5MB). Bậc nào ghi được thì thôi.
+  const full={...base, wsData:WS_DATA_BY_DATE,roomStatus:ROOM_STATUS_BY_DATE,amData:AM_DATA_BY_DATE,mbData:MB_DATE_DATA};
+  try{ if(_lsPut(JSON.stringify(full))) return true; }catch(e){}
+  try{ if(_lsPut(JSON.stringify(base))) return true; }catch(e){}   // bỏ map buồng phòng rồi thử lại
+  try{ _warnLsQuota(); }catch(_){}
+  return false;
+}
+// Cảnh báo bộ nhớ máy đầy — CHỈ khi cloud CHƯA sẵn sàng (offline). Nếu đã đồng bộ cloud thì dữ liệu an toàn
+// trên máy chủ, không cần báo động (tránh báo giả khi bộ đệm cục bộ không chứa hết dữ liệu chữ).
 let _lsQuotaWarnAt=0;
 function _warnLsQuota(){
+  if(sb && cloudReady){ console.warn('[LS] Bộ nhớ máy đầy nhưng cloud đã đồng bộ — bỏ qua cảnh báo (dữ liệu an toàn trên máy chủ).'); return; }
   const now=Date.now(); if(now-_lsQuotaWarnAt<30000) return; _lsQuotaWarnAt=now;
-  try{ showToast('⚠️ Bộ nhớ máy đầy — dữ liệu chưa lưu được. Hãy bấm "🗜 Nén ảnh cũ" ở tab Kho hoặc xoá bớt ảnh.',6500,'error'); }catch(e){}
+  try{ showToast('⚠️ Đang offline & bộ nhớ máy đầy — thay đổi tạm giữ trong máy, hãy kết nối mạng để đồng bộ lên máy chủ.',6500,'error'); }catch(e){}
 }
 function lsLoad(){
   try{
@@ -7748,11 +7748,21 @@ async function khoStorageReport(){
     ? `<div style="margin-top:10px;font-weight:600;">Mặt hàng nặng ảnh nhất:</div><ul style="margin:4px 0 0 18px;padding:0;">`+
       per.slice(0,5).map(p=>`<li style="margin:2px 0;">${esc(p.ten)} — <b>${kb(p.b)} KB</b></li>`).join('')+`</ul>`
     : `<div style="margin-top:10px;color:var(--text-muted);">Kho hiện không có ảnh base64 nào.</div>`;
+  // Breakdown dung lượng theo từng nhóm dữ liệu (để thấy cái gì chiếm chỗ nhất).
+  const groups={ 'Chi (phiếu chi)':CHI_DATA, 'Thu (phiếu thu)':THU_DATA, 'Kho':_khoLite(KHO_DATA),
+    'Buồng phòng (theo ngày)':WS_DATA_BY_DATE, 'Trạng thái phòng':ROOM_STATUS_BY_DATE, 'Amenity':AM_DATA_BY_DATE,
+    'Minibar':MB_DATE_DATA, 'Đề xuất':DX_DATA, 'NCC':NCC_DATA, 'Danh mục':(typeof catalogItems!=='undefined'?catalogItems:[]),
+    'Nhân sự lương':NS_LUONG, 'Quỹ tiền mặt':QUY_TX };
+  const gSizes=Object.keys(groups).map(k=>{ let n=0; try{ n=JSON.stringify(groups[k]||[]).length; }catch(e){} return [k,n]; })
+    .filter(x=>x[1]>2).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  const groupHtml = `<div style="margin-top:10px;font-weight:600;">Nhóm dữ liệu nặng nhất:</div><ul style="margin:4px 0 0 18px;padding:0;">`+
+    gSizes.map(([k,n])=>`<li style="margin:2px 0;">${esc(k)} — <b>${mb(n)} MB</b></li>`).join('')+`</ul>`;
   body.innerHTML = verdict +
     `<table style="width:100%;font-size:13px;border-collapse:collapse;">`+
     rows.map(r=>`<tr><td style="padding:5px 6px;color:var(--text-muted);">${r[0]}</td><td style="padding:5px 6px;text-align:right;font-weight:600;">${r[1]}</td></tr>`).join('')+
-    `</table>`+ topHtml +
-    (imgBytes>1048576?`<div style="margin-top:10px;font-size:12px;color:var(--text-muted);">💡 Ảnh đang chiếm nhiều — bấm “🗜 Nén ảnh cũ ngay” để giải phóng.</div>`:'');
+    `</table>`+ groupHtml + topHtml +
+    (imgBytes>1048576?`<div style="margin-top:10px;font-size:12px;color:var(--text-muted);">💡 Ảnh đang chiếm nhiều — bấm “🗜 Nén ảnh cũ ngay” để giải phóng.</div>`:'')+
+    ((sb&&cloudReady)?`<div style="margin-top:10px;font-size:12px;color:var(--green);">✓ Dữ liệu đã đồng bộ lên máy chủ — kể cả khi bộ nhớ máy đầy, dữ liệu vẫn an toàn.</div>`:'');
 }
 
 // ===== Khôi phục món kho đã xoá từ cloud (đọc cả dòng deleted=true còn dữ liệu) =====
