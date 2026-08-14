@@ -131,7 +131,15 @@ function _lsSaveRaw(){
       amData:AM_DATA_BY_DATE,mbData:MB_DATE_DATA,nsLuong:NS_LUONG,sxData:SX_DATA,
       nsBhxh:NS_BHXH,nsTncn:NS_TNCN,cats:CATS,dvtList:DVT_LIST,
     };
-    localStorage.setItem(LS_KEY,JSON.stringify(data));
+    const str=JSON.stringify(data);
+    try{
+      localStorage.setItem(LS_KEY,str);
+    }catch(e1){
+      // iOS/Safari: ghi ĐÈ khi bộ nhớ gần đầy có thể lỗi dù dữ liệu mới nhỏ hơn (kẹt với blob cũ to).
+      // Xoá hẳn key cũ để giải phóng rồi ghi lại → gỡ kẹt, blob mới (đã bỏ ảnh) luôn vừa.
+      try{ localStorage.removeItem(LS_KEY); }catch(_){}
+      localStorage.setItem(LS_KEY,str);
+    }
     try{ _dirty=true; }catch(e){}   // đánh dấu có thay đổi để vòng đồng bộ 4s quét
     return true;
   }catch(e){ try{ _warnLsQuota(); }catch(_){}; return false; }
