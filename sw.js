@@ -1,12 +1,40 @@
-// Queen Ann Hotel — Service Worker v1
-const CACHE='queen-ann-v1';
+// Queen Ann Hotel — Service Worker v2
+const CACHE='queen-ann-v2';
 
 self.addEventListener('install', e=>{
   self.skipWaiting();
 });
 
 self.addEventListener('activate', e=>{
-  e.waitUntil(clients.claim());
+  e.waitUntil((async()=>{
+    // Xoá cache phiên bản cũ
+    const keys=await caches.keys();
+    await Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)));
+    await clients.claim();
+  })());
+});
+
+// Network-first cho trang HTML: luôn lấy bản mới khi có mạng, offline thì dùng cache.
+// Nhờ vậy các bản cập nhật code tới máy ngay, không bị kẹt bản cũ trong cache trình duyệt.
+self.addEventListener('fetch', e=>{
+  const req=e.request;
+  if(req.method!=='GET') return;
+  let url;
+  try{ url=new URL(req.url); }catch(_){ return; }
+  if(url.origin!==self.location.origin) return;   // chỉ xử lý cùng máy chủ
+  const isDoc = req.mode==='navigate' || (req.headers.get('accept')||'').includes('text/html') || url.pathname.endsWith('/Index.html');
+  if(!isDoc) return;   // tài nguyên khác: để trình duyệt xử lý mặc định
+  e.respondWith((async()=>{
+    try{
+      const res=await fetch(req, {cache:'no-store'});
+      if(res && res.ok){ try{ const c=res.clone(); const cache=await caches.open(CACHE); await cache.put(req, c); }catch(_){} }
+      return res;
+    }catch(err){
+      const cached=await caches.match(req) || await caches.match('/hotel/Index.html');
+      if(cached) return cached;
+      throw err;
+    }
+  })());
 });
 
 // Nhận push notification từ server (hoặc tự trigger từ app)

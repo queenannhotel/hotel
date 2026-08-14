@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
 <title>Queen Ann Hotel — Kế Toán</title>
 <link rel="manifest" href="/hotel/manifest.json">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -16,6 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
+const APP_VERSION='2026.08.14';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -823,6 +826,7 @@ textarea{resize:vertical;min-height:68px;}
     </div>
     <button class="logout-btn" onclick="doLogout()" title="Đăng xuất">⏻ Ra</button>
   </div>
+  <div id="app-version" style="text-align:center;font-size:10px;color:rgba(255,255,255,.35);padding:4px 0 6px;">v—</div>
 </aside>
 
 <div class="main">
@@ -7388,8 +7392,10 @@ async function khoStorageReport(){
   const verdict = !writeOk
     ? `<div style="padding:10px 12px;background:var(--red-bg);border:1px solid var(--red);border-radius:8px;color:var(--red);font-weight:700;margin-bottom:10px;">⚠️ Bộ nhớ ĐẦY — máy không ghi thêm được. Hãy bấm “🗜 Nén ảnh cũ” hoặc xoá bớt ảnh để không mất dữ liệu.</div>`
     : `<div style="padding:10px 12px;background:var(--green-bg);border:1px solid var(--green);border-radius:8px;color:var(--green);font-weight:700;margin-bottom:10px;">✅ Bộ nhớ còn ghi được bình thường (đang dùng ~${pct}% giới hạn ~5MB).</div>`;
+  const draftBytes=((localStorage.getItem('qah_modal_drafts')||'').length)+((localStorage.getItem('qah_dx_drafts')||'').length);
   const rows=[
     ['Dữ liệu app (Queen Ann)', mb(appBytes)+' MB'],
+    ['Bản nháp (drafts)', mb(draftBytes)+' MB'],
     ['Tổng bộ nhớ trình duyệt (localStorage)', mb(totalBytes)+` MB / ~5 MB (${pct}%)`],
     ['Ảnh trong kho', `${imgCount} ảnh · ~${mb(imgBytes)} MB`],
   ];
@@ -8259,6 +8265,8 @@ function showPage(id,el){
     if(wsNgay&&!wsNgay.value) wsNgay.value=new Date().toISOString().slice(0,10);
     renderWorksheet();
   }
+  // Mobile/iPad: chọn tab xong tự đóng menu + nền tối (trước đây bị kẹt màn tối).
+  if(window.innerWidth<1181){ try{ closeMobileSidebar(); }catch(e){} }
 }
 
 function renderDashDx() {
@@ -8683,7 +8691,23 @@ const MODAL_DRAFTS = {
      afterApply:()=>{ khoRefreshBalances('kn'); const v=document.getElementById('kn-img')?.value; if(v) imgPickerSet('kn',v); } },
 };
 let MD_STORE={}; const MD_LS='qah_modal_drafts'; let _mdTimer=null;
-function mdLoad(){ try{ MD_STORE=JSON.parse(localStorage.getItem(MD_LS)||'{}')||{}; }catch(e){ MD_STORE={}; } }
+function mdLoad(){
+  try{ MD_STORE=JSON.parse(localStorage.getItem(MD_LS)||'{}')||{}; }catch(e){ MD_STORE={}; }
+  // Dọn 1 lần: bỏ ảnh base64 lỡ kẹt trong nháp cũ (giải phóng bộ nhớ máy).
+  let changed=false;
+  try{
+    Object.values(MD_STORE).forEach(slot=>{
+      if(slot&&slot.scalars) Object.keys(slot.scalars).forEach(k=>{
+        const v=slot.scalars[k];
+        if((/-img$/.test(k)) || (typeof v==='string' && v.startsWith('data:'))){ delete slot.scalars[k]; changed=true; }
+      });
+      if(slot&&Array.isArray(slot.rowGroups)) slot.rowGroups.forEach(g=>Array.isArray(g)&&g.forEach(row=>{
+        if(row&&Array.isArray(row.vals)) row.vals=row.vals.map(v=>(typeof v==='string'&&v.startsWith('data:'))?(changed=true,''):v);
+      }));
+    });
+  }catch(e){}
+  if(changed){ try{ mdPersist(); }catch(e){} }
+}
 function mdPersist(){ try{ localStorage.setItem(MD_LS, JSON.stringify(MD_STORE)); }catch(e){} }
 function mdSlot(id){ const cfg=MODAL_DRAFTS[id]; return id+'::'+(cfg?cfg.key():'?'); }
 function mdCtrlKey(c){ return c.id ? '#'+c.id : ((c.className||'')+'|'+(c.value||'')); }
@@ -8691,7 +8715,7 @@ function mdSerialize(id){
   const cfg=MODAL_DRAFTS[id], m=document.getElementById(id); if(!m) return null;
   const inRow=c=>cfg.rowGroups.some(g=>c.closest(g.rowSel));
   const scalars={};
-  m.querySelectorAll('input,select,textarea').forEach(c=>{ if(inRow(c)) return; const k=mdCtrlKey(c); if(!k||k==='|') return;
+  m.querySelectorAll('input,select,textarea').forEach(c=>{ if(inRow(c)) return; if(c.type==='hidden') return; const k=mdCtrlKey(c); if(!k||k==='|'||/-img$/.test(k)) return;
     scalars[k]=(c.type==='checkbox'||c.type==='radio')?c.checked:c.value; });
   const rowGroups=cfg.rowGroups.map(g=>[...m.querySelectorAll(g.rowSel)].map(row=>({
     ds:{...row.dataset},
@@ -8895,8 +8919,8 @@ function toggleMobileSidebar(){ toggleAnySidebar(); }
 function closeMobileSidebar(){
   const sb=document.querySelector('.sidebar');
   const ov=document.getElementById('sidebar-overlay');
-  sb.classList.remove('open','ipad-open');
-  if(ov){ ov.classList.remove('open'); ov.onclick=null; }
+  if(sb) sb.classList.remove('open','ipad-open');
+  if(ov){ ov.classList.remove('open'); }   // GIỮ handler chạm nền tối (không set onclick=null)
 }
 function setMobActive(){ /* deprecated — giữ để tránh lỗi nếu còn gọi */ }
 function syncMobNotif(){
@@ -8916,7 +8940,7 @@ function checkMobileLayout(){
     const sb=document.querySelector('.sidebar');
     if(sb){ sb.classList.remove('open','ipad-open'); }
     const ov=document.getElementById('sidebar-overlay');
-    if(ov){ ov.classList.remove('open'); ov.onclick=null; }
+    if(ov){ ov.classList.remove('open'); }   // GIỮ handler chạm nền tối
   }
 }
 window.addEventListener('resize', checkMobileLayout);
@@ -8927,12 +8951,19 @@ checkMobileLayout();
 const today=new Date(); document.getElementById('topbar-date').textContent='📅 '+today.toLocaleDateString('vi-VN',{month:'long',year:'numeric'});
 
 // ===== PWA SERVICE WORKER =====
-let swReg = null;
+let swReg = null, _swReloaded=false;
 async function registerSW(){
   if(!('serviceWorker' in navigator)) return;
   try{
-    swReg = await navigator.serviceWorker.register('/hotel/sw.js');
+    // updateViaCache:'none' → luôn tải sw.js mới nhất (không lấy từ cache) để bắt bản cập nhật.
+    swReg = await navigator.serviceWorker.register('/hotel/sw.js', {updateViaCache:'none'});
     console.log('[SW] Registered');
+    try{ swReg.update(); }catch(_){}
+    // Khi service worker mới chiếm quyền điều khiển → tải lại 1 lần để nhận bản HTML mới.
+    navigator.serviceWorker.addEventListener('controllerchange', ()=>{
+      if(_swReloaded) return; _swReloaded=true;
+      try{ location.reload(); }catch(_){}
+    });
   }catch(e){ console.warn('[SW] Register failed:', e); }
 }
 
@@ -9019,6 +9050,7 @@ window.addEventListener('DOMContentLoaded',()=>{
     showToast('✅ Đã tải dữ liệu đã lưu!',2000,'success');
     updateDashboardKPI();
   }
+  const ver=document.getElementById('app-version'); if(ver) ver.textContent='v'+APP_VERSION;
 });
 // Auto-save mỗi 2 phút
 setInterval(()=>{ lsSave(); },2*60*1000);
