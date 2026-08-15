@@ -1172,7 +1172,7 @@ textarea{resize:vertical;min-height:68px;}
             <button class="btn btn-ghost btn-sm" onclick="openQuyUng()">📝 Yêu cầu ứng tiền</button>
           </div>
         </div>
-        <div class="table-wrap wide"><table><thead><tr><th>Ngày</th><th>Loại</th><th>Số tiền</th><th>Lý do</th><th>Người</th><th>Thao tác</th></tr></thead><tbody id="qtm-kt-body"></tbody></table></div>
+        <div class="table-wrap wide"><table><thead><tr><th>Ngày</th><th>Loại</th><th>Số tiền</th><th>Số dư</th><th>Lý do</th><th>Người</th><th>Thao tác</th></tr></thead><tbody id="qtm-kt-body"></tbody></table></div>
         </div>
       </div>
 
@@ -4274,6 +4274,13 @@ function renderQuyKt(){
   setT('qtm-kt-nop', fmt(quySumKind('nop')));
   setT('qtm-kt-ung', fmt(quySumKind('ung')));
   const from=document.getElementById('qtm-kt-from')?.value||'', to=document.getElementById('qtm-kt-to')?.value||'', loai=document.getElementById('qtm-kt-loai')?.value||'';
+  // Số dư sau MỖI giao dịch (theo thứ tự thời gian) — tính trên TOÀN BỘ nộp/ứng nên đúng cả khi đang lọc.
+  // Cộng dồn từ cashActual(): nộp trừ, ứng cộng → dòng cuối = quyKtBalance() (khớp số dư ở header).
+  const bal={};
+  { let cum=cashActual();
+    QUY_TX.filter(t=>['nop','ung'].includes(t.kind))
+      .slice().sort((a,b)=>vnToIso(a.ngay).localeCompare(vnToIso(b.ngay))||String(a.id).localeCompare(String(b.id)))
+      .forEach(t=>{ cum+=(t.kind==='ung'?1:-1)*(parseFloat(t.sotien)||0); bal[t.id]=cum; }); }
   let rows=QUY_TX.filter(t=>['nop','ung'].includes(t.kind)).filter(t=>{const iso=vnToIso(t.ngay);return (!from||iso>=from)&&(!to||iso<=to);});
   if(loai) rows=rows.filter(t=>t.kind===loai);
   rows.sort((a,b)=>vnToIso(b.ngay).localeCompare(vnToIso(a.ngay)));
@@ -4283,10 +4290,11 @@ function renderQuyKt(){
     <td style="font-size:12px;">${t.ngay}</td>
     <td><span class="badge badge-navy" style="font-size:10px;">${label[t.kind]}</span></td>
     <td style="font-weight:700;color:${color[t.kind]};">${sign[t.kind]}${fmt(t.sotien)}</td>
+    <td style="font-weight:600;">${fmt(bal[t.id])}</td>
     <td style="font-size:12px;">${esc(t.lydo)||'—'}</td>
     <td style="font-size:12px;">${esc(t.nguoi)||'—'}</td>
     <td><button class="btn btn-danger btn-sm" onclick="deleteQuyTx('${t.id}')" title="Xoá">🗑</button></td>
-  </tr>`).join(''):`<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted);">Chưa có giao dịch</td></tr>`;
+  </tr>`).join(''):`<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted);">Chưa có giao dịch</td></tr>`;
 }
 function renderQuyTq(){
   const setT=(id,v)=>{const e=document.getElementById(id); if(e) e.textContent=v;};
