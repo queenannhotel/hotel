@@ -8665,6 +8665,17 @@ function ensureTabToday(fromId,toId,key){
   const f=document.getElementById(fromId), to=document.getElementById(toId);
   if(f) f.value=t; if(to) to.value=t;
 }
+// Mặc định khoảng ngày = THÁNG HIỆN HÀNH (mùng 1 → cuối tháng); vẫn cho người dùng đổi từ/đến sau đó.
+function ensureTabMonth(fromId,toId,key){
+  if(_tabDateInit[key]) return;
+  _tabDateInit[key]=true;
+  const d=new Date();
+  const first=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`;
+  const ld=new Date(d.getFullYear(),d.getMonth()+1,0);
+  const last=`${ld.getFullYear()}-${String(ld.getMonth()+1).padStart(2,'0')}-${String(ld.getDate()).padStart(2,'0')}`;
+  const f=document.getElementById(fromId), to=document.getElementById(toId);
+  if(f) f.value=first; if(to) to.value=last;
+}
 function showPage(id,el){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById('page-'+id).classList.add('active');
@@ -8681,7 +8692,7 @@ function showPage(id,el){
   if(id==='nha-cung-cap') renderNccTable();
   if(id==='cong-no') renderCongNoPtr();
   if(id==='chuyen-khoan') renderCongNoCk();
-  if(id==='quy-tien-mat'){ ensureTabToday('qtm-kt-from','qtm-kt-to','qtmkt'); ensureTabToday('qtm-tq-from','qtm-tq-to','qtmtq'); renderQuyTienMat(); }
+  if(id==='quy-tien-mat'){ ensureTabMonth('qtm-kt-from','qtm-kt-to','qtmkt'); ensureTabMonth('qtm-tq-from','qtm-tq-to','qtmtq'); renderQuyTienMat(); }
   if(id==='bao-cao') renderBaoCao();
   if(id==='cai-dat') renderCaiDat();
   if(id==='nhan-su'){ renderNsLuong(); updateNsKpi(); }
