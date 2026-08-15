@@ -4241,10 +4241,10 @@ function confirmChiSplit(){
 }
 
 // ==================== QUỸ TIỀN MẶT ====================
-// Số dư tiền mặt THỰC TẾ (luỹ kế): tổng Thu TM (VND) − tổng Chi TM đã hoàn thành.
+// Số dư tiền mặt THỰC TẾ (luỹ kế): tổng Thu TM (VND) − tổng Chi TM (MỌI trạng thái) — khớp Số dư TM bên Sổ thu chi.
 function cashActual(){
   const thuTM=THU_DATA.flatMap(r=>thuLines(r)).filter(l=>l.pttt==='TM'&&(!l.currency||l.currency==='VND')).reduce((s,l)=>s+(parseFloat(l.sotien)||0),0);
-  const chiTM=CHI_DATA.filter(r=>r.tinh_trang==='hoan-thanh'&&r.pttt==='TM').reduce((s,r)=>s+chiAmt(r),0);
+  const chiTM=CHI_DATA.filter(r=>r.pttt==='TM').reduce((s,r)=>s+chiAmt(r),0);   // mọi trạng thái (kể cả đang lên đơn/đang giao)
   return thuTM-chiTM;
 }
 function quySumKind(...kinds){ return QUY_TX.filter(t=>kinds.includes(t.kind)).reduce((s,t)=>s+(parseFloat(t.sotien)||0),0); }
