@@ -4793,13 +4793,13 @@ function buildThuChiBook(){
   })));
   // Chi: gom theo PHIẾU CHI (chiGroupKey) — mỗi phiếu 1 dòng, tổng tiền cả phiếu (không tách từng món).
   const chiGroups={}; const chiOrder=[];
-  CHI_DATA.filter(r=>r.tinh_trang==='hoan-thanh').forEach(r=>{
+  CHI_DATA.slice().forEach(r=>{   // MỌI khoản chi (kể cả đang lên đơn / đang giao) — sổ ghi nhận đủ
     const k=chiGroupKey(r); if(!chiGroups[k]){ chiGroups[k]=[]; chiOrder.push(k); } chiGroups[k].push(r);
   });
   const chiRowsBook = chiOrder.map(k=>{ const recs=chiGroups[k], first=recs[0];
     const ncc=[...new Set(recs.map(x=>x.ten_ncc).filter(n=>n&&n!=='—'))].join(', ')||first.ten_hang||'—';
     const bp =[...new Set(recs.map(x=>x.bophan).filter(Boolean))].join(', ')||'';
-    return {loai:'chi', ngay:first.ngay, mota:ncc, bophan:bp, pttt:first.pttt, thu:0, chi:recs.reduce((s,x)=>s+chiAmt(x),0), nguoi:'Kế toán'};
+    return {loai:'chi', ngay:first.ngay, mota:ncc, bophan:bp, pttt:first.pttt, thu:0, chi:recs.reduce((s,x)=>s+chiAmt(x),0), nguoi:'Kế toán', tt:first.tinh_trang};
   });
   return [
     ...thuUnits.map(u=>({loai:'thu', ngay:u.ngay, mota:u.mota, bophan:u.bophan, pttt:u.pttt, thu:u.vnd, chi:0, nguoi:u.nguoi, cur:u.currency, raw:u.raw})),
@@ -4826,12 +4826,12 @@ function syncThuChiSummary() {
     raw:parseFloat(l.sotien)||0,
   })));
   // Lọc theo khoảng ngày (+ bộ lọc PTTT của filter row cho các ô tổng)
-  const chiRows  = CHI_DATA.filter(r=>r.tinh_trang==='hoan-thanh' && inRange(r) && (!fPttt||r.pttt===fPttt));
+  const chiRows  = CHI_DATA.filter(r=>inRange(r) && (!fPttt||r.pttt===fPttt));   // mọi trạng thái (kể cả đang lên đơn/đang giao)
   const tongThu  = thuUnits.filter(u=>inRange(u) && (!fPttt||u.pttt===fPttt)).reduce((s,u)=>s+u.vnd,0);
   const tongChi  = chiRows.reduce((s,r)=>s+chiAmt(r),0);
   // Tiền mặt (PTTT='TM') trong khoảng — không phụ thuộc filter PTTT của bảng
   const thuTM = thuUnits.filter(u=>inRange(u)&&u.pttt==='TM').reduce((s,u)=>s+u.vnd,0);
-  const chiTM = CHI_DATA.filter(r=>r.tinh_trang==='hoan-thanh'&&inRange(r)&&r.pttt==='TM').reduce((s,r)=>s+chiAmt(r),0);
+  const chiTM = CHI_DATA.filter(r=>inRange(r)&&r.pttt==='TM').reduce((s,r)=>s+chiAmt(r),0);   // mọi trạng thái
   const soDu  = thuTM - chiTM;   // số dư TIỀN MẶT của giai đoạn
 
   // Công nợ phải trả: toàn bộ Chi công nợ chưa thanh toán (không theo khoảng ngày)
@@ -4860,12 +4860,14 @@ function syncThuChiSummary() {
 
   const ptttBadge={'TM':'badge-tm','CK':'badge-ck','Cà thẻ':'badge-the','Công nợ':'badge-cong-no'};
   const tbody=document.getElementById('tbl-thu-chi-body');
+  const ttTag={'dang-len-don':['status-dang-len','Đang lên đơn'],'dang-giao':['status-dang-giao','Đang giao']};
   if(tbody) tbody.innerHTML=allRows.map((r,i)=>{
     const thuTxt = r.loai==='thu' ? (r.cur&&r.cur!=='VND' ? (r.raw||0).toLocaleString('vi-VN')+' '+esc(r.cur) : (r.thu?fmt(r.thu):'—')) : '—';
+    const ttBadge = (r.loai==='chi' && ttTag[r.tt]) ? ` <span class="badge ${ttTag[r.tt][0]}" style="font-size:9px;">${ttTag[r.tt][1]}</span>` : '';
     return `<tr>
     <td style="font-size:11px;color:var(--text-muted);">${i+1}</td>
     <td style="font-size:12px;">${r.ngay}</td>
-    <td><span class="badge ${r.loai==='thu'?'badge-green':'badge-red'}">${r.loai==='thu'?'Thu':'Chi'}</span></td>
+    <td><span class="badge ${r.loai==='thu'?'badge-green':'badge-red'}">${r.loai==='thu'?'Thu':'Chi'}</span>${ttBadge}</td>
     <td>${r.mota}</td>
     <td style="font-size:12px;">${r.bophan}</td>
     <td><span class="badge ${ptttBadge[r.pttt]||'badge-navy'}" style="font-size:10px;">${r.pttt||'—'}</span></td>
