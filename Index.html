@@ -131,8 +131,9 @@ function _lsPut(str){
   try{ localStorage.setItem(LS_KEY,str); return true; }
   catch(e1){ try{ localStorage.removeItem(LS_KEY); }catch(_){}; localStorage.setItem(LS_KEY,str); return true; }
 }
-function _lsSaveRaw(){
-  try{ _dirty=true; }catch(e){}   // LUÔN đánh dấu để vòng đồng bộ nền đẩy lên cloud, kể cả khi lưu cục bộ lỗi
+function _lsSaveRaw(fromRemote){
+  // fromRemote=true: thay đổi đã đến TỪ cloud → chỉ cache cục bộ, KHÔNG đánh dấu bẩn (khỏi flush lại vô ích).
+  if(!fromRemote){ try{ _dirty=true; }catch(e){} }   // thay đổi cục bộ → đánh dấu để vòng nền đẩy lên cloud, kể cả khi lưu lỗi
   const base={
     thu:THU_DATA,chi:CHI_DATA,dx:DX_DATA,ncc:NCC_DATA,kho:_khoLite(KHO_DATA),yc:YC_DATA,ycDeleted:YC_DELETED,transferReq:TR_DATA,
     hvLinen:HV_LINEN,hvRewash:HV_REWASH_DATA,hvCols:HV_REWASH_COLS,
@@ -1099,7 +1100,7 @@ textarea{resize:vertical;min-height:68px;}
         <div class="card">
           <div class="card-body" style="padding:10px 16px;">
             <div class="filter-row">
-              <input id="cnpthu-q" oninput="renderCongNoPthuSheet()" placeholder="Khách / nội dung…" style="font-size:12px;padding:6px 10px;min-width:170px;">
+              <input id="cnpthu-q" oninput="debSearch('cnpthu',renderCongNoPthuSheet)" placeholder="Khách / nội dung…" style="font-size:12px;padding:6px 10px;min-width:170px;">
               <span style="font-size:12px;color:var(--text-muted);">Từ</span>
               <input type="date" id="cnpthu-from" onchange="renderCongNoPthuSheet()" style="width:140px;font-size:12px;padding:6px 10px;" title="Từ ngày">
               <span style="font-size:12px;color:var(--text-muted);">→</span>
@@ -1351,7 +1352,7 @@ textarea{resize:vertical;min-height:68px;}
       <div class="card">
         <div class="card-body" style="padding:10px 16px;">
           <div class="filter-row">
-            <input type="text" id="ncc-search" placeholder="🔍 Tìm tên NCC..." style="width:220px;" oninput="renderNccTable()">
+            <input type="text" id="ncc-search" placeholder="🔍 Tìm tên NCC..." style="width:220px;" oninput="debSearch('ncc',renderNccTable)">
             <select id="ncc-f-dm" onchange="renderNccTable()" style="font-size:12px;padding:6px 10px;">
               <option value="">Tất cả danh mục</option>
             </select>
@@ -1393,7 +1394,7 @@ textarea{resize:vertical;min-height:68px;}
       <div class="card">
         <div class="card-body" style="padding:10px 16px;">
           <div class="filter-row">
-            <input type="text" id="catalog-search" placeholder="🔍 Tìm tên hàng, mã hàng..." style="width:260px;" oninput="renderCatalog()">
+            <input type="text" id="catalog-search" placeholder="🔍 Tìm tên hàng, mã hàng..." style="width:260px;" oninput="debSearch('catalog',renderCatalog)">
             <select id="catalog-f-ncc" onchange="renderCatalog()"><option value="">Tất cả NCC</option></select>
             <span id="catalog-count" style="font-size:12px;color:var(--text-muted);margin-left:auto;"></span>
           </div>
@@ -1543,7 +1544,7 @@ textarea{resize:vertical;min-height:68px;}
 
       <!-- Filter row (dùng chung cho các tab kho BP) -->
       <div id="kho-filter-row" class="card" style="padding:12px 16px;margin-bottom:14px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
-        <input type="text" id="kho-search" placeholder="🔍 Tìm mã / tên hàng..." style="width:220px;font-size:12px;padding:7px 12px;border:1.5px solid var(--border);border-radius:8px;" oninput="renderKhoTab()">
+        <input type="text" id="kho-search" placeholder="🔍 Tìm mã / tên hàng..." style="width:220px;font-size:12px;padding:7px 12px;border:1.5px solid var(--border);border-radius:8px;" oninput="debSearch('kho',renderKhoTab)">
         <select id="kho-f-vitri" onchange="renderKhoTab()" style="font-size:12px;padding:7px 12px;border:1.5px solid var(--border);border-radius:8px;">
           <option value="">Tất cả vị trí</option>
           <option>VP</option><option>Kho lầu 2</option><option>Kho lầu 4</option>
@@ -9573,7 +9574,10 @@ async function cloudPullAll(){
       const s={}; cloudRows.forEach(r=>{ s[r.id]=JSON.stringify(r.obj); }); lastSnapshot[name]=s;
     });
     _lsSaveRaw();
-    Object.keys(COLLECTIONS).forEach(name=>{ try{ COLLECTIONS[name].render(); }catch(e){} });
+    // Chỉ render nhóm của tab đang mở (tránh dựng lại mọi bảng nặng); tab khác sẽ render khi chuyển sang.
+    Object.keys(COLLECTIONS).forEach(name=>{ if(_shouldRenderColl(name)){ try{ COLLECTIONS[name].render(); }catch(e){} } });
+    try{ updateDashboardKPI(); }catch(e){}
+    if(_pageActive('dashboard')){ try{ renderDashDx(); }catch(e){} }
     cloudReady=true; setSyncStatus('ok');
     return true;
   }catch(e){
@@ -9655,10 +9659,22 @@ function _notifySyncErr(force){
 
 // ----- REALTIME: áp thay đổi từ máy khác vào bộ nhớ, cập nhật snapshot để không đẩy dội lại -----
 let _renderQ=new Set(), _renderTimer=null;
-function _scheduleRender(name){ _renderQ.add(name); clearTimeout(_renderTimer); _renderTimer=setTimeout(()=>{ const q=[..._renderQ]; _renderQ.clear(); q.forEach(n=>{ try{ COLLECTIONS[n].render(); }catch(e){} }); try{ updateDashboardKPI(); }catch(e){} }, 300); }
+// Chỉ dựng lại DOM của tab ĐANG mở khi có thay đổi nền (realtime/pull) — bảng ẩn để dành, render lại khi chuyển tab.
+function _pageActive(pageId){ const a=document.querySelector('.page.active'); return !!a && a.id==='page-'+pageId; }
+function _shouldRenderColl(name){ const tab=COLLECTION_TAB[name]; return !tab || _pageActive(tab); }
+// Debounce ô tìm kiếm: chờ ngừng gõ ~200ms mới dựng lại bảng (khỏi rebuild theo từng phím → gõ mượt).
+const _searchDebT={};
+function debSearch(key,fn){ clearTimeout(_searchDebT[key]); _searchDebT[key]=setTimeout(fn,200); }
+function _scheduleRender(name){ _renderQ.add(name); clearTimeout(_renderTimer); _renderTimer=setTimeout(()=>{
+  const q=[..._renderQ]; _renderQ.clear();
+  q.forEach(n=>{ if(_shouldRenderColl(n)){ try{ COLLECTIONS[n].render(); }catch(e){} } });
+  try{ updateDashboardKPI(); }catch(e){}                                  // Dashboard KPI rẻ → luôn cập nhật
+  if(_pageActive('thu-chi')){ try{ syncThuChiSummary(); }catch(e){} }     // trang tổng Thu-Chi vẫn sống khi thu/chi đổi
+  if(_pageActive('dashboard')){ try{ renderDashDx(); }catch(e){} }        // bảng đề xuất trên Dashboard
+}, 300); }
 // Gộp nhiều sự kiện realtime liên tiếp thành 1 lần ghi localStorage (đỡ serialize toàn bộ dữ liệu mỗi bản ghi).
 let _lsSaveT=null;
-function _lsSaveRawDebounced(){ clearTimeout(_lsSaveT); _lsSaveT=setTimeout(()=>{ try{ _lsSaveRaw(); }catch(e){} }, 500); }
+function _lsSaveRawDebounced(){ clearTimeout(_lsSaveT); _lsSaveT=setTimeout(()=>{ try{ _lsSaveRaw(true); }catch(e){} }, 500); }
 function startRealtime(){
   if(!sb) return;
   sb.channel('records-sync')
