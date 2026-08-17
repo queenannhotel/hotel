@@ -4242,9 +4242,10 @@ function confirmChiSplit(){
 
 // ==================== QUỸ TIỀN MẶT ====================
 // Số dư tiền mặt THỰC TẾ (luỹ kế): tổng Thu TM (VND) − tổng Chi TM (MỌI trạng thái) — khớp Số dư TM bên Sổ thu chi.
-function cashActual(){
-  const thuTM=THU_DATA.flatMap(r=>thuLines(r)).filter(l=>l.pttt==='TM'&&(!l.currency||l.currency==='VND')).reduce((s,l)=>s+(parseFloat(l.sotien)||0),0);
-  const chiTM=CHI_DATA.filter(r=>r.pttt==='TM').reduce((s,r)=>s+chiAmt(r),0);   // mọi trạng thái (kể cả đang lên đơn/đang giao)
+// asOf (YYYY-MM-DD): chỉ tính Thu/Chi có ngày ≤ asOf → số dư ĐÚNG tại một thời điểm (không cộng dồn tiền phát sinh sau).
+function cashActual(asOf){
+  const thuTM=THU_DATA.filter(r=>!asOf||vnToIso(r.ngay)<=asOf).flatMap(r=>thuLines(r)).filter(l=>l.pttt==='TM'&&(!l.currency||l.currency==='VND')).reduce((s,l)=>s+(parseFloat(l.sotien)||0),0);
+  const chiTM=CHI_DATA.filter(r=>(!asOf||vnToIso(r.ngay)<=asOf)&&r.pttt==='TM').reduce((s,r)=>s+chiAmt(r),0);   // mọi trạng thái (kể cả đang lên đơn/đang giao)
   return thuTM-chiTM;
 }
 function quySumKind(...kinds){ return QUY_TX.filter(t=>kinds.includes(t.kind)).reduce((s,t)=>s+(parseFloat(t.sotien)||0),0); }
@@ -4275,13 +4276,14 @@ function renderQuyKt(){
   setT('qtm-kt-nop', fmt(quySumKind('nop')));
   setT('qtm-kt-ung', fmt(quySumKind('ung')));
   const from=document.getElementById('qtm-kt-from')?.value||'', to=document.getElementById('qtm-kt-to')?.value||'', loai=document.getElementById('qtm-kt-loai')?.value||'';
-  // Số dư sau MỖI giao dịch (theo thứ tự thời gian) — tính trên TOÀN BỘ nộp/ứng nên đúng cả khi đang lọc.
-  // Cộng dồn từ cashActual(): nộp trừ, ứng cộng → dòng cuối = quyKtBalance() (khớp số dư ở header).
+  // Số dư quỹ ĐÚNG TẠI THỜI ĐIỂM mỗi giao dịch = tiền mặt thực tế TÍNH ĐẾN NGÀY đó − nộp + ứng (cộng dồn tới giao dịch đó).
+  // Dùng cashActual(ngày) để KHÔNG cộng dồn tiền Thu/Chi phát sinh ở các ngày SAU vào số dư của giao dịch cũ.
   const bal={};
-  { let cum=cashActual();
+  { let nop=0, ung=0;
     QUY_TX.filter(t=>['nop','ung'].includes(t.kind))
       .slice().sort((a,b)=>vnToIso(a.ngay).localeCompare(vnToIso(b.ngay))||String(a.id).localeCompare(String(b.id)))
-      .forEach(t=>{ cum+=(t.kind==='ung'?1:-1)*(parseFloat(t.sotien)||0); bal[t.id]=cum; }); }
+      .forEach(t=>{ if(t.kind==='nop') nop+=(parseFloat(t.sotien)||0); else ung+=(parseFloat(t.sotien)||0);
+        bal[t.id]=cashActual(vnToIso(t.ngay)) - nop + ung; }); }
   let rows=QUY_TX.filter(t=>['nop','ung'].includes(t.kind)).filter(t=>{const iso=vnToIso(t.ngay);return (!from||iso>=from)&&(!to||iso<=to);});
   if(loai) rows=rows.filter(t=>t.kind===loai);
   rows.sort((a,b)=>vnToIso(b.ngay).localeCompare(vnToIso(a.ngay)));
