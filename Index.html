@@ -2221,6 +2221,29 @@ textarea{resize:vertical;min-height:68px;}
   </div>
 </div>
 
+<!-- ===== MODAL CHUYỂN VỊ TRÍ (cùng kho) ===== -->
+<div class="modal-overlay" id="modal-kho-vitri-move">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title">📍 Chuyển vị trí</span><button class="close-btn" onclick="closeModal('modal-kho-vitri-move')">✕</button></div>
+    <div id="kvm-info" style="background:var(--cream);border-radius:8px;padding:10px 13px;margin-bottom:14px;font-size:13px;"></div>
+    <div class="form-row">
+      <div class="form-group"><label>Vị trí đến <span style="color:var(--red)">*</span></label>
+        <select id="kvm-vitri"></select>
+      </div>
+      <div class="form-group"><label>Số lượng <span style="color:var(--red)">*</span></label>
+        <input type="number" id="kvm-sl" min="1" value="1" placeholder="SL cần chuyển">
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:12px;"><label>Lý do (tuỳ chọn)</label>
+      <textarea id="kvm-lydo" placeholder="VD: dời hàng lên kho lầu 8..." style="min-height:60px;"></textarea>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
+      <button class="btn btn-ghost" onclick="closeModal('modal-kho-vitri-move')">Huỷ</button>
+      <button class="btn btn-gold" onclick="confirmKhoVitriMove()">✅ Xác nhận chuyển</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===== MODAL LỊCH SỬ ===== -->
 <div class="modal-overlay" id="modal-kho-history">
   <div class="modal modal-lg">
@@ -8102,7 +8125,8 @@ function _khoDeptRow(it, isChild){
     <td style="text-align:center;font-weight:700;font-size:15px;color:${cc};">${s.con}</td>
     <td style="font-size:11px;color:var(--text-muted);">${it.ghichu||'—'}</td>
     <td><div style="display:flex;gap:3px;">
-      <button class="btn btn-gold btn-sm" onclick="openTransfer('${it.id}')" title="Transfer">🔄</button>
+      <button class="btn btn-ghost btn-sm" onclick="openKhoVitriMove('${it.id}')" title="Chuyển vị trí (cùng kho)">📍</button>
+      <button class="btn btn-gold btn-sm" onclick="openTransfer('${it.id}')" title="Chuyển sang kho khác">🔄</button>
       <button class="btn btn-ghost btn-sm" onclick="openKhoHistory('${it.id}')" title="Lịch sử">📋</button>
       <button class="btn btn-ghost btn-sm" onclick="editKhoItem('${it.id}')">✏</button>
       ${currentUser?.role==='giamdoc'?`<button class="btn btn-danger btn-sm" onclick="deleteKhoItem('${it.id}')" title="Xoá mặt hàng (chỉ Giám đốc)">🗑</button>`:''}
@@ -8264,6 +8288,44 @@ function confirmTransfer(){
   }
   closeModal('modal-kho-transfer');
   showToast(`✅ Transfer ${sl} ${it.dvt} "${it.ten}" → ${KHO_BP_LABELS[dest]}`,2500,'success');
+  renderKhoTab(); syncNow();
+}
+
+// ===== Chuyển hàng giữa 2 VỊ TRÍ trong CÙNG kho (dời số lượng, không đổi tổng) =====
+let vitriMovingItemId=null;
+function openKhoVitriMove(itemId){
+  vitriMovingItemId=itemId;
+  const it=KHO_DATA.find(x=>x.id===itemId); if(!it) return;
+  const con=calcKyStats(it).con;
+  document.getElementById('kvm-info').innerHTML=`<div style="font-weight:600;">${esc(it.ten)} <span style="color:var(--text-muted);font-size:11px;">(${esc(it.ma||'')})</span></div><div style="font-size:12px;margin-top:4px;">Kho: <strong>${KHO_BP_LABELS[it.bophan]||it.bophan}</strong> | Vị trí hiện tại: <strong>${esc(it.vitri||'—')}</strong> | Còn: <strong style="color:var(--green);">${con} ${esc(it.dvt)}</strong></div>`;
+  const others=KHO_VITRI_LIST.filter(v=>khoVi(v)!==khoVi(it.vitri));
+  const sel=document.getElementById('kvm-vitri');
+  sel.innerHTML=others.map(v=>`<option>${v}</option>`).join('');
+  if(others.length) sel.value=others[0];
+  const slEl=document.getElementById('kvm-sl'); slEl.value='1'; slEl.max=con;
+  document.getElementById('kvm-lydo').value='';
+  openModal('modal-kho-vitri-move');
+}
+function confirmKhoVitriMove(){
+  const src=KHO_DATA.find(x=>x.id===vitriMovingItemId); if(!src) return;
+  const sl=parseInt(document.getElementById('kvm-sl').value)||0;
+  const dest=document.getElementById('kvm-vitri').value||'';
+  const lydo=document.getElementById('kvm-lydo').value.trim();
+  const con=calcKyStats(src).con;
+  if(!dest || khoVi(dest)===khoVi(src.vitri)){ showToast('Chọn vị trí đến khác vị trí hiện tại!',2600,'error'); return; }
+  if(sl<=0||sl>con){ showToast(`Tối đa còn ${con} ${src.dvt}`,2600,'error'); return; }
+  const ngay=new Date().toLocaleDateString('vi-VN');
+  const nguoi=currentUser?.fullname||'Kế toán';
+  const note='Chuyển vị trí: '+(src.vitri||'—')+' → '+dest+(lydo?' ('+lydo+')':'');
+  if(!Array.isArray(src.lichSu)) src.lichSu=[];
+  src.lichSu.push({ngay,loai:'transfer-out',sl,tu:src.bophan,den:src.bophan,lydo:note,nguoi,vitri:src.vitri});
+  // Đích: CÙNG bộ phận, khác vị trí — có sẵn thì cộng, chưa có thì tạo dòng mới
+  let d=KHO_DATA.find(x=>x.bophan===src.bophan && khoNorm(x.ten)===khoNorm(src.ten) && khoDvt(x.dvt)===khoDvt(src.dvt) && khoVi(x.vitri)===khoVi(dest));
+  if(d){ if(!Array.isArray(d.lichSu)) d.lichSu=[]; d.lichSu.push({ngay,loai:'transfer-in',sl,tu:src.bophan,den:src.bophan,lydo:note,nguoi,vitri:dest}); }
+  else{ KHO_DATA.push({id:'KH'+Date.now()+Math.floor(Math.random()*1000),ma:src.ma,ten:src.ten,dvt:src.dvt,bophan:src.bophan,vitri:dest,ton_dau:0,img:src.img,ghichu:src.ghichu,
+    lichSu:[{ngay,loai:'transfer-in',sl,tu:src.bophan,den:src.bophan,lydo:note,nguoi,vitri:dest}]}); }
+  closeModal('modal-kho-vitri-move');
+  showToast(`✅ Đã chuyển ${sl} ${src.dvt} "${src.ten}": ${src.vitri||'—'} → ${dest}`,2600,'success');
   renderKhoTab(); syncNow();
 }
 
