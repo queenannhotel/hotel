@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.18';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.18b';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -1067,10 +1067,8 @@ textarea{resize:vertical;min-height:68px;}
             <table id="tbl-pt"><thead><tr><th>Danh mục</th><th style="text-align:right;">Tổng phải thu (chưa TT)</th></tr></thead>
             <tbody id="tbl-pt-body"></tbody></table></div>
           <div class="card"><div class="card-header" style="display:flex;justify-content:space-between;align-items:center;"><div class="card-title">⬆ Phải Trả (NCC)</div><strong class="amount-neg" id="cn-ptr-total" style="font-size:15px;">—</strong></div>
-            <div class="table-wrap">
             <table id="tbl-ptr"><thead><tr><th>Nhà cung cấp</th><th style="text-align:right;">Tổng chưa TT</th></tr></thead>
             <tbody id="tbl-ptr-body"></tbody></table></div>
-          </div>
         </div>
       </div>
       <div id="cn-panel-ptr" style="display:none;">
