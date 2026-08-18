@@ -7963,7 +7963,9 @@ let KHO_DATA = [];
 
 function calcKyStats(item){
   const inKy=(item.lichSu||[]).filter(h=>!(h.loai==='nhap'&&(h.lydo||'').includes('đầu kỳ')));
-  const nhap =inKy.filter(h=>h.loai==='nhap'||h.loai==='transfer-in').reduce((s,h)=>s+h.sl,0);
+  // Chuyển vị trí (cùng kho): 'chuyen-den' cộng vào NHẬP, 'chuyen-di' TRỪ thẳng NHẬP (không đi qua cột Xuất).
+  const nhap =inKy.filter(h=>h.loai==='nhap'||h.loai==='transfer-in'||h.loai==='chuyen-den').reduce((s,h)=>s+h.sl,0)
+             -inKy.filter(h=>h.loai==='chuyen-di').reduce((s,h)=>s+h.sl,0);
   const xuat =inKy.filter(h=>h.loai==='xuat'||h.loai==='transfer-out').reduce((s,h)=>s+h.sl,0);
   const huy  =inKy.filter(h=>h.loai==='huy').reduce((s,h)=>s+h.sl,0);
   return {nhap,xuat,huy,con:item.ton_dau+nhap-xuat-huy};
@@ -8202,14 +8204,14 @@ function openKhoHistoryByMa(maOrTen){
   let con=0; rows.forEach(it=>con+=calcKyStats(it).con);
   document.getElementById('kho-hist-title').textContent=`📋 Lịch Sử (gộp mọi bộ phận): ${ten} (${ma})`;
   document.getElementById('kho-hist-summary').innerHTML=rows.map(it=>{const s=calcKyStats(it);return `<div style="padding:8px 14px;background:var(--cream);border-radius:8px;font-size:13px;"><div style="font-size:10px;color:var(--text-muted);">${KHO_BP_LABELS[it.bophan]||it.bophan}</div><div style="font-weight:700;color:var(--green);">${s.con} ${dvt}</div></div>`;}).join('')+`<div style="padding:8px 14px;background:var(--green-bg);border-radius:8px;font-size:13px;"><div style="font-size:10px;color:var(--text-muted);">TỔNG CÒN</div><div style="font-weight:700;color:var(--green);">${con} ${dvt}</div></div>`;
-  const loaiMap={nhap:'Nhập vào',xuat:'Xuất ra','transfer-in':'Nhận Transfer','transfer-out':'Transfer đi',huy:'Huỷ'};
+  const loaiMap={nhap:'Nhập vào',xuat:'Xuất ra','transfer-in':'Nhận Transfer','transfer-out':'Transfer đi',huy:'Huỷ','chuyen-den':'Chuyển đến (vị trí)','chuyen-di':'Chuyển đi (vị trí)'};
   const all=[];
   rows.forEach(it=>(it.lichSu||[]).forEach(h=>all.push({...h,bophan:it.bophan,_vitri:it.vitri})));
   const parseD=s=>{const p=(s||'').split('/');return new Date(+p[2]||0,(+p[1]||1)-1,+p[0]||1).getTime();};
   all.sort((a,b)=>parseD(b.ngay)-parseD(a.ngay));
   document.getElementById('kho-hist-body').innerHTML=all.map(h=>{
-    const sc=h.loai==='nhap'||h.loai==='transfer-in'?'var(--green)':h.loai==='huy'?'var(--red)':'var(--yellow)';
-    const sg=h.loai==='nhap'||h.loai==='transfer-in'?'+':'-';
+    const sc=h.loai==='nhap'||h.loai==='transfer-in'||h.loai==='chuyen-den'?'var(--green)':h.loai==='huy'?'var(--red)':'var(--yellow)';
+    const sg=h.loai==='nhap'||h.loai==='transfer-in'||h.loai==='chuyen-den'?'+':'-';
     const route=`${h.tu?(KHO_BP_LABELS[h.tu]||h.tu):''}${h.den?' → '+(KHO_BP_LABELS[h.den]||h.den):''}`;
     return `<tr>
       <td style="font-size:12px;">${h.ngay}</td>
@@ -8318,12 +8320,13 @@ function confirmKhoVitriMove(){
   const nguoi=currentUser?.fullname||'Kế toán';
   const note='Chuyển vị trí: '+(src.vitri||'—')+' → '+dest+(lydo?' ('+lydo+')':'');
   if(!Array.isArray(src.lichSu)) src.lichSu=[];
-  src.lichSu.push({ngay,loai:'transfer-out',sl,tu:src.bophan,den:src.bophan,lydo:note,nguoi,vitri:src.vitri});
+  // Trừ THẲNG vào Nhập của vị trí nguồn (chuyen-di), cộng vào Nhập vị trí đích (chuyen-den) — không dùng cột Xuất.
+  src.lichSu.push({ngay,loai:'chuyen-di',sl,lydo:note,nguoi,vitri:src.vitri});
   // Đích: CÙNG bộ phận, khác vị trí — có sẵn thì cộng, chưa có thì tạo dòng mới
   let d=KHO_DATA.find(x=>x.bophan===src.bophan && khoNorm(x.ten)===khoNorm(src.ten) && khoDvt(x.dvt)===khoDvt(src.dvt) && khoVi(x.vitri)===khoVi(dest));
-  if(d){ if(!Array.isArray(d.lichSu)) d.lichSu=[]; d.lichSu.push({ngay,loai:'transfer-in',sl,tu:src.bophan,den:src.bophan,lydo:note,nguoi,vitri:dest}); }
+  if(d){ if(!Array.isArray(d.lichSu)) d.lichSu=[]; d.lichSu.push({ngay,loai:'chuyen-den',sl,lydo:note,nguoi,vitri:dest}); }
   else{ KHO_DATA.push({id:'KH'+Date.now()+Math.floor(Math.random()*1000),ma:src.ma,ten:src.ten,dvt:src.dvt,bophan:src.bophan,vitri:dest,ton_dau:0,img:src.img,ghichu:src.ghichu,
-    lichSu:[{ngay,loai:'transfer-in',sl,tu:src.bophan,den:src.bophan,lydo:note,nguoi,vitri:dest}]}); }
+    lichSu:[{ngay,loai:'chuyen-den',sl,lydo:note,nguoi,vitri:dest}]}); }
   closeModal('modal-kho-vitri-move');
   showToast(`✅ Đã chuyển ${sl} ${src.dvt} "${src.ten}": ${src.vitri||'—'} → ${dest}`,2600,'success');
   renderKhoTab(); syncNow();
@@ -8337,10 +8340,10 @@ function openKhoHistory(itemId){
     <div style="padding:8px 14px;background:var(--green-bg);border-radius:8px;font-size:13px;"><div style="font-size:10px;color:var(--text-muted);">Còn lại</div><div style="font-weight:700;color:var(--green);">${s.con} ${it.dvt}</div></div>
     <div style="padding:8px 14px;background:var(--cream);border-radius:8px;font-size:13px;"><div style="font-size:10px;color:var(--text-muted);">Tồn đầu kỳ</div><div style="font-weight:600;">${it.ton_dau}</div></div>
     <div style="padding:8px 14px;background:var(--red-bg);border-radius:8px;font-size:13px;"><div style="font-size:10px;color:var(--text-muted);">Đã xuất + huỷ</div><div style="font-weight:600;color:var(--red);">${s.xuat+s.huy}</div></div>`;
-  const loaiMap={nhap:'Nhập vào',xuat:'Xuất ra','transfer-in':'Nhận Transfer','transfer-out':'Transfer đi',huy:'Huỷ'};
+  const loaiMap={nhap:'Nhập vào',xuat:'Xuất ra','transfer-in':'Nhận Transfer','transfer-out':'Transfer đi',huy:'Huỷ','chuyen-den':'Chuyển đến (vị trí)','chuyen-di':'Chuyển đi (vị trí)'};
   document.getElementById('kho-hist-body').innerHTML=(it.lichSu||[]).slice().reverse().map(h=>{
-    const sc=h.loai==='nhap'||h.loai==='transfer-in'?'var(--green)':h.loai==='huy'?'var(--red)':'var(--yellow)';
-    const sg=h.loai==='nhap'||h.loai==='transfer-in'?'+':'-';
+    const sc=h.loai==='nhap'||h.loai==='transfer-in'||h.loai==='chuyen-den'?'var(--green)':h.loai==='huy'?'var(--red)':'var(--yellow)';
+    const sg=h.loai==='nhap'||h.loai==='transfer-in'||h.loai==='chuyen-den'?'+':'-';
     return `<tr>
       <td style="font-size:12px;">${h.ngay}</td>
       <td><span class="badge badge-navy" style="font-size:10px;">${loaiMap[h.loai]||h.loai}</span></td>
