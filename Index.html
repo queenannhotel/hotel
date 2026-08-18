@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.17';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.18';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -7958,6 +7958,18 @@ function applyKhoVitriDefaults(){
   (KHO_DATA||[]).forEach(it=>{ const d=KHO_VITRI_DEFAULT[it.bophan]; if(d && it.vitri!==d){ it.vitri=d; ch=true; } });
   return ch;
 }
+// Migration 1 lần: các "chuyển vị trí" làm bằng bản cũ ghi transfer-out/in (rơi vào cột Xuất) → đổi sang
+// chuyen-di/chuyen-den (trừ thẳng Nhập). Nhận diện: cùng bộ phận (tu===den) + lý do bắt đầu "Chuyển vị trí".
+// Transfer liên kho thật (tu≠den, lý do "Transfer sang…") KHÔNG khớp nên giữ nguyên. con không đổi.
+function migrateKhoVitriMoves(){
+  let ch=0;
+  (KHO_DATA||[]).forEach(it=>(it.lichSu||[]).forEach(h=>{
+    if((h.loai==='transfer-out'||h.loai==='transfer-in') && h.tu===h.den && typeof h.lydo==='string' && h.lydo.startsWith('Chuyển vị trí')){
+      h.loai = h.loai==='transfer-out' ? 'chuyen-di' : 'chuyen-den'; ch++;
+    }
+  }));
+  return ch;
+}
 
 let KHO_DATA = [];
 
@@ -9796,6 +9808,13 @@ async function initCloud(){
     if((currentUser?.role==='giamdoc'||currentUser?.role==='ketoan') && !localStorage.getItem('qah_vitri_default_v1')){
       if(applyKhoVitriDefaults()){ try{renderKhoTab();}catch(e){} syncNow(); }
       localStorage.setItem('qah_vitri_default_v1','1');
+    }
+  }catch(e){}
+  // Sửa hồi tố các "chuyển vị trí" cũ (ghi nhầm vào cột Xuất) → trừ thẳng Nhập. Chạy 1 lần/thiết bị.
+  try{
+    if((currentUser?.role==='giamdoc'||currentUser?.role==='ketoan') && !localStorage.getItem('qah_vitri_move_migrate_v1')){
+      if(migrateKhoVitriMoves()>0){ try{renderKhoTab();}catch(e){} syncNow(); }
+      localStorage.setItem('qah_vitri_move_migrate_v1','1');
     }
   }catch(e){}
   // Nén ảnh cũ 1 lần/thiết bị (giảm tải bộ nhớ + đồng bộ). Chỉ vai trò ghi được 'kho'.
