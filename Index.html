@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.18e';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.18f';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -5657,8 +5657,8 @@ function renderWorksheet(){
       <td class="room-no" style="position:sticky;left:0;z-index:2;background:${noBg}!important;">${r}</td>
       <td class="room-status ${sClass[rs.status]||''}">${rs.status}</td>
       <td style="font-size:10px;white-space:nowrap;">${wsFmtArrDep(rs.arrDep)}</td>
-      <td><input type="time" class="ws-input" style="width:62px;padding:0 2px;" value="${WS_DATA[r].tIn||''}" onchange="wsSetTime('${r}','tIn',this.value)"></td>
-      <td><input type="time" class="ws-input" style="width:62px;padding:0 2px;" value="${WS_DATA[r].tOut||''}" onchange="wsSetTime('${r}','tOut',this.value)"></td>
+      <td style="white-space:nowrap;"><input type="time" class="ws-input" style="width:56px;padding:0 2px;" value="${WS_DATA[r].tIn||''}" onchange="wsSetTime('${r}','tIn',this.value)">${WS_DATA[r].tIn?`<span onclick="wsClearTime('${r}','tIn')" title="Xoá giờ IN" style="cursor:pointer;color:var(--red);font-size:11px;margin-left:1px;">✕</span>`:''}</td>
+      <td style="white-space:nowrap;"><input type="time" class="ws-input" style="width:56px;padding:0 2px;" value="${WS_DATA[r].tOut||''}" onchange="wsSetTime('${r}','tOut',this.value)">${WS_DATA[r].tOut?`<span onclick="wsClearTime('${r}','tOut')" title="Xoá giờ OUT" style="cursor:pointer;color:var(--red);font-size:11px;margin-left:1px;">✕</span>`:''}</td>
       <td><select class="ws-task-sel" onchange="wsSetStatus('${r}',this.value)" style="background:${selBg};">
         <option value="" ${st===''?'selected':''}>–</option>
         <option value="dang-lam" ${st==='dang-lam'?'selected':''}>🟡 Đang làm</option>
@@ -5729,10 +5729,12 @@ function wsSetStatus(r,val){
   // Tự ghi giờ IN khi chuyển "Đang làm", giờ OUT khi chuyển "Done" (chỉ điền nếu đang trống — vẫn cho sửa tay).
   if(val==='dang-lam' && !WS_DATA[r].tIn) WS_DATA[r].tIn=wsNowHM();
   if(val==='done'){ if(!WS_DATA[r].tIn) WS_DATA[r].tIn=wsNowHM(); if(!WS_DATA[r].tOut) WS_DATA[r].tOut=wsNowHM(); }
+  if(val===''){ WS_DATA[r].tIn=''; WS_DATA[r].tOut=''; }   // chọn "–" = reset: xoá luôn giờ IN/OUT
   if(currentBpTab==='setup-xe')renderSetupXe();
   try{ renderWorksheet(); }catch(e){}   // cập nhật màu ô phòng + giờ IN/OUT
 }
 function wsSetTime(r,fld,val){ syncWsData(); if(WS_DATA[r]) WS_DATA[r][fld]=val||''; }
+function wsClearTime(r,fld){ syncWsData(); if(WS_DATA[r]) WS_DATA[r][fld]=''; try{ renderWorksheet(); }catch(e){} try{ syncNow(); }catch(e){} }
 // Hiển thị Arr/Dep: ARR - ngày | ngày - DEP | ngày → ngày (nhận cả định dạng cũ "ARR x"/"DEP x").
 function wsFmtArrDep(s){
   s=(s||'').trim(); if(!s) return '—';
