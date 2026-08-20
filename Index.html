@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.18l';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.18m';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -72,6 +72,16 @@ const TAB_COLLECTIONS = {
   'nhan-su': ['nsLuong','bhxh','tncn'],
   'buong-phong': ['wsData','roomStatus','amData','mbData','hvLinen','hvRewash','hvCols','yc','ycDeleted','sx','hkStaff','mbHistory','hvNono'],
 };
+// Xóa data ở Buồng phòng tách theo TỪNG SHEET đang mở (currentBpTab)
+const BP_SHEET_COLLECTIONS = {
+  worksheet:['wsData','roomStatus'],
+  minibar:['mbData','mbHistory'],
+  amenity:['amData'],
+  'hang-vai':['hvLinen','hvRewash','hvCols','hvNono'],
+  'setup-xe':['sx'],
+  'yeu-cau':['yc','ycDeleted'],
+};
+const BP_SHEET_LABELS = { worksheet:'Worksheet', minibar:'Minibar', amenity:'Amenity', 'hang-vai':'Hàng Vải', 'setup-xe':'Setup Xe', 'yeu-cau':'Khách Yêu Cầu' };
 
 // Chỉ xoá dữ liệu của TAB đang mở (không xoá toàn bộ như clearLocalData).
 async function clearTabData(){
@@ -81,8 +91,15 @@ async function clearTabData(){
   }
   const activePage = document.querySelector('.page.active');
   const pageId = activePage ? activePage.id.replace(/^page-/, '') : '';
-  const keys = TAB_COLLECTIONS[pageId];
-  const tabName = PAGE_TITLES[pageId] || 'này';
+  // Buồng phòng: xoá TÁCH theo từng sheet đang mở (currentBpTab) thay vì xoá cả tab.
+  let keys, tabName;
+  if(pageId==='buong-phong'){
+    keys = BP_SHEET_COLLECTIONS[currentBpTab];
+    tabName = 'Sheet ' + (BP_SHEET_LABELS[currentBpTab] || currentBpTab);
+  }else{
+    keys = TAB_COLLECTIONS[pageId];
+    tabName = PAGE_TITLES[pageId] || 'này';
+  }
   if(!keys || !keys.length){
     showToast('ℹ️ Tab "'+tabName+'" không có dữ liệu riêng để xoá.', 3000, 'info');
     return;
