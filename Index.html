@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.18j';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.18k';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -581,6 +581,8 @@ textarea{resize:vertical;min-height:68px;}
 .ws-status-vc{color:var(--green);} .ws-status-vo{color:#3A5FA0;} .ws-status-oc{color:var(--yellow);} .ws-status-co{color:var(--red);}
 .ws-status-ooo{color:#888;text-decoration:line-through;} .ws-status-dnd{color:#9B59B6;font-weight:700;} .ws-status-nsr{color:#E67E22;}
 .ws-input{width:34px;height:24px;border:1px solid var(--border);border-radius:4px;text-align:center;font-size:11px;font-family:'Inter',sans-serif;padding:0;}
+/* Ẩn icon đồng hồ trên ô giờ IN/OUT (chỉ Chrome desktop hiện) để không che mất giờ — cho giống iPad */
+input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-webkit-appearance:none;}
 .ws-input:focus{border-color:var(--gold);outline:none;}
 .ws-done{background:var(--green)!important;} .ws-check-cell{font-size:14px;cursor:pointer;}
 /* Status dropdown */
@@ -5882,6 +5884,7 @@ function handleSmileImport(input){
     ROOM_STATUS=rs;
     showToast(`✅ Import ${n} phòng từ Smile!\nNgày: ${dk.split('-').reverse().join('/')}`,2500,'success');
     renderWorksheet();
+    try{ syncNow(); }catch(e){}   // đẩy roomStatus lên cloud ngay → máy khác (iPhone) nhận được
   }
 
   if(isXlsx){
