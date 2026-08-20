@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.18c';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.18d';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -5501,7 +5501,7 @@ function wsDateKey(){
   return new Date().toISOString().slice(0,10);
 }
 function wsNewRoomData(){
-  return {taskStatus:'chua-lam',ga:{K:{do:0,sach:0},Q:{do:0,sach:0},T:{do:0,sach:0}},boc:{K:{do:0,sach:0},Q:{do:0,sach:0},T:{do:0,sach:0}},khan:{tay:{do:0,sach:0},tam:{do:0,sach:0},tham:{do:0,sach:0}},kimono:0,ao_goi:0,suoi:0,tra:0,cafe:0,duong:0,ban_chai:0,luoc:0,chup_toc:0,tam_bong:0,dao_cao:0,giay_vs:0};
+  return {taskStatus:'',tIn:'',tOut:'',ga:{K:{do:0,sach:0},Q:{do:0,sach:0},T:{do:0,sach:0}},boc:{K:{do:0,sach:0},Q:{do:0,sach:0},T:{do:0,sach:0}},khan:{tay:{do:0,sach:0},tam:{do:0,sach:0},tham:{do:0,sach:0}},kimono:0,ao_goi:0,suoi:0,tra:0,cafe:0,duong:0,ban_chai:0,luoc:0,chup_toc:0,tam_bong:0,dao_cao:0,giay_vs:0};
 }
 function getWsDataForDate(dateKey){
   if(!WS_DATA_BY_DATE[dateKey]){
@@ -5611,7 +5611,9 @@ function renderWorksheet(){
       <th rowspan="3" class="th-room-no" style="min-width:52px;">Phòng</th>
       <th rowspan="3" style="background:var(--navy);">Status</th>
       <th rowspan="3" style="background:var(--navy);">Arr/Dep</th>
-      <th rowspan="3" style="background:var(--navy);min-width:60px;">Tình<br>trạng</th>
+      <th rowspan="3" style="background:var(--navy);min-width:48px;">IN</th>
+      <th rowspan="3" style="background:var(--navy);min-width:48px;">OUT</th>
+      <th rowspan="3" style="background:var(--navy);min-width:74px;">Tình<br>trạng</th>
       <th colspan="6" class="group-header" style="border-bottom:none;">Ga trải giường</th>
       <th colspan="6" class="group-header" style="border-bottom:none;">Bọc mền</th>
       <th colspan="6" class="group-header" style="border-bottom:none;">Khăn</th>
@@ -5644,14 +5646,20 @@ function renderWorksheet(){
   const inpSc=(r,key,bg,opts)=>`<td style="background:${bg||'#EEF3FB'};">${sel(WS_DATA[r][key]||0,bg||'#EEF3FB',`wsSetSingle('${r}','${key}',this.value)`,opts)}</td>`;
   const rows=rooms.map(r=>{
     const rs=ROOM_STATUS[r]||{status:'VC',arrDep:''};
-    const done=WS_DATA[r].taskStatus==='xong';
-    return `<tr style="${done?'background:#edfbf3;':''}">
-      <td class="room-no" style="position:sticky;left:0;z-index:2;background:${done?'#c8f0d8':'var(--cream)'}!important;">${r}</td>
+    const st=wsTaskState(WS_DATA[r].taskStatus);   // '' | 'dang-lam' | 'done'
+    const rowBg=st==='done'?'background:#edfbf3;':st==='dang-lam'?'background:#fffdf0;':'';
+    const noBg=st==='done'?'#c8f0d8':st==='dang-lam'?'#fdf3c4':'var(--cream)';   // ô số phòng: xanh nhạt / vàng nhạt
+    const selBg=st==='done'?'#d6f5e3':st==='dang-lam'?'#fdf3c4':'#fff';
+    return `<tr style="${rowBg}">
+      <td class="room-no" style="position:sticky;left:0;z-index:2;background:${noBg}!important;">${r}</td>
       <td class="room-status ${sClass[rs.status]||''}">${rs.status}</td>
-      <td style="font-size:10px;white-space:nowrap;">${rs.arrDep||'—'}</td>
-      <td><select class="ws-task-sel" onchange="wsSetStatus('${r}',this.value)" style="background:${done?'#d6f5e3':'#fff'};">
-        <option value="chua-lam" ${!done?'selected':''}>⏳</option>
-        <option value="xong" ${done?'selected':''}>✅</option>
+      <td style="font-size:10px;white-space:nowrap;">${wsFmtArrDep(rs.arrDep)}</td>
+      <td><input type="time" class="ws-input" style="width:62px;padding:0 2px;" value="${WS_DATA[r].tIn||''}" onchange="wsSetTime('${r}','tIn',this.value)"></td>
+      <td><input type="time" class="ws-input" style="width:62px;padding:0 2px;" value="${WS_DATA[r].tOut||''}" onchange="wsSetTime('${r}','tOut',this.value)"></td>
+      <td><select class="ws-task-sel" onchange="wsSetStatus('${r}',this.value)" style="background:${selBg};">
+        <option value="" ${st===''?'selected':''}>–</option>
+        <option value="dang-lam" ${st==='dang-lam'?'selected':''}>🟡 Đang làm</option>
+        <option value="done" ${st==='done'?'selected':''}>✅ Done</option>
       </select></td>
       ${['K','Q','T'].map(s=>`<td style="background:#fff5f5;">${inp(r,'ga',s,'do')}</td>`).join('')}
       ${['K','Q','T'].map(s=>`<td style="background:#f0fff5;">${inp(r,'ga',s,'sach')}</td>`).join('')}
@@ -5669,7 +5677,7 @@ function renderWorksheet(){
   const smS=(key)=>rooms.reduce((s,r)=>s+(WS_DATA[r][key]||0),0);
   const totalRow=`<tr style="background:var(--navy);color:var(--gold);font-weight:700;position:sticky;bottom:0;z-index:3;">
     <td style="position:sticky;left:0;background:var(--navy);color:var(--gold);font-size:11px;z-index:4;padding:5px 8px;">TỔNG</td>
-    <td colspan="3" style="background:var(--navy);"></td>
+    <td colspan="5" style="background:var(--navy);"></td>
     ${['K','Q','T'].map(s=>`<td style="text-align:center;">${sm('ga',s,'do')}</td>`).join('')}
     ${['K','Q','T'].map(s=>`<td style="text-align:center;">${sm('ga',s,'sach')}</td>`).join('')}
     ${['K','Q','T'].map(s=>`<td style="text-align:center;">${sm('boc',s,'do')}</td>`).join('')}
@@ -5689,7 +5697,28 @@ function renderWorksheet(){
 function wsSet(r,key,sub,fld,val){syncWsData();if(WS_DATA[r]?.[key]?.[sub])WS_DATA[r][key][sub][fld]=parseInt(val)||0;}
 function wsSetSingle(r,key,val){syncWsData();if(WS_DATA[r])WS_DATA[r][key]=parseInt(val)||0;}
 function wsSetObj(r,key,fld,val){syncWsData();if(WS_DATA[r]?.[key])WS_DATA[r][key][fld]=parseInt(val)||0;}
-function wsSetStatus(r,val){syncWsData();if(WS_DATA[r])WS_DATA[r].taskStatus=val;if(currentBpTab==='setup-xe')renderSetupXe();}
+// Chuẩn hoá trạng thái task: '' (chưa) | 'dang-lam' | 'done' (nhận cả dữ liệu cũ 'chua-lam'/'xong').
+function wsTaskState(ts){ if(ts==='xong'||ts==='done') return 'done'; if(ts==='dang-lam') return 'dang-lam'; return ''; }
+function wsNowHM(){ const d=new Date(); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
+function wsSetStatus(r,val){
+  syncWsData(); if(!WS_DATA[r]) return;
+  WS_DATA[r].taskStatus=val;
+  // Tự ghi giờ IN khi chuyển "Đang làm", giờ OUT khi chuyển "Done" (chỉ điền nếu đang trống — vẫn cho sửa tay).
+  if(val==='dang-lam' && !WS_DATA[r].tIn) WS_DATA[r].tIn=wsNowHM();
+  if(val==='done'){ if(!WS_DATA[r].tIn) WS_DATA[r].tIn=wsNowHM(); if(!WS_DATA[r].tOut) WS_DATA[r].tOut=wsNowHM(); }
+  if(currentBpTab==='setup-xe')renderSetupXe();
+  try{ renderWorksheet(); }catch(e){}   // cập nhật màu ô phòng + giờ IN/OUT
+}
+function wsSetTime(r,fld,val){ syncWsData(); if(WS_DATA[r]) WS_DATA[r][fld]=val||''; }
+// Hiển thị Arr/Dep: ARR - ngày | ngày - DEP | ngày → ngày (nhận cả định dạng cũ "ARR x"/"DEP x").
+function wsFmtArrDep(s){
+  s=(s||'').trim(); if(!s) return '—';
+  let m;
+  if((m=s.match(/^ARR\s*-?\s*(.+)$/i))) return 'ARR - '+m[1].trim();
+  if((m=s.match(/^DEP\s*-?\s*(.+)$/i))) return m[1].trim()+' - DEP';   // dữ liệu cũ "DEP ngày"
+  if((m=s.match(/^(.+?)\s*-?\s*DEP$/i))) return m[1].trim()+' - DEP';
+  return s;   // "ngày → ngày" giữ nguyên
+}
 function saveWsData(){
   syncWsData();
   const dk=wsDateKey();
@@ -5728,11 +5757,19 @@ function handleSmileImport(input){
       if(!rs[room]) return;
       const rawStatus=String(cols[1]||'').trim();
       const status=SMILE_STATUS_MAP[rawStatus]||(rawStatus==='---'?'OOO':rawStatus)||'VC';
-      const rawIn=String(cols[2]||'').trim().replace(/\*\*/g,'').replace(/ARR/g,'').trim();
-      const rawOut=String(cols[3]||'').trim().replace(/\*\*/g,'').replace(/DPT/g,'').trim();
-      const fmtDate=(s)=>{if(!s||s.length<3)return '';const p=s.split('/');return p.length>=2?`${p[0].padStart(2,'0')}/${p[1].padStart(2,'0')}`:''};
-      const arrStr=fmtDate(rawIn), depStr=fmtDate(rawOut);
-      const arrDep=arrStr&&depStr?`${arrStr}→${depStr}`:arrStr?`ARR ${arrStr}`:depStr?`DEP ${depStr}`:'';
+      const rawArrCol=String(cols[2]||'').trim(), rawDepCol=String(cols[3]||'').trim();
+      const hasArr=/ARR/i.test(rawArrCol), hasDep=/DPT|DEP/i.test(rawDepCol);
+      const fmtDate=(s)=>{s=(s||'').replace(/\*\*/g,'').replace(/ARR/ig,'').replace(/DPT|DEP/ig,'').trim();if(!s||s.length<3)return '';const p=s.split('/');return p.length>=2?`${p[0].padStart(2,'0')}/${p[1].padStart(2,'0')}`:''};
+      const arrStr=fmtDate(rawArrCol), depStr=fmtDate(rawDepCol);
+      // ARR + ngày → "ARR - ngày"; ngày + DPT → "ngày - DEP"; 2 ngày → "ngày → ngày"
+      let arrDep='';
+      if(arrStr&&depStr) arrDep=`${arrStr} → ${depStr}`;
+      else if(hasArr&&depStr) arrDep=`ARR - ${depStr}`;
+      else if(hasDep&&arrStr) arrDep=`${arrStr} - DEP`;
+      else if(arrStr) arrDep=`ARR - ${arrStr}`;
+      else if(depStr) arrDep=`${depStr} - DEP`;
+      else if(hasArr) arrDep='ARR';
+      else if(hasDep) arrDep='DEP';
       rs[room]={status,arrDep};
       n++;
     });
