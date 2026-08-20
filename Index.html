@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.18f';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.18g';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -53,7 +53,7 @@ async function clearLocalData(){
   YC_DATA=[];HV_LINEN=[];NS_LUONG=[];NS_BHXH=[];NS_TNCN=[];catalogItems=[];
   WS_DATA_BY_DATE={};ROOM_STATUS_BY_DATE={};AM_DATA_BY_DATE={};
   HV_REWASH_DATA={};HV_REWASH_COLS=[];
-  QUY_TX=[];QUY_UNG=[];QUY_TQ_DAU={amount:0};HK_STAFF=[];
+  QUY_TX=[];QUY_UNG=[];QUY_TQ_DAU={amount:0};HK_STAFF=[];MB_HISTORY=[];
   showToast('✅ Đã xóa toàn bộ dữ liệu — trang sẽ tải lại',2000,'success');
   setTimeout(()=>location.reload(),1500);
 }
@@ -138,7 +138,7 @@ function _lsSaveRaw(fromRemote){
     thu:THU_DATA,chi:CHI_DATA,dx:DX_DATA,ncc:NCC_DATA,kho:_khoLite(KHO_DATA),yc:YC_DATA,ycDeleted:YC_DELETED,transferReq:TR_DATA,
     hvLinen:HV_LINEN,hvRewash:HV_REWASH_DATA,hvCols:HV_REWASH_COLS,
     nsLuong:NS_LUONG,sxData:SX_DATA,nsBhxh:NS_BHXH,nsTncn:NS_TNCN,cats:CATS,dvtList:DVT_LIST,
-    quyTx:QUY_TX,quyUng:QUY_UNG,quyTqDau:QUY_TQ_DAU,hkStaff:HK_STAFF,
+    quyTx:QUY_TX,quyUng:QUY_UNG,quyTqDau:QUY_TQ_DAU,hkStaff:HK_STAFF,mbHistory:MB_HISTORY,
   };
   // Bậc 1: đầy đủ (kèm map buồng phòng theo ngày). Bậc 2: lược các map đó (chúng có sẵn trên cloud) để cache
   // phần tài chính vẫn vừa bộ nhớ máy nhỏ (iPad ~5MB). Bậc nào ghi được thì thôi.
@@ -185,6 +185,7 @@ function lsLoad(){
     if(d.cats){ ['ncc','thu','bophan'].forEach(k=>{ if(Array.isArray(d.cats[k])) CATS[k]=d.cats[k]; }); enforceThuCats(); rebuildBpLabels(); }
     if(Array.isArray(d.dvtList)&&d.dvtList.length) DVT_LIST=d.dvtList;
     if(Array.isArray(d.hkStaff)) HK_STAFF=d.hkStaff;
+    if(Array.isArray(d.mbHistory)) MB_HISTORY=d.mbHistory;
     return true;
   }catch(e){return false;}
 }
@@ -1628,9 +1629,13 @@ textarea{resize:vertical;min-height:68px;}
       <div id="bp-panel-minibar" style="display:none;">
         <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
           <div class="bp-tab active" onclick="setMbView('date',this)" style="font-size:11px;padding:5px 12px;">📅 Theo dõi date</div>
+          <div class="bp-tab"        onclick="setMbView('report',this)" style="font-size:11px;padding:5px 12px;">📊 Báo cáo</div>
+          <div class="bp-tab"        onclick="setMbView('history',this)" style="font-size:11px;padding:5px 12px;">🧾 Lịch sử</div>
           <div class="bp-tab"        onclick="setMbView('stock',this)" style="font-size:11px;padding:5px 12px;">📦 Xuất/Nhập</div>
-          <input type="month" id="mb-thang" value="2026-07" onchange="renderMinibar()" style="font-size:12px;padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;">
-          <button class="btn btn-gold btn-sm" onclick="openMbUpdate()">✏ Cập nhật date</button>
+          <span id="mb-date-controls" style="display:inline-flex;gap:8px;align-items:center;">
+            <input type="month" id="mb-thang" value="2026-07" onchange="renderMinibar()" style="font-size:12px;padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;">
+            <button class="btn btn-gold btn-sm" onclick="openMbUpdate()">✏ Cập nhật date</button>
+          </span>
         </div>
         <div id="mb-view-date">
           <div class="card" style="overflow-x:auto;padding:0;">
@@ -1643,6 +1648,27 @@ textarea{resize:vertical;min-height:68px;}
             <span style="background:#FFF3CD;padding:2px 8px;border-radius:4px;margin-right:8px;">⚠ Sắp hết hạn (≤20 ngày)</span>
             <span style="background:#F8D7DA;padding:2px 8px;border-radius:4px;">🔴 Đã hết hạn</span>
           </div>
+        </div>
+        <div id="mb-view-report" style="display:none;">
+          <div style="display:flex;gap:10px;margin-bottom:12px;align-items:center;flex-wrap:wrap;">
+            <span style="font-size:12px;color:var(--text-muted);">Tháng:</span>
+            <input type="month" id="mb-rep-thang" onchange="renderMbReport()" style="font-size:12px;padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;">
+          </div>
+          <div class="card" style="padding:0;overflow:hidden;"><div style="overflow-x:auto;">
+            <table class="amenity-table" style="min-width:900px;" id="mb-rep-table"><thead id="mb-rep-thead"></thead><tbody id="mb-rep-tbody"></tbody></table>
+          </div></div>
+          <div style="margin-top:8px;font-size:11px;color:var(--text-muted);">* Số liệu tổng hợp từ sheet Lịch sử Minibar (Import từ Smile)</div>
+        </div>
+        <div id="mb-view-history" style="display:none;">
+          <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;flex-wrap:wrap;">
+            <span style="font-size:12px;color:var(--text-muted);">Từ</span>
+            <input type="date" id="mb-hist-from" onchange="renderMbHistory()" style="font-size:12px;padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;">
+            <span style="font-size:12px;color:var(--text-muted);">→</span>
+            <input type="date" id="mb-hist-to" onchange="renderMbHistory()" style="font-size:12px;padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;">
+            <button class="btn btn-excel btn-sm" onclick="importMbSmile()">📥 Import từ Smile</button>
+            <input type="file" id="mb-smile-input" accept=".xlsx,.xls,.csv" style="display:none;" onchange="handleMbSmileImport(this)">
+          </div>
+          <div id="mb-hist-list"></div>
         </div>
         <div id="mb-view-stock" style="display:none;">
           <div class="card">
@@ -5529,6 +5555,11 @@ function getRoomStatusForDate(dateKey){
   return ROOM_STATUS_BY_DATE[dateKey];
 }
 const MB_ITEMS=['Coca Cola','Sprite','Fanta','Bia Tiger','Suối Dasani 500ml','Nước yến','Snack','Mì ly','Chocopie'];
+// Báo cáo/Lịch sử Minibar (Import từ Smile) — danh mục cố định + map tên Smile → tên báo cáo
+const MB_REPORT_ITEMS=['COCA COLA','FANTA','SPRITE','BIA TIGER','SUỐI DASANI','BIRD NEST','SNACK','MI LY MODERN','CHOCOPIE'];
+const MB_SMILE_MAP={'COCA COLA':'COCA COLA','COCACOLA':'COCA COLA','FANTA':'FANTA','SPRITE':'SPRITE','TIGER':'BIA TIGER','BIA TIGER':'BIA TIGER','DASANI':'SUỐI DASANI','SUOI DASANI':'SUỐI DASANI','SUỐI DASANI':'SUỐI DASANI','BIRD NEST':'BIRD NEST','NUOC YEN':'BIRD NEST','NƯỚC YẾN':'BIRD NEST','SNACK':'SNACK','MI LY MODERN':'MI LY MODERN','MI LY':'MI LY MODERN','MÌ LY':'MI LY MODERN','CHOCOPIE':'CHOCOPIE'};
+function mbMapName(raw){ const k=String(raw||'').trim().toUpperCase().replace(/\s+/g,' '); return MB_SMILE_MAP[k]||String(raw||'').trim(); }
+let MB_HISTORY=[];   // Lịch sử sử dụng minibar theo từng phòng (đồng bộ) — nguồn cho sheet Báo cáo
 let MB_DATE_DATA={};
 ALL_ROOMS.forEach(r=>{MB_DATE_DATA[r]={};MB_ITEMS.forEach(m=>{MB_DATE_DATA[r][m]='2026-09-15';});});
 const HV_ITEMS=['Bọc mền K','Bọc mền Q','Bọc mền T','Ga trải giường K','Ga trải giường Q','Ga trải giường T','Áo gối','Khăn tắm','Khăn tay','Thảm chân','Kimono'];
@@ -5824,8 +5855,22 @@ function handleSmileImport(input){
   input.value='';
 }
 
-function setMbView(view,el){mbView=view;document.querySelectorAll('#bp-panel-minibar .bp-tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');document.getElementById('mb-view-date').style.display=view==='date'?'block':'none';document.getElementById('mb-view-stock').style.display=view==='stock'?'block':'none';renderMinibar();}
-function renderMinibar(){mbView==='date'?renderMbDate():renderMbStock();}
+function setMbView(view,el){
+  mbView=view;
+  document.querySelectorAll('#bp-panel-minibar .bp-tab').forEach(t=>t.classList.remove('active'));
+  if(el) el.classList.add('active');
+  const show=(id,v)=>{const e=document.getElementById(id); if(e) e.style.display=v?'block':'none';};
+  show('mb-view-date',view==='date'); show('mb-view-report',view==='report');
+  show('mb-view-history',view==='history'); show('mb-view-stock',view==='stock');
+  const dc=document.getElementById('mb-date-controls'); if(dc) dc.style.display=view==='date'?'inline-flex':'none';   // ô tháng + Cập nhật date chỉ cho sheet Theo dõi date
+  renderMinibar();
+}
+function renderMinibar(){
+  if(mbView==='report') return renderMbReport();
+  if(mbView==='history') return renderMbHistory();
+  if(mbView==='stock') return renderMbStock();
+  return renderMbDate();
+}
 function renderMbDate(){
   const today=new Date();
   document.getElementById('mb-date-thead').innerHTML=`<tr><th>Phòng</th>${MB_ITEMS.map(m=>`<th style="font-size:10px;">${m}</th>`).join('')}</tr>`;
@@ -5838,6 +5883,122 @@ function renderMbStock(){
   const rows=[];KHO_DATA.filter(it=>it.bophan==='hk').forEach(it=>(it.lichSu||[]).forEach(h=>rows.push({...h,ten:it.ten})));
   rows.sort((a,b)=>b.ngay.localeCompare(a.ngay));
   document.getElementById('mb-stock-body').innerHTML=rows.slice(0,20).map(h=>`<tr><td>${h.ngay}</td><td><span class="badge badge-navy" style="font-size:10px;">${h.loai}</span></td><td>${h.ten}</td><td style="font-weight:600;">${h.sl}</td><td>${h.lydo||'—'}</td></tr>`).join('')||`<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-muted);">Chưa có dữ liệu</td></tr>`;
+}
+
+// ===================== MINIBAR: BÁO CÁO & LỊCH SỬ (Import từ Smile) =====================
+let mbHistExpanded=new Set();
+function _mbEnsureMonthDefault(){ const e=document.getElementById('mb-rep-thang'); if(e&&!e.value) e.value=curMonth(); }
+function _mbEnsureHistRange(){
+  const f=document.getElementById('mb-hist-from'), t=document.getElementById('mb-hist-to'); const d=new Date();
+  if(f&&!f.value) f.value=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`;
+  if(t&&!t.value){ const ld=new Date(d.getFullYear(),d.getMonth()+1,0); t.value=ld.toISOString().slice(0,10); }
+}
+// Báo cáo: mặt hàng × ngày trong tháng + cột Tổng — lấy SL từ MB_HISTORY (đã map tên).
+function renderMbReport(){
+  _mbEnsureMonthDefault();
+  const thang=document.getElementById('mb-rep-thang')?.value||curMonth();
+  const [y,m]=thang.split('-').map(Number);
+  const daysInMonth=new Date(y,m,0).getDate();
+  const days=Array.from({length:daysInMonth},(_,i)=>i+1);
+  const today=new Date(); const todayD=today.getDate(), todayMon=today.getMonth()+1, todayY=today.getFullYear();
+  // grid[item][day] = tổng SL
+  const grid={}; MB_REPORT_ITEMS.forEach(it=>{ grid[it]={}; });
+  (MB_HISTORY||[]).forEach(rec=>{
+    const iso=rec.ngay||''; const p=iso.split('-'); if(p.length<3) return;
+    if(parseInt(p[0])!==y||parseInt(p[1])!==m) return;
+    const day=parseInt(p[2]);
+    (rec.items||[]).forEach(it=>{ const nm=mbMapName(it.ten); if(grid[nm]){ grid[nm][day]=(grid[nm][day]||0)+(parseFloat(it.sl)||0); } });
+  });
+  document.getElementById('mb-rep-thead').innerHTML=`<tr><th>Mặt hàng</th>${days.map(d=>`<th style="${d===todayD&&m===todayMon&&y===todayY?'background:var(--navy);color:var(--gold);font-weight:700;':''}">${d}</th>`).join('')}<th>Tổng T${m}</th></tr>`;
+  document.getElementById('mb-rep-tbody').innerHTML=MB_REPORT_ITEMS.map(item=>{
+    let rowTotal=0;
+    const cells=days.map(d=>{ const val=grid[item][d]||0; if(val>0) rowTotal+=val; return `<td style="text-align:center;${val>0?'font-weight:600;color:var(--navy);background:#EEF3FB;':''}">${val||''}</td>`; });
+    return `<tr><td style="font-weight:500;padding-left:8px;white-space:nowrap;">${item}</td>${cells.join('')}<td style="font-weight:700;text-align:center;color:var(--navy);">${rowTotal||''}</td></tr>`;
+  }).join('');
+}
+// Lịch sử: liệt kê từng phiếu (phòng) trong khoảng ngày, xổ ra chi tiết mặt hàng.
+function renderMbHistory(){
+  _mbEnsureHistRange();
+  const from=document.getElementById('mb-hist-from')?.value||'', to=document.getElementById('mb-hist-to')?.value||'';
+  const rows=(MB_HISTORY||[]).filter(r=>{ const iso=r.ngay||''; return (!from||iso>=from)&&(!to||iso<=to); })
+    .sort((a,b)=>(b.ngay||'').localeCompare(a.ngay||'')||String(b.id).localeCompare(String(a.id)));
+  const box=document.getElementById('mb-hist-list');
+  if(!rows.length){ box.innerHTML=`<div class="card"><div style="padding:24px;text-align:center;color:var(--text-muted);">Chưa có lịch sử — bấm "📥 Import từ Smile" để nạp.</div></div>`; return; }
+  box.innerHTML=rows.map(r=>{
+    const open=mbHistExpanded.has(r.id);
+    const tongSL=(r.items||[]).reduce((s,i)=>s+(parseFloat(i.sl)||0),0);
+    const head=`<div onclick="mbToggleHist('${r.id}')" style="cursor:pointer;display:flex;flex-wrap:wrap;gap:14px;align-items:center;padding:10px 14px;background:var(--cream);border-radius:8px;font-size:13px;">
+      <span style="font-weight:700;">${open?'▾':'▸'} P.${esc(r.room||'—')}</span>
+      <span style="color:var(--text-muted);">${(r.ngay||'').split('-').reverse().join('/')}</span>
+      <span>Folio: <b>${esc(r.folio||'—')}</b></span>
+      <span>Bill ID: <b>${esc(r.billId||'—')}</b></span>
+      <span>Clerk: ${esc(r.clerk||'—')}</span>
+      <span style="color:var(--text-muted);">${(r.items||[]).length} món · ${tongSL} đv</span>
+      ${r.note?`<span style="color:var(--text-muted);">📝 ${esc(r.note)}</span>`:''}
+      <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();mbDeleteRecord('${r.id}')" title="Xoá phiếu" style="margin-left:auto;font-size:10px;">🗑</button>
+    </div>`;
+    const detail=open?`<div style="padding:6px 14px 12px;"><table style="width:100%;font-size:12px;border-collapse:collapse;">
+      <thead><tr style="color:var(--text-muted);text-align:left;"><th style="padding:4px;">Mặt hàng</th><th style="padding:4px;width:70px;">SL</th><th style="padding:4px;">Ghi chú</th><th style="padding:4px;width:44px;"></th></tr></thead>
+      <tbody>${(r.items||[]).map((it,idx)=>`<tr>
+        <td style="padding:4px;">${esc(it.ten)}</td>
+        <td style="padding:4px;"><input type="number" min="0" value="${it.sl||0}" onchange="mbEditItem('${r.id}',${idx},'sl',this.value)" style="width:60px;padding:2px 4px;font-size:12px;"></td>
+        <td style="padding:4px;"><input type="text" value="${esc(it.note||'')}" onchange="mbEditItem('${r.id}',${idx},'note',this.value)" placeholder="—" style="width:100%;padding:2px 4px;font-size:12px;"></td>
+        <td style="padding:4px;"><button class="btn btn-danger btn-sm" onclick="mbDeleteItem('${r.id}',${idx})" style="font-size:10px;">✕</button></td>
+      </tr>`).join('')||`<tr><td colspan="4" style="padding:8px;color:var(--text-muted);">(không có món)</td></tr>`}</tbody>
+    </table></div>`:'';
+    return `<div class="card" style="margin-bottom:8px;padding:0;overflow:hidden;">${head}${detail}</div>`;
+  }).join('');
+}
+function mbToggleHist(id){ if(mbHistExpanded.has(id)) mbHistExpanded.delete(id); else mbHistExpanded.add(id); renderMbHistory(); }
+function mbEditItem(id,idx,fld,val){ const r=(MB_HISTORY||[]).find(x=>String(x.id)===String(id)); if(!r||!r.items[idx]) return; r.items[idx][fld]=fld==='sl'?(parseFloat(val)||0):val; try{syncNow();}catch(e){} }
+function mbDeleteItem(id,idx){ const r=(MB_HISTORY||[]).find(x=>String(x.id)===String(id)); if(!r) return; if(!confirm('Xoá món này?')) return; r.items.splice(idx,1); renderMbHistory(); try{syncNow();}catch(e){} }
+function mbDeleteRecord(id){ if(!confirm('Xoá cả phiếu minibar này?')) return; MB_HISTORY=MB_HISTORY.filter(x=>String(x.id)!==String(id)); renderMbHistory(); try{syncNow();}catch(e){} }
+// Excel serial (ngày) → ISO YYYY-MM-DD (lấy phần ngày, dùng UTC để khỏi lệch)
+function mbExcelToISO(v){
+  if(typeof v==='number'||/^\d+(\.\d+)?$/.test(String(v).trim())){ const n=Math.floor(parseFloat(v)); const d=new Date(Math.round((n-25569)*86400000)); return isNaN(d.getTime())?'':d.toISOString().slice(0,10); }
+  const p=String(v||'').trim().split(/[\/\-.]/);
+  if(p.length>=3){ let dd=p[0],mm=p[1],yy=p[2]; if(yy.length===2) yy='20'+yy; return `${yy}-${String(mm).padStart(2,'0')}-${String(dd).padStart(2,'0')}`; }
+  return '';
+}
+function importMbSmile(){ document.getElementById('mb-smile-input').click(); }
+// Phân tích các dòng (mảng ô) từ file Smile → gom theo phòng/bill → nạp vào MB_HISTORY (chống trùng). Trả số phiếu thêm.
+function mbImportRows(rows){
+  const recs=[]; let cur=null, room='', billId='', folio='';
+  (rows||[]).forEach(cols=>{
+    const a=String(cols[0]||'').trim(); let m;
+    if((m=a.match(/^ROOM\s*[:：]\s*(\d+)/i))){ room=String(parseInt(m[1])); billId=''; folio=''; cur=null; return; }
+    if(/^BILL\s*ID/i.test(a)){ billId=String(cols[1]||'').trim(); folio=String(cols[4]||'').trim(); cur=null; return; }
+    if(/^AMOUNT/i.test(a)||/^\s*TOTAL/i.test(a)) return;
+    const name=String(cols[2]||'').trim();
+    const isDate=(typeof cols[0]==='number')||/^\d+(\.\d+)?$/.test(a)||/\d{1,2}\/\d{1,2}\//.test(a);
+    if(room && name && isDate){
+      const iso=mbExcelToISO(cols[0]); const sl=parseFloat(cols[4])||0; const clerk=String(cols[6]||'').trim();
+      if(!cur){ cur={id:'MB'+Date.now()+Math.floor(Math.random()*1e4)+recs.length,ngay:iso,room,billId,folio,clerk,note:'',items:[]}; recs.push(cur); }
+      if(iso&&!cur.ngay) cur.ngay=iso; if(clerk&&!cur.clerk) cur.clerk=clerk;
+      cur.items.push({ten:mbMapName(name),sl,note:''});
+    }
+  });
+  const key=r=>`${r.room}|${r.billId}|${r.folio}|${r.ngay}`;
+  const existing=new Set((MB_HISTORY||[]).map(key));
+  let added=0; recs.forEach(r=>{ if(!existing.has(key(r))){ MB_HISTORY.push(r); existing.add(key(r)); added++; } });
+  return {added, total:recs.length};
+}
+function handleMbSmileImport(input){
+  const file=input.files[0]; if(!file) return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const wb=XLSX.read(e.target.result,{type:'array'});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+      const {added,total}=mbImportRows(rows);
+      if(!total){ showToast('Không đọc được dòng minibar nào từ file.',3000,'error'); input.value=''; return; }
+      showToast(`✅ Import ${added} phiếu minibar (bỏ ${total-added} trùng).`,2800,'success');
+      renderMbHistory(); try{syncNow();}catch(e){}
+    }catch(err){ showToast('Lỗi đọc file: '+err.message,3500,'error'); }
+    input.value='';
+  };
+  reader.readAsArrayBuffer(file);
 }
 // ---- Minibar: minimap chọn nhiều phòng ----
 function mbFloorOf(r){ return r.slice(0, r.length-2); }   // '201'→'2', '1001'→'10', '1101'→'11'
@@ -9702,6 +9863,7 @@ const COLLECTIONS = {
   cats:      { read:()=>[{id:'_', obj:CATS}], write:r=>{const x=r.find(v=>v.id==='_'); if(x&&x.obj){ CATS=x.obj; enforceThuCats(); rebuildBpLabels(); }}, render:()=>{try{refreshAllCatSelects();}catch(e){}} },
   dvtList:   { read:()=>[{id:'_', obj:DVT_LIST}], write:r=>{const x=r.find(v=>v.id==='_'); if(x&&Array.isArray(x.obj)) DVT_LIST=x.obj;}, render:()=>{try{fillDvtSelect();}catch(e){}} },
   hkStaff:   { read:()=>[{id:'_', obj:HK_STAFF}], write:r=>{const x=r.find(v=>v.id==='_'); if(x&&Array.isArray(x.obj)) HK_STAFF=x.obj;}, render:()=>{try{renderWsStaffBar();}catch(e){}} },
+  mbHistory: { read:()=>_byIdDump(MB_HISTORY), write:r=>{MB_HISTORY=r.map(x=>x.obj);}, render:()=>{try{renderMinibar();}catch(e){}} },
 };
 
 // lastSnapshot phản ánh trạng thái ĐÃ ở trên cloud: {collection:{id:json}}
@@ -9757,7 +9919,7 @@ function syncNow(){ _lsSaveRaw(); if(sb&&cloudReady) flushToCloud(); }
 const WRITE_MATRIX = {
   thu:['giamdoc','ketoan'], chi:['giamdoc','ketoan'],
   ncc:['giamdoc','ketoan'], catalog:['giamdoc','ketoan'],
-  nsLuong:['giamdoc','hr'], bhxh:['giamdoc','hr'], tncn:['giamdoc','hr'], cats:['giamdoc'], dvtList:['giamdoc','ketoan'], hkStaff:['giamdoc','truong-bp','ketoan'],
+  nsLuong:['giamdoc','hr'], bhxh:['giamdoc','hr'], tncn:['giamdoc','hr'], cats:['giamdoc'], dvtList:['giamdoc','ketoan'], hkStaff:['giamdoc','truong-bp','ketoan'], mbHistory:['giamdoc','truong-bp','ketoan'],
   dx:['giamdoc','ketoan','truong-bp','hr'], kho:['giamdoc','ketoan','truong-bp','hr'], yc:['giamdoc','ketoan','truong-bp','hr'], ycDeleted:['giamdoc','ketoan','truong-bp','hr'], transferReq:['giamdoc','ketoan','truong-bp','hr'],
   wsData:['giamdoc','truong-bp'], roomStatus:['giamdoc','truong-bp'], amData:['giamdoc','truong-bp'],
   mbData:['giamdoc','truong-bp'], hvLinen:['giamdoc','truong-bp'], hvRewash:['giamdoc','truong-bp'],
@@ -9770,7 +9932,7 @@ const COLLECTION_TAB = {
   nsLuong:'nhan-su', bhxh:'nhan-su', tncn:'nhan-su',
   dx:'de-xuat', kho:'kho', transferReq:'yeu-cau-transfer',
   quyTx:'quy-tien-mat', quyUng:'quy-tien-mat',
-  yc:'buong-phong', ycDeleted:'buong-phong', wsData:'buong-phong', roomStatus:'buong-phong', hkStaff:'buong-phong',
+  yc:'buong-phong', ycDeleted:'buong-phong', wsData:'buong-phong', roomStatus:'buong-phong', hkStaff:'buong-phong', mbHistory:'buong-phong',
   amData:'buong-phong', mbData:'buong-phong', hvLinen:'buong-phong', hvRewash:'buong-phong',
   hvCols:'buong-phong', sx:'buong-phong',
 };   // 'cats' KHÔNG map → giữ chỉ Giám đốc
