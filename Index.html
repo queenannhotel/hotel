@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.18g';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.18h';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -5729,6 +5729,20 @@ function renderWorksheet(){
   document.getElementById('ws-tbody').innerHTML=rows.join('')+totalRow;
   try{ renderWsStaffBar(); }catch(e){}
 }
+// Dựng chuỗi Arr/Dep từ 2 cột file Smile — BÁM TOKEN (ARR/DPT) ở BẤT KỲ cột nào, không theo vị trí.
+// ARR + ngày → "ARR - ngày"; ngày + DPT → "ngày - DEP"; 2 ngày → "ngày → ngày".
+function wsArrDepFromCols(c2,c3){
+  c2=String(c2||'').trim(); c3=String(c3||'').trim();
+  const both=c2+' '+c3;
+  const hasArr=/ARR/i.test(both), hasDep=/DPT|DEP/i.test(both);
+  const fmtDate=(s)=>{s=(s||'').replace(/\*\*/g,'').replace(/ARR/ig,'').replace(/DPT|DEP/ig,'').trim();if(!s||s.length<3)return '';const p=s.split('/');return p.length>=2?`${p[0].padStart(2,'0')}/${p[1].padStart(2,'0')}`:''};
+  const d2=fmtDate(c2), d3=fmtDate(c3), theDate=d2||d3;
+  if(d2&&d3) return `${d2} → ${d3}`;                 // 2 ngày → khoảng lưu trú
+  if(hasArr && !hasDep) return theDate?`ARR - ${theDate}`:'ARR';
+  if(hasDep && !hasArr) return theDate?`${theDate} - DEP`:'DEP';
+  if(hasArr && hasDep)  return theDate?`ARR - ${theDate}`:'';   // hiếm: cả 2 marker → ưu tiên ARR
+  return theDate||'';                                 // chỉ 1 ngày, không marker → hiện ngày trơn (không đoán)
+}
 // ===== Nhân viên phụ trách theo TẦNG (A/B) theo ngày — chọn từ danh sách HK riêng (HK_STAFF) =====
 let wsStaffManage=false;
 function wsStaffObj(){ const day=getWsDataForDate(wsDateKey()); if(!day._staff||typeof day._staff!=='object') day._staff={A:[],B:[]}; if(!Array.isArray(day._staff.A)) day._staff.A=[]; if(!Array.isArray(day._staff.B)) day._staff.B=[]; return day._staff; }
@@ -5813,19 +5827,7 @@ function handleSmileImport(input){
       if(!rs[room]) return;
       const rawStatus=String(cols[1]||'').trim();
       const status=SMILE_STATUS_MAP[rawStatus]||(rawStatus==='---'?'OOO':rawStatus)||'VC';
-      const rawArrCol=String(cols[2]||'').trim(), rawDepCol=String(cols[3]||'').trim();
-      const hasArr=/ARR/i.test(rawArrCol), hasDep=/DPT|DEP/i.test(rawDepCol);
-      const fmtDate=(s)=>{s=(s||'').replace(/\*\*/g,'').replace(/ARR/ig,'').replace(/DPT|DEP/ig,'').trim();if(!s||s.length<3)return '';const p=s.split('/');return p.length>=2?`${p[0].padStart(2,'0')}/${p[1].padStart(2,'0')}`:''};
-      const arrStr=fmtDate(rawArrCol), depStr=fmtDate(rawDepCol);
-      // ARR + ngày → "ARR - ngày"; ngày + DPT → "ngày - DEP"; 2 ngày → "ngày → ngày"
-      let arrDep='';
-      if(arrStr&&depStr) arrDep=`${arrStr} → ${depStr}`;
-      else if(hasArr&&depStr) arrDep=`ARR - ${depStr}`;
-      else if(hasDep&&arrStr) arrDep=`${arrStr} - DEP`;
-      else if(arrStr) arrDep=`ARR - ${arrStr}`;
-      else if(depStr) arrDep=`${depStr} - DEP`;
-      else if(hasArr) arrDep='ARR';
-      else if(hasDep) arrDep='DEP';
+      const arrDep=wsArrDepFromCols(cols[2],cols[3]);
       rs[room]={status,arrDep};
       n++;
     });
