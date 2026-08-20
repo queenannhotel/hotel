@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.18n';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.18o';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -5614,6 +5614,12 @@ function bpCanEditDate(dISO){
   if(role==='truong-bp') return BP_LOCK.locked ? (dISO>=today) : true;  // TBP HK: full, trừ khi GĐ bật khoá thì chặn ngày cũ
   return dISO>=today;                                      // NV HK & vai trò khác: luôn chặn ngày cũ (chỉ sửa hôm nay + tương lai)
 }
+// Chặn + toast nếu ngày dISO ('YYYY-MM-DD') đã khoá. true = được phép sửa.
+function bpGuardDate(dISO){ if(bpCanEditDate(dISO)) return true; try{ showToast('🔒 Ngày cũ đã khoá — chỉ Giám đốc/hôm nay mới sửa được', 2500, 'error'); }catch(e){} return false; }
+// Đổi nhãn 'D/M' → ISO rồi kiểm tra quyền (dùng cho Hàng vải)
+function bpCanEditLabel(label){ try{ return bpCanEditDate(dayLabelToDateKey(label)); }catch(e){ return true; } }
+// Đổi chuỗi ngày vi-VN 'D/M/YYYY' (từ toLocaleDateString) → ISO 'YYYY-MM-DD'
+function bpViDateToISO(s){ const m=String(s||'').match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/); if(!m) return ''; return `${m[3]}-${String(+m[2]).padStart(2,'0')}-${String(+m[1]).padStart(2,'0')}`; }
 let SX_DATA=[
   {id:'sx1', ten:'Ga trải K',      sl_setup:20,  manual:false, ghichu:'1 bộ/phòng K'},
   {id:'sx2', ten:'Ga trải Q',      sl_setup:30,  manual:false, ghichu:'1 bộ/phòng Q'},
@@ -6066,9 +6072,9 @@ function renderMbHistory(){
   }).join('');
 }
 function mbToggleHist(id){ if(mbHistExpanded.has(id)) mbHistExpanded.delete(id); else mbHistExpanded.add(id); renderMbHistory(); }
-function mbEditItem(id,idx,fld,val){ const r=(MB_HISTORY||[]).find(x=>String(x.id)===String(id)); if(!r||!r.items[idx]) return; r.items[idx][fld]=fld==='sl'?(parseFloat(val)||0):val; try{syncNow();}catch(e){} }
-function mbDeleteItem(id,idx){ const r=(MB_HISTORY||[]).find(x=>String(x.id)===String(id)); if(!r) return; if(!confirm('Xoá món này?')) return; r.items.splice(idx,1); renderMbHistory(); try{syncNow();}catch(e){} }
-function mbDeleteRecord(id){ if(!confirm('Xoá cả phiếu minibar này?')) return; MB_HISTORY=MB_HISTORY.filter(x=>String(x.id)!==String(id)); renderMbHistory(); try{syncNow();}catch(e){} }
+function mbEditItem(id,idx,fld,val){ const r=(MB_HISTORY||[]).find(x=>String(x.id)===String(id)); if(!r||!r.items[idx]) return; if(!bpGuardDate(r.ngay)){ try{renderMbHistory();}catch(e){} return; } r.items[idx][fld]=fld==='sl'?(parseFloat(val)||0):val; try{syncNow();}catch(e){} }
+function mbDeleteItem(id,idx){ const r=(MB_HISTORY||[]).find(x=>String(x.id)===String(id)); if(!r) return; if(!bpGuardDate(r.ngay)){ try{renderMbHistory();}catch(e){} return; } if(!confirm('Xoá món này?')) return; r.items.splice(idx,1); renderMbHistory(); try{syncNow();}catch(e){} }
+function mbDeleteRecord(id){ const r=(MB_HISTORY||[]).find(x=>String(x.id)===String(id)); if(r && !bpGuardDate(r.ngay)) return; if(!confirm('Xoá cả phiếu minibar này?')) return; MB_HISTORY=MB_HISTORY.filter(x=>String(x.id)!==String(id)); renderMbHistory(); try{syncNow();}catch(e){} }
 // Excel serial (ngày) → ISO YYYY-MM-DD (lấy phần ngày, dùng UTC để khỏi lệch)
 function mbExcelToISO(v){
   if(typeof v==='number'||/^\d+(\.\d+)?$/.test(String(v).trim())){ const n=Math.floor(parseFloat(v)); const d=new Date(Math.round((n-25569)*86400000)); return isNaN(d.getTime())?'':d.toISOString().slice(0,10); }
@@ -6331,13 +6337,14 @@ function renderHvLinen(){
       ${days.map((d,i)=>{
         const dv=dirtyByDay[i];
         const sv=sachByDay[i];
+        const dis=bpCanEditLabel(d.label)?'':'disabled';
         return`<td style="background:#fff8f8;text-align:center;padding:2px;">
-          <input class="ws-input hv-inp" type="number" min="0" value="${dv}"
+          <input class="ws-input hv-inp" type="number" min="0" value="${dv}" ${dis}
             data-loai="${encodeURIComponent(item)}" data-ngay="${d.label}" data-field="dirty"
             style="width:28px;background:${dv>0?'#fce4e4':'#fff'};">
         </td>
         <td style="background:#f5fff8;text-align:center;padding:2px;">
-          <input class="ws-input hv-inp" type="number" min="0" value="${sv}"
+          <input class="ws-input hv-inp" type="number" min="0" value="${sv}" ${dis}
             data-loai="${encodeURIComponent(item)}" data-ngay="${d.label}" data-field="clean"
             style="width:28px;background:${sv>0?'#d6f5e3':'#fff'};">
         </td>`;
@@ -6353,6 +6360,7 @@ function renderHvLinen(){
   try{ renderHvNono(days); }catch(e){}
 }
 function hvSetSach(loai,ngay,val){
+  if(!bpGuardDate(dayLabelToDateKey(ngay))){ try{ renderHvLinen(); }catch(e){} return; }
   const idx=HV_LINEN.findIndex(r=>r.loai===loai&&r.ngay===ngay);
   const v=parseInt(val)||0;
   const old=idx>-1?HV_LINEN[idx].clean:0;
@@ -6369,6 +6377,7 @@ function hvSetSachAndRefresh(loai,ngay,val){
 }
 function hvSetDirty(loai,ngay,val){const idx=HV_LINEN.findIndex(r=>r.loai===loai&&r.ngay===ngay);const v=parseInt(val)||0;if(idx>-1)HV_LINEN[idx].dirty=v;else HV_LINEN.push({loai,ngay,clean:0,dirty:v});}
 function hvSetDirtyByDay(loai,ngay,val){
+  if(!bpGuardDate(dayLabelToDateKey(ngay))){ try{ renderHvLinen(); }catch(e){} return; }
   // Ghi vào HV_DIRTY_BY_DATE[ngay][loai] (cho phép sửa tay)
   if(!HV_DIRTY_BY_DATE[ngay]) HV_DIRTY_BY_DATE[ngay]={};
   HV_DIRTY_BY_DATE[ngay][loai]=parseInt(val)||0;
@@ -6384,6 +6393,7 @@ function hvNonoDefault(item,label){
 }
 function hvNonoValue(item,label){ const ov=HV_NONO_OVERRIDE[label]; return (ov&&ov[item]!==undefined)?ov[item]:hvNonoDefault(item,label); }
 function hvSetNono(item,label,val){
+  if(!bpGuardDate(dayLabelToDateKey(label))){ try{ renderHvLinen(); }catch(e){} return; }
   const s=String(val).trim();
   if(s===''){ if(HV_NONO_OVERRIDE[label]) delete HV_NONO_OVERRIDE[label][item]; }   // rỗng → về công thức
   else { if(!HV_NONO_OVERRIDE[label]) HV_NONO_OVERRIDE[label]={}; HV_NONO_OVERRIDE[label][item]=parseInt(s)||0; }
@@ -6401,7 +6411,7 @@ function renderHvNono(days){
       const v=hvNonoValue(item,d.label); tong+=v;
       const col=v<0?'var(--red)':v>0?'var(--green)':'var(--text-muted)';
       const bg=v<0?'#fff5f5':v>0?'#f0fff8':'#fff';
-      return `<td style="text-align:center;padding:2px;"><input class="ws-input" type="number" value="${v}" data-loai="${encodeURIComponent(item)}" data-ngay="${d.label}" onchange="hvSetNono(decodeURIComponent(this.dataset.loai),this.dataset.ngay,this.value)" style="width:36px;text-align:center;color:${col};font-weight:600;background:${bg};"></td>`;
+      return `<td style="text-align:center;padding:2px;"><input class="ws-input" type="number" value="${v}" ${bpCanEditLabel(d.label)?'':'disabled'} data-loai="${encodeURIComponent(item)}" data-ngay="${d.label}" onchange="hvSetNono(decodeURIComponent(this.dataset.loai),this.dataset.ngay,this.value)" style="width:36px;text-align:center;color:${col};font-weight:600;background:${bg};"></td>`;
     });
     const tcol=tong<0?'var(--red)':tong>0?'var(--green)':'var(--text-muted)';
     return `<tr><td style="font-weight:600;text-align:left;padding-left:8px;white-space:nowrap;">${item}</td>${cells.join('')}<td style="font-weight:700;text-align:center;color:${tcol};">${tong>0?'+'+tong:tong}</td></tr>`;
@@ -6476,13 +6486,14 @@ function renderHvRewash(){
       </td>
       ${cols.map((col,ci)=>{
         const v=(HV_REWASH_DATA[col.id]||{})[item]||{do:0,sach:0};
+        const dis=bpCanEditDate(col.date)?'':'disabled';
         return`<td style="background:#fff8f8;text-align:center;padding:6px 4px;border-left:2px solid rgba(240,200,200,.3);">
-          <input class="ws-input rw-inp" type="number" min="0" value="${v.do||0}"
+          <input class="ws-input rw-inp" type="number" min="0" value="${v.do||0}" ${dis}
             data-col="${col.id}" data-item="${encodeURIComponent(item)}" data-field="do"
             style="width:36px;height:28px;font-size:12px;font-weight:600;background:${v.do>0?'#fce4e4':'#fff'};border-radius:6px;border:1.5px solid ${v.do>0?'#f0a0a0':'var(--border)'};">
         </td>
         <td style="background:#f5fff8;text-align:center;padding:6px 4px;">
-          <input class="ws-input rw-inp" type="number" min="0" value="${v.sach||0}"
+          <input class="ws-input rw-inp" type="number" min="0" value="${v.sach||0}" ${dis}
             data-col="${col.id}" data-item="${encodeURIComponent(item)}" data-field="sach"
             style="width:36px;height:28px;font-size:12px;font-weight:600;background:${v.sach>0?'#d6f5e3':'#fff'};border-radius:6px;border:1.5px solid ${v.sach>0?'#7ecfa8':'var(--border)'};">
         </td>`;
@@ -6532,6 +6543,8 @@ function rwSetDate(ci,val){
 }
 
 function rwSet(colId,loai,field,val){
+  const col=(HV_REWASH_COLS||[]).find(c=>c.id===colId);
+  if(col && !bpGuardDate(col.date)){ try{ renderHvRewash(); }catch(e){} return; }
   if(!HV_REWASH_DATA[colId]) HV_REWASH_DATA[colId]={};
   if(!HV_REWASH_DATA[colId][loai]) HV_REWASH_DATA[colId][loai]={do:0,sach:0};
   HV_REWASH_DATA[colId][loai][field]=parseInt(val)||0;
@@ -7627,12 +7640,14 @@ function renderYeuCau(){
 }
 function ycSetStatus(id,s){
   const yc=YC_DATA.find(x=>x.id===id);if(!yc)return;
+  if(!bpGuardDate(bpViDateToISO(yc.ngay))){ try{renderYeuCau();}catch(e){} return; }
   yc.status=s;renderYeuCau();renderYeuCauStats();syncNow();
   if(s==='hoan-thanh') sendPush('✅ Yêu Cầu Đã Xong', `P.${yc.phong} — ${yc.loaiLabel}`, 'yeu-cau', '/hotel/Index.html', 'buong-phong');
 }
 let ycDeletingId=null;
 function ycDelete(id){
   const yc=YC_DATA.find(x=>x.id===id); if(!yc) return;
+  if(!bpGuardDate(bpViDateToISO(yc.ngay))) return;
   ycDeletingId=id;
   const iStr=(yc.items||[]).map(i=>`${i.ten}×${i.sl}`).join(', ');
   document.getElementById('yc-del-info').innerHTML=`<strong>P.${yc.phong}</strong> · ${yc.loaiLabel||yc.loai} · 🕐 ${yc.gio||''} ${yc.ngay||''}${iStr?`<br>${iStr}`:''}`;
