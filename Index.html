@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.18h';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.18i';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -53,7 +53,7 @@ async function clearLocalData(){
   YC_DATA=[];HV_LINEN=[];NS_LUONG=[];NS_BHXH=[];NS_TNCN=[];catalogItems=[];
   WS_DATA_BY_DATE={};ROOM_STATUS_BY_DATE={};AM_DATA_BY_DATE={};
   HV_REWASH_DATA={};HV_REWASH_COLS=[];
-  QUY_TX=[];QUY_UNG=[];QUY_TQ_DAU={amount:0};HK_STAFF=[];MB_HISTORY=[];
+  QUY_TX=[];QUY_UNG=[];QUY_TQ_DAU={amount:0};HK_STAFF=[];MB_HISTORY=[];HV_NONO_OVERRIDE={};
   showToast('✅ Đã xóa toàn bộ dữ liệu — trang sẽ tải lại',2000,'success');
   setTimeout(()=>location.reload(),1500);
 }
@@ -138,7 +138,7 @@ function _lsSaveRaw(fromRemote){
     thu:THU_DATA,chi:CHI_DATA,dx:DX_DATA,ncc:NCC_DATA,kho:_khoLite(KHO_DATA),yc:YC_DATA,ycDeleted:YC_DELETED,transferReq:TR_DATA,
     hvLinen:HV_LINEN,hvRewash:HV_REWASH_DATA,hvCols:HV_REWASH_COLS,
     nsLuong:NS_LUONG,sxData:SX_DATA,nsBhxh:NS_BHXH,nsTncn:NS_TNCN,cats:CATS,dvtList:DVT_LIST,
-    quyTx:QUY_TX,quyUng:QUY_UNG,quyTqDau:QUY_TQ_DAU,hkStaff:HK_STAFF,mbHistory:MB_HISTORY,
+    quyTx:QUY_TX,quyUng:QUY_UNG,quyTqDau:QUY_TQ_DAU,hkStaff:HK_STAFF,mbHistory:MB_HISTORY,hvNono:HV_NONO_OVERRIDE,
   };
   // Bậc 1: đầy đủ (kèm map buồng phòng theo ngày). Bậc 2: lược các map đó (chúng có sẵn trên cloud) để cache
   // phần tài chính vẫn vừa bộ nhớ máy nhỏ (iPad ~5MB). Bậc nào ghi được thì thôi.
@@ -186,6 +186,7 @@ function lsLoad(){
     if(Array.isArray(d.dvtList)&&d.dvtList.length) DVT_LIST=d.dvtList;
     if(Array.isArray(d.hkStaff)) HK_STAFF=d.hkStaff;
     if(Array.isArray(d.mbHistory)) MB_HISTORY=d.mbHistory;
+    if(d.hvNono&&typeof d.hvNono==='object') HV_NONO_OVERRIDE=d.hvNono;
     return true;
   }catch(e){return false;}
 }
@@ -1732,6 +1733,14 @@ textarea{resize:vertical;min-height:68px;}
           <!-- Status kết ca nhỏ ở góc phải dưới -->
           <div id="hv-ketca-status" style="display:none;text-align:right;margin-top:8px;padding:6px 12px;background:#FFF3CD;border:1px solid #FCEAA0;border-radius:8px;font-size:11.5px;color:#856404;">
             🔔 Kết ca lúc: <strong id="hv-ketca-time">—</strong> &nbsp;|&nbsp; Hàng dơ sau giờ này → ngày <strong id="hv-ketca-nextday">—</strong>
+          </div>
+          <!-- Bảng Nợ / Dư hàng ngày (Sạch − Dơ), chạy công thức + sửa tay được -->
+          <div style="margin-top:16px;font-weight:700;font-size:13px;color:var(--navy);">📊 Nợ / Dư hàng ngày <span style="font-weight:400;color:var(--text-muted);font-size:11px;">(= Sạch − Dơ mỗi ngày · âm = Nợ · dương = Dư · sửa tay được)</span></div>
+          <div style="overflow:auto;max-height:calc(100vh - 380px);position:relative;margin-top:6px;">
+            <table class="amenity-table" style="min-width:1800px;" id="hv-nono-table">
+              <thead id="hv-nono-thead" style="position:sticky;top:0;z-index:3;"></thead>
+              <tbody id="hv-nono-tbody"></tbody>
+            </table>
           </div>
         </div>
         <div id="hv-view-rewash" style="display:none;">
@@ -5565,6 +5574,7 @@ ALL_ROOMS.forEach(r=>{MB_DATE_DATA[r]={};MB_ITEMS.forEach(m=>{MB_DATE_DATA[r][m]
 const HV_ITEMS=['Bọc mền K','Bọc mền Q','Bọc mền T','Ga trải giường K','Ga trải giường Q','Ga trải giường T','Áo gối','Khăn tắm','Khăn tay','Thảm chân','Kimono'];
 let HV_LINEN=[],HV_REWASH=[],HV_EDIT_LOG=[];
 let HK_STAFF=[];   // Danh sách nhân viên buồng phòng (tự quản, đồng bộ) — dùng cho ô NV phụ trách theo tầng ở Worksheet
+let HV_NONO_OVERRIDE={};   // Nợ/Dư hàng ngày sửa tay: { 'D/M': { loại: số } } — ghi đè công thức Sạch−Dơ (đồng bộ)
 let SX_DATA=[
   {id:'sx1', ten:'Ga trải K',      sl_setup:20,  manual:false, ghichu:'1 bộ/phòng K'},
   {id:'sx2', ten:'Ga trải Q',      sl_setup:30,  manual:false, ghichu:'1 bộ/phòng Q'},
@@ -6236,6 +6246,7 @@ function renderHvLinen(){
       </td>
     </tr>`;
   }).join('');
+  try{ renderHvNono(days); }catch(e){}
 }
 function hvSetSach(loai,ngay,val){
   const idx=HV_LINEN.findIndex(r=>r.loai===loai&&r.ngay===ngay);
@@ -6259,6 +6270,38 @@ function hvSetDirtyByDay(loai,ngay,val){
   HV_DIRTY_BY_DATE[ngay][loai]=parseInt(val)||0;
   // Cũng lưu vào HV_LINEN.dirty để persist
   hvSetDirty(loai,ngay,val);
+}
+// ===== Bảng Nợ/Dư HÀNG NGÀY: mặc định = Sạch(ngày) − Dơ(ngày); cho ghi đè bằng tay =====
+function hvNonoDefault(item,label){
+  const rec=HV_LINEN.find(r=>r.loai===item&&r.ngay===label);
+  const sach=rec?.clean||0;
+  const dirty=calcHvDirtyForDay(label)[item]||0;
+  return sach-dirty;
+}
+function hvNonoValue(item,label){ const ov=HV_NONO_OVERRIDE[label]; return (ov&&ov[item]!==undefined)?ov[item]:hvNonoDefault(item,label); }
+function hvSetNono(item,label,val){
+  const s=String(val).trim();
+  if(s===''){ if(HV_NONO_OVERRIDE[label]) delete HV_NONO_OVERRIDE[label][item]; }   // rỗng → về công thức
+  else { if(!HV_NONO_OVERRIDE[label]) HV_NONO_OVERRIDE[label]={}; HV_NONO_OVERRIDE[label][item]=parseInt(s)||0; }
+  clearTimeout(window._hvNonoTimer); window._hvNonoTimer=setTimeout(()=>renderHvLinen(),300);
+  try{ syncNow(); }catch(e){}
+}
+function renderHvNono(days){
+  const thead=document.getElementById('hv-nono-thead'), tbody=document.getElementById('hv-nono-tbody');
+  if(!thead||!tbody) return;
+  const todayFull=wsDateKey(); const tp=todayFull.split('-'); const todayLabel=`${parseInt(tp[2])}/${parseInt(tp[1])}`;
+  thead.innerHTML=`<tr><th style="min-width:140px;text-align:left;padding-left:8px;">Loại hàng vải</th>${days.map(d=>`<th style="font-size:9px;padding:3px;min-width:34px;${d.label===todayLabel?'background:#2E7D5B;color:#fff;':''}">${d.label}</th>`).join('')}<th style="background:var(--navy);color:#fff;min-width:64px;">Tổng</th></tr>`;
+  tbody.innerHTML=HV_ITEMS.map(item=>{
+    let tong=0;
+    const cells=days.map(d=>{
+      const v=hvNonoValue(item,d.label); tong+=v;
+      const col=v<0?'var(--red)':v>0?'var(--green)':'var(--text-muted)';
+      const bg=v<0?'#fff5f5':v>0?'#f0fff8':'#fff';
+      return `<td style="text-align:center;padding:2px;"><input class="ws-input" type="number" value="${v}" data-loai="${encodeURIComponent(item)}" data-ngay="${d.label}" onchange="hvSetNono(decodeURIComponent(this.dataset.loai),this.dataset.ngay,this.value)" style="width:36px;text-align:center;color:${col};font-weight:600;background:${bg};"></td>`;
+    });
+    const tcol=tong<0?'var(--red)':tong>0?'var(--green)':'var(--text-muted)';
+    return `<tr><td style="font-weight:600;text-align:left;padding-left:8px;white-space:nowrap;">${item}</td>${cells.join('')}<td style="font-weight:700;text-align:center;color:${tcol};">${tong>0?'+'+tong:tong}</td></tr>`;
+  }).join('');
 }
 const HV_REWASH_ITEMS=[
   'Bọc mền K','Bọc mền Q','Bọc mền T',
@@ -9861,6 +9904,7 @@ const COLLECTIONS = {
   amData:    { read:()=>_mapDump(AM_DATA_BY_DATE),     write:r=>{const m={};r.forEach(x=>m[x.id]=x.obj);AM_DATA_BY_DATE=m;},     render:()=>{try{renderAmenity();}catch(e){}} },
   mbData:    { read:()=>_mapDump(MB_DATE_DATA),        write:r=>{const m={};r.forEach(x=>m[x.id]=x.obj);MB_DATE_DATA=m;},        render:()=>{try{renderMinibar();}catch(e){}} },
   hvRewash:  { read:()=>[{id:'_', obj:HV_REWASH_DATA}], write:r=>{const x=r.find(v=>v.id==='_'); HV_REWASH_DATA=x?x.obj:{};}, render:()=>{try{renderHangVai();}catch(e){}} },
+  hvNono:    { read:()=>[{id:'_', obj:HV_NONO_OVERRIDE}], write:r=>{const x=r.find(v=>v.id==='_'); HV_NONO_OVERRIDE=(x&&x.obj&&typeof x.obj==='object')?x.obj:{};}, render:()=>{try{renderHangVai();}catch(e){}} },
   hvCols:    { read:()=>[{id:'_', obj:HV_REWASH_COLS}], write:r=>{const x=r.find(v=>v.id==='_'); HV_REWASH_COLS=x?x.obj:[];}, render:()=>{try{renderHangVai();}catch(e){}} },
   cats:      { read:()=>[{id:'_', obj:CATS}], write:r=>{const x=r.find(v=>v.id==='_'); if(x&&x.obj){ CATS=x.obj; enforceThuCats(); rebuildBpLabels(); }}, render:()=>{try{refreshAllCatSelects();}catch(e){}} },
   dvtList:   { read:()=>[{id:'_', obj:DVT_LIST}], write:r=>{const x=r.find(v=>v.id==='_'); if(x&&Array.isArray(x.obj)) DVT_LIST=x.obj;}, render:()=>{try{fillDvtSelect();}catch(e){}} },
@@ -9921,7 +9965,7 @@ function syncNow(){ _lsSaveRaw(); if(sb&&cloudReady) flushToCloud(); }
 const WRITE_MATRIX = {
   thu:['giamdoc','ketoan'], chi:['giamdoc','ketoan'],
   ncc:['giamdoc','ketoan'], catalog:['giamdoc','ketoan'],
-  nsLuong:['giamdoc','hr'], bhxh:['giamdoc','hr'], tncn:['giamdoc','hr'], cats:['giamdoc'], dvtList:['giamdoc','ketoan'], hkStaff:['giamdoc','truong-bp','ketoan'], mbHistory:['giamdoc','truong-bp','ketoan'],
+  nsLuong:['giamdoc','hr'], bhxh:['giamdoc','hr'], tncn:['giamdoc','hr'], cats:['giamdoc'], dvtList:['giamdoc','ketoan'], hkStaff:['giamdoc','truong-bp','ketoan'], mbHistory:['giamdoc','truong-bp','ketoan'], hvNono:['giamdoc','truong-bp','ketoan'],
   dx:['giamdoc','ketoan','truong-bp','hr'], kho:['giamdoc','ketoan','truong-bp','hr'], yc:['giamdoc','ketoan','truong-bp','hr'], ycDeleted:['giamdoc','ketoan','truong-bp','hr'], transferReq:['giamdoc','ketoan','truong-bp','hr'],
   wsData:['giamdoc','truong-bp'], roomStatus:['giamdoc','truong-bp'], amData:['giamdoc','truong-bp'],
   mbData:['giamdoc','truong-bp'], hvLinen:['giamdoc','truong-bp'], hvRewash:['giamdoc','truong-bp'],
@@ -9934,7 +9978,7 @@ const COLLECTION_TAB = {
   nsLuong:'nhan-su', bhxh:'nhan-su', tncn:'nhan-su',
   dx:'de-xuat', kho:'kho', transferReq:'yeu-cau-transfer',
   quyTx:'quy-tien-mat', quyUng:'quy-tien-mat',
-  yc:'buong-phong', ycDeleted:'buong-phong', wsData:'buong-phong', roomStatus:'buong-phong', hkStaff:'buong-phong', mbHistory:'buong-phong',
+  yc:'buong-phong', ycDeleted:'buong-phong', wsData:'buong-phong', roomStatus:'buong-phong', hkStaff:'buong-phong', mbHistory:'buong-phong', hvNono:'buong-phong',
   amData:'buong-phong', mbData:'buong-phong', hvLinen:'buong-phong', hvRewash:'buong-phong',
   hvCols:'buong-phong', sx:'buong-phong',
 };   // 'cats' KHÔNG map → giữ chỉ Giám đốc
