@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.18b';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.18c';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -313,7 +313,9 @@ body{font-family:'Inter',sans-serif;background:var(--cream);color:var(--text);mi
 
 /* ===MAIN APP=== */
 #app{display:none;width:100%;}
-.sidebar{width:240px;height:100vh;background:var(--navy);display:flex;flex-direction:column;position:fixed;top:0;left:0;z-index:100;overflow:hidden;}
+.sidebar{width:240px;height:100vh;background:var(--navy);display:flex;flex-direction:column;position:fixed;top:0;left:0;z-index:100;overflow:hidden;transition:transform .22s ease;}
+body.sidebar-collapsed .sidebar{transform:translateX(-240px);}
+body.sidebar-collapsed .main{margin-left:0;}
 
 .logo{padding:24px 24px 18px;border-bottom:1px solid rgba(201,168,76,.2);flex-shrink:0;}
 
@@ -338,7 +340,7 @@ body{font-family:'Inter',sans-serif;background:var(--cream);color:var(--text);mi
 /* Nút logout dạng text+icon đẹp hơn */
 .logout-btn{display:flex;align-items:center;gap:6px;padding:7px 12px;border-radius:8px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);color:rgba(255,255,255,.6);cursor:pointer;font-size:12px;font-family:'Inter',sans-serif;transition:all .15s;white-space:nowrap;}
 .logout-btn:hover{background:rgba(192,57,43,.5);color:#fff;border-color:rgba(192,57,43,.6);}
-.main{margin-left:240px;flex:1;display:flex;flex-direction:column;min-height:100vh;min-width:0;overflow-x:hidden;}
+.main{margin-left:240px;flex:1;display:flex;flex-direction:column;min-height:100vh;min-width:0;overflow-x:hidden;transition:margin-left .22s ease;}
 .topbar{background:var(--white);border-bottom:1px solid var(--border);padding:0 32px;height:58px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50;}
 .page-title{font-family:'Playfair Display',serif;font-size:19px;color:var(--navy);font-weight:500;}
 .topbar-right{display:flex;align-items:center;gap:12px;}
@@ -517,7 +519,7 @@ textarea{resize:vertical;min-height:68px;}
   .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:199;}
   .sidebar-overlay.open{display:block;}
 }
-@media (min-width:1181px){#sidebar-toggle-btn{display:none!important;}}
+/* Nút ☰ hiện ở mọi kích thước — desktop dùng để thu/mở sidebar (body.sidebar-collapsed) */
 .kho-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px;padding:4px 0;}
 .kho-tab{padding:7px 14px;border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;border:1.5px solid var(--border);color:var(--text-muted);background:#fff;transition:all .15s;white-space:nowrap;}
 .kho-tab:hover{border-color:var(--gold);color:var(--gold);}
@@ -5875,7 +5877,7 @@ function snapshotWsToDate(dateKey){
 const AM_ITEMS=['Suối','Trà','Cà phê','Đường','Bàn chải','Lược','Chụp tóc','Tăm bông','Dao cạo râu','Giấy vệ sinh'];
 const AM_WS_KEYS={Suối:'suoi',Trà:'tra','Cà phê':'cafe',Đường:'duong','Bàn chải':'ban_chai',Lược:'luoc','Chụp tóc':'chup_toc','Tăm bông':'tam_bong','Dao cạo râu':'dao_cao','Giấy vệ sinh':'giay_vs'};
 function renderAmenity(){
-  const thang=document.getElementById('am-thang')?.value||'2026-07';
+  const thang=document.getElementById('am-thang')?.value||curMonth();
   const [y,m]=thang.split('-').map(Number);
   const daysInMonth=new Date(y,m,0).getDate();
   const days=Array.from({length:daysInMonth},(_,i)=>i+1);
@@ -5917,7 +5919,7 @@ function renderAmenity(){
 function setHvView(view,el){hvView=view;document.querySelectorAll('#bp-panel-hang-vai .bp-tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');document.getElementById('hv-view-linen').style.display=view==='linen'?'block':'none';document.getElementById('hv-view-rewash').style.display=view==='rewash'?'block':'none';renderHangVai();}
 function renderHangVai(){hvView==='linen'?renderHvLinen():renderHvRewash();}
 function renderHvLinen(){
-  const thang=document.getElementById('hv-thang')?.value||'2026-07';
+  const thang=document.getElementById('hv-thang')?.value||curMonth();
   const [y,m]=thang.split('-').map(Number);
   const days=[];
   for(let d=25;d<=31;d++){const dt=new Date(y,m-2,d);if(dt.getMonth()===m-2)days.push({d,m:m-1<1?12:m-1,label:`${d}/${m-1<1?12:m-1}`});}
@@ -9424,7 +9426,8 @@ function rejectDx(id){
 function toggleAnySidebar(){
   const sb=document.querySelector('.sidebar');
   const ov=document.getElementById('sidebar-overlay');
-  if(!sb||window.innerWidth>1180) return;
+  if(!sb) return;
+  if(window.innerWidth>1180){ document.body.classList.toggle('sidebar-collapsed'); return; }   // desktop: thu/mở sidebar
   const isOpen=sb.classList.contains('open')||sb.classList.contains('ipad-open');
   if(isOpen){
     sb.classList.remove('open','ipad-open');
@@ -9453,23 +9456,29 @@ function syncMobNotif(){
   });
 }
 function checkMobileLayout(){
-  // Hiện nút ☰ khi < 1181px (mobile + iPad)
+  // Nút ☰ luôn hiện: mobile/iPad để mở menu, desktop để thu/mở sidebar
   const btn=document.getElementById('sidebar-toggle-btn');
-  if(btn) btn.style.display=window.innerWidth<1181?'flex':'none';
-  // Desktop: đảm bảo sidebar luôn hiện
+  if(btn) btn.style.display='flex';
   if(window.innerWidth>1180){
+    // Desktop: dọn class mobile (giữ trạng thái thu/mở của desktop)
     const sb=document.querySelector('.sidebar');
     if(sb){ sb.classList.remove('open','ipad-open'); }
     const ov=document.getElementById('sidebar-overlay');
     if(ov){ ov.classList.remove('open'); }   // GIỮ handler chạm nền tối
+  } else {
+    document.body.classList.remove('sidebar-collapsed');   // mobile: dùng open/ipad-open, không dùng collapse desktop
   }
 }
 window.addEventListener('resize', checkMobileLayout);
 document.querySelector('.sidebar')?.setAttribute('id','main-sidebar');
 checkMobileLayout();
 
+// Tháng hiện hành dạng YYYY-MM (dùng cho mặc định các ô chọn tháng)
+function curMonth(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
 // Set today
 const today=new Date(); document.getElementById('topbar-date').textContent='📅 '+today.toLocaleDateString('vi-VN',{month:'long',year:'numeric'});
+// Buồng phòng: đưa ô chọn tháng của Minibar/Amenity/Hàng vải về THÁNG HIỆN HÀNH (trước đây kẹt 2026-07)
+['mb-thang','am-thang','hv-thang'].forEach(id=>{ const e=document.getElementById(id); if(e && (!e.value||e.value==='2026-07')) e.value=curMonth(); });
 
 // ===== PWA SERVICE WORKER =====
 let swReg = null, _swReloaded=false;
