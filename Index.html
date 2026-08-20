@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.18k';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.18l';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -70,7 +70,7 @@ const TAB_COLLECTIONS = {
   'danh-muc': ['catalog'],
   'kho': ['kho'],
   'nhan-su': ['nsLuong','bhxh','tncn'],
-  'buong-phong': ['wsData','roomStatus','amData','mbData','hvLinen','hvRewash','hvCols','yc','sx'],
+  'buong-phong': ['wsData','roomStatus','amData','mbData','hvLinen','hvRewash','hvCols','yc','ycDeleted','sx','hkStaff','mbHistory','hvNono'],
 };
 
 // Chỉ xoá dữ liệu của TAB đang mở (không xoá toàn bộ như clearLocalData).
@@ -9949,7 +9949,7 @@ const COLLECTIONS = {
   hvCols:    { read:()=>[{id:'_', obj:HV_REWASH_COLS}], write:r=>{const x=r.find(v=>v.id==='_'); HV_REWASH_COLS=x?x.obj:[];}, render:()=>{try{renderHangVai();}catch(e){}} },
   cats:      { read:()=>[{id:'_', obj:CATS}], write:r=>{const x=r.find(v=>v.id==='_'); if(x&&x.obj){ CATS=x.obj; enforceThuCats(); rebuildBpLabels(); }}, render:()=>{try{refreshAllCatSelects();}catch(e){}} },
   dvtList:   { read:()=>[{id:'_', obj:DVT_LIST}], write:r=>{const x=r.find(v=>v.id==='_'); if(x&&Array.isArray(x.obj)) DVT_LIST=x.obj;}, render:()=>{try{fillDvtSelect();}catch(e){}} },
-  hkStaff:   { read:()=>[{id:'_', obj:HK_STAFF}], write:r=>{const x=r.find(v=>v.id==='_'); if(x&&Array.isArray(x.obj)) HK_STAFF=x.obj;}, render:()=>{try{renderWsStaffBar();}catch(e){}} },
+  hkStaff:   { read:()=>[{id:'_', obj:HK_STAFF}], write:r=>{const x=r.find(v=>v.id==='_'); HK_STAFF=(x&&Array.isArray(x.obj))?x.obj:[];}, render:()=>{try{renderWsStaffBar();}catch(e){}} },
   mbHistory: { read:()=>_byIdDump(MB_HISTORY), write:r=>{MB_HISTORY=r.map(x=>x.obj);}, render:()=>{try{renderMinibar();}catch(e){}} },
 };
 
