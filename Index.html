@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.18i';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.18j';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -1602,8 +1602,12 @@ textarea{resize:vertical;min-height:68px;}
       <div id="bp-panel-worksheet">
         <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
           <div style="display:flex;border:1.5px solid var(--border);border-radius:8px;overflow:hidden;">
-            <button id="ws-filter-a" class="btn btn-primary btn-sm" style="border-radius:0;border:none;" onclick="setWsFilter('A')">Tầng A (2–6)</button>
-            <button id="ws-filter-b" class="btn btn-ghost btn-sm"  style="border-radius:0;border:none;" onclick="setWsFilter('B')">Tầng B (7–11)</button>
+            <button id="ws-filter-a" class="btn btn-primary btn-sm" style="border-radius:0;border:none;" onclick="setWsFilter('A')">Tầng A</button>
+            <button id="ws-filter-b" class="btn btn-ghost btn-sm"  style="border-radius:0;border:none;" onclick="setWsFilter('B')">Tầng B</button>
+          </div>
+          <div style="position:relative;">
+            <button class="btn btn-ghost btn-sm" onclick="wsToggleFloorPanel(event)">🏢 Chọn tầng ▾</button>
+            <div id="ws-floor-panel" style="display:none;position:absolute;z-index:50;top:100%;left:0;margin-top:4px;background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px 12px;box-shadow:var(--shadow);min-width:180px;"></div>
           </div>
           <input type="date" id="ws-ngay" style="font-size:12px;padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;" onchange="renderWorksheet()">
           <button class="btn btn-excel btn-sm" onclick="importSmileFile()">📥 Import từ Smile</button>
@@ -5629,8 +5633,41 @@ function switchBpTab(tab,el){
   if(tab==='yeu-cau'){renderYeuCau();}
 }
 
+// ===== Chọn TẦNG cho tab A/B theo TỪNG NGÀY (lưu ở WS_DATA_BY_DATE[dk]._floors) =====
+function wsAllFloors(){ return [...new Set(ALL_ROOMS.map(r=>parseInt(mbFloorOf(r))))].sort((a,b)=>a-b); }
+function wsFloorObj(){
+  const dk=wsDateKey(); const day=getWsDataForDate(dk);
+  if(!day._floors||typeof day._floors!=='object'){
+    // Lấy cấu hình của NGÀY GẦN NHẤT trước đó có _floors; không có thì mặc định A=<7, B=≥7
+    let src=null, best='';
+    Object.keys(WS_DATA_BY_DATE).forEach(k=>{ if(k<dk && WS_DATA_BY_DATE[k]&&WS_DATA_BY_DATE[k]._floors && k>best){ best=k; src=WS_DATA_BY_DATE[k]._floors; } });
+    if(src) day._floors={A:[...(src.A||[])],B:[...(src.B||[])]};
+    else { const all=wsAllFloors(); day._floors={A:all.filter(f=>f<7),B:all.filter(f=>f>=7)}; }
+  }
+  if(!Array.isArray(day._floors.A)) day._floors.A=[];
+  if(!Array.isArray(day._floors.B)) day._floors.B=[];
+  return day._floors;
+}
 function getFilteredRooms(){
-  return wsFilter==='A'?ALL_ROOMS.filter(r=>parseInt(r)<700):ALL_ROOMS.filter(r=>parseInt(r)>=700);
+  const set=new Set((wsFloorObj()[wsFilter]||[]).map(Number));
+  return ALL_ROOMS.filter(r=>set.has(parseInt(mbFloorOf(r))));
+}
+function wsToggleFloor(f){
+  const arr=wsFloorObj()[wsFilter]; f=Number(f); const i=arr.indexOf(f);
+  if(i>=0) arr.splice(i,1); else { arr.push(f); arr.sort((a,b)=>a-b); }
+  renderWorksheet(); try{ syncNow(); }catch(e){}
+}
+function wsToggleFloorPanel(ev){ if(ev) ev.stopPropagation(); const p=document.getElementById('ws-floor-panel'); if(p) p.style.display=p.style.display==='none'?'block':'none'; }
+function _wsFloorsLabel(arr){ if(!arr||!arr.length) return '—'; const s=[...arr].sort((a,b)=>a-b); let cont=true; for(let i=1;i<s.length;i++) if(s[i]!==s[i-1]+1) cont=false; return cont?`${s[0]}–${s[s.length-1]}`:s.join(','); }
+function renderWsFloorControls(){
+  const fo=wsFloorObj();
+  const a=document.getElementById('ws-filter-a'), b=document.getElementById('ws-filter-b');
+  if(a) a.textContent=`Tầng A (${_wsFloorsLabel(fo.A)})`;
+  if(b) b.textContent=`Tầng B (${_wsFloorsLabel(fo.B)})`;
+  const panel=document.getElementById('ws-floor-panel'); if(!panel) return;
+  const sel=new Set((fo[wsFilter]||[]).map(Number));
+  panel.innerHTML=`<div style="font-size:12px;font-weight:700;color:var(--navy);margin-bottom:6px;">Tầng ${wsFilter} gồm:</div>`+
+    wsAllFloors().map(f=>`<label style="display:flex;align-items:center;gap:6px;font-size:12px;padding:3px 2px;cursor:pointer;"><input type="checkbox" ${sel.has(f)?'checked':''} onchange="wsToggleFloor(${f})"> Tầng ${f}</label>`).join('');
 }
 function setWsFilter(f){
   wsFilter=f;
@@ -5738,6 +5775,7 @@ function renderWorksheet(){
   </tr>`;
   document.getElementById('ws-tbody').innerHTML=rows.join('')+totalRow;
   try{ renderWsStaffBar(); }catch(e){}
+  try{ renderWsFloorControls(); }catch(e){}
 }
 // Dựng chuỗi Arr/Dep từ 2 cột file Smile — BÁM TOKEN (ARR/DPT) ở BẤT KỲ cột nào, không theo vị trí.
 // ARR + ngày → "ARR - ngày"; ngày + DPT → "ngày - DEP"; 2 ngày → "ngày → ngày".
