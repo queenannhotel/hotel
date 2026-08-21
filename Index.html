@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.18o';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.18p';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -2889,13 +2889,23 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
       <div class="form-group"><label>Tên mặt hàng <span style="color:var(--red);">*</span></label><input id="ai-name" placeholder="VD: Ga trải giường cotton"></div>
     </div>
     <div class="form-row">
-      <div class="form-group"><label>Đơn vị tính</label>
+      <div class="form-group"><label>Đơn vị tính <span style="color:var(--text-muted);font-weight:400;font-size:11px;">— ĐVT khi mua/đề xuất</span></label>
         <div style="display:flex;gap:6px;align-items:center;">
-          <select id="ai-dvt" style="flex:1;"></select>
+          <select id="ai-dvt" style="flex:1;" onchange="aiSyncQuydoiDvt()"></select>
           <button type="button" id="ai-dvt-mgr" onclick="openCatManager('dvt')" title="Thêm/Xoá đơn vị tính (Giám đốc/Kế toán)" style="display:none;white-space:nowrap;padding:6px 9px;border-radius:8px;border:1.5px solid var(--border);background:#fff;cursor:pointer;font-size:12px;">⚙ ĐVT</button>
         </div>
       </div>
       <div class="form-group"><label>Bộ phận sử dụng <span style="color:var(--text-muted);font-weight:400;font-size:11px;">— chọn nhiều</span></label><div id="ai-bophan-list" style="display:flex;flex-wrap:wrap;gap:6px 14px;padding:8px 0;"></div></div>
+    </div>
+    <div class="form-row full">
+      <div class="form-group"><label>Quy đổi khi nhập kho <span style="color:var(--text-muted);font-weight:400;font-size:11px;">— để trống nếu không quy đổi</span></label>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px;">
+          <span>1 <strong id="ai-quydoi-dvt">ĐVT mua</strong> =</span>
+          <input id="ai-quydoi" type="number" min="0" step="any" placeholder="VD: 15" style="width:100px;">
+          <select id="ai-dvt-kho" style="min-width:120px;"></select>
+          <span style="color:var(--text-muted);font-size:11px;">(ĐVT kho — kiểm kê theo đvt này)</span>
+        </div>
+      </div>
     </div>
     <div class="form-row full">
       <div class="form-group"><label>Loại hàng <span style="color:var(--text-muted);font-weight:400;font-size:11px;">— chọn nhiều loại nếu cần (để trống nếu không phân loại)</span></label>
@@ -3083,17 +3093,28 @@ function refreshCatSelects(key){
 function refreshAllCatSelects(){ catMergeUsed(); ['ncc','thu','bophan'].forEach(refreshCatSelects); try{ fillDvtSelect(); }catch(e){} }
 // ===== Đơn vị tính (ĐVT) — danh sách đồng bộ (Giám đốc/Kế toán thêm được) =====
 let DVT_LIST=['bộ','cái','kg','lít','hộp','thùng','m²','cuộn','lần','đợt','tờ','gói','vỉ','can','đôi','túi','lon','chai','cây','xấp','sợi','ram'];
-function fillDvtSelect(selected){
-  const sel=document.getElementById('ai-dvt'); if(!sel) return;
+function fillDvtSelectInto(id, selected){
+  const sel=document.getElementById(id); if(!sel) return;
   const cur = selected!==undefined ? selected : sel.value;
   const all=[...DVT_LIST];
   const has=v=>all.some(x=>(x||'').toLowerCase()===(v||'').toLowerCase());
   // Gộp ĐVT đã dùng trong danh mục (không mất giá trị cũ) + giá trị đang chọn (nếu là ĐVT lạ)
-  [...new Set((catalogItems||[]).map(it=>(it.dvt||'').trim()).filter(Boolean))].forEach(u=>{ if(!has(u)) all.push(u); });
+  [...new Set((catalogItems||[]).flatMap(it=>[(it.dvt||'').trim(),(it.dvtKho||'').trim()]).filter(Boolean))].forEach(u=>{ if(!has(u)) all.push(u); });
   if(cur && !has(cur)) all.push(cur);
   sel.innerHTML=all.map(u=>`<option value="${esc(u)}">${esc(u)}</option>`).join('');
   sel.value = cur||all[0]||'';
 }
+function fillDvtSelect(selected){ fillDvtSelectInto('ai-dvt', selected); }
+// Select ĐVT kho: có 1 lựa chọn trống ở đầu = không quy đổi
+function fillDvtKhoSelect(selected){
+  fillDvtSelectInto('ai-dvt-kho', selected||'');
+  const sel=document.getElementById('ai-dvt-kho'); if(!sel) return;
+  const blank=document.createElement('option'); blank.value=''; blank.textContent='— chọn —';
+  sel.insertBefore(blank, sel.firstChild);
+  sel.value = selected||'';
+}
+// Cập nhật nhãn "1 ⟨ĐVT mua⟩" cạnh ô hệ số quy đổi
+function aiSyncQuydoiDvt(){ const s=document.getElementById('ai-quydoi-dvt'); const d=document.getElementById('ai-dvt'); if(s&&d) s.textContent=d.value||'ĐVT mua'; }
 // Giữ tương thích tên cũ
 function populateNccDanhmuc(selected){ catMergeUsed(); fillCatSelect('ncc-danhmuc','ncc',{selected, allLabel:'— Chọn —'}); }
 
@@ -4032,6 +4053,19 @@ function khoNorm(s){ return (s||'').normalize('NFC').trim().toLowerCase().replac
 function khoDvt(d){ return khoNorm((d||'').trim()||'Cái'); }
 // Vị trí chuẩn để so khớp — mỗi vị trí là 1 dòng riêng (không gộp các vị trí khác nhau).
 function khoVi(v){ return khoNorm(v||''); }
+// Quy đổi ĐVT khi hàng vào kho (chỉ luồng Đề xuất→Chi→Kho). Nếu mặt hàng trong Danh mục có
+// cấu hình quyDoi>0 & dvtKho, VÀ ĐVT vào đúng là ĐVT mua → nhân hệ số & đổi sang ĐVT kho.
+// Không khớp ĐVT mua (đã là đvt kho, hoặc không cấu hình) → giữ nguyên.
+function khoConvertIntake(ten, sl, dvt){
+  sl=parseFloat(sl)||0;
+  const it=(typeof catalogItems!=='undefined'?catalogItems:[]).find(c=>khoNorm(c.name)===khoNorm(ten));
+  const heso=it?parseFloat(it.quyDoi)||0:0;
+  const dvtKho=it?(it.dvtKho||'').trim():'';
+  if(it && heso>0 && dvtKho && khoDvt(dvt)===khoDvt(it.dvt)){
+    return {sl: sl*heso, dvt: dvtKho, converted:true, origSl:sl, origDvt:(dvt||'').trim(), heso};
+  }
+  return {sl, dvt, converted:false};
+}
 function mergeKhoDuplicates(){
   const keyOf=it=>`${it.bophan||''}|${khoNorm(it.ten)}|${khoDvt(it.dvt)}|${khoVi(it.vitri)}`;
   const keep=new Map(); const removeIds=new Set();
@@ -4156,15 +4190,19 @@ function confirmChiSyncKho(){
 // Đẩy 1 mặt hàng Chi vào kho gắn (gắn ref_chi để rút chính xác; dedup chống trùng).
 function addChiKhoEntry(r){
   const kho=r.kho||'kt', ten=r.ten_hang; if(!ten) return;
-  const dvt=(r.dvt||'').trim()||'Cái';   // cùng 1 giá trị ĐVT cho cả TÌM và TẠO (chống sinh dòng trùng)
-  const sl=parseFloat(r.sl)||0;
+  const dvtMua=(r.dvt||'').trim()||'Cái';
+  // Quy đổi ĐVT theo cấu hình Danh mục (1 đvt mua = hệ số đvt kho). Phiếu Chi vẫn giữ đvt mua.
+  const cv=khoConvertIntake(ten, parseFloat(r.sl)||0, dvtMua);
+  const dvt=(cv.dvt||'').trim()||'Cái';   // cùng 1 giá trị ĐVT cho cả TÌM và TẠO (chống sinh dòng trùng)
+  const sl=cv.sl;
   const ngay=r.ngay||new Date().toLocaleDateString('vi-VN');
   const vitri=khoVitriDefault(kho);   // hàng nhập tự động từ Chi → vào vị trí mặc định của kho
   let it=KHO_DATA.find(x=>x.bophan===kho && khoNorm(x.ten)===khoNorm(ten) && khoDvt(x.dvt)===khoDvt(dvt) && khoVi(x.vitri)===khoVi(vitri));
   if(!it){ it={id:'KH'+Date.now()+Math.floor(Math.random()*1000),ma:'',ten,dvt,bophan:kho,vitri,ton_dau:0,img:'📦',ghichu:'',lichSu:[]}; KHO_DATA.push(it); }
   if(!Array.isArray(it.lichSu)) it.lichSu=[];
   if(sl>0 && !it.lichSu.some(h=>h.ref_chi===r.id)){
-    it.lichSu.push({ngay,loai:'nhap',sl,tu:'',den:kho,lydo:`Nhập từ Chi${r.ten_ncc&&r.ten_ncc!=='—'?' ('+r.ten_ncc+')':''}`,ref_chi:r.id,nguoi:currentUser?.fullname||'Kế toán',vitri});
+    const qdNote=cv.converted?` — quy đổi ${cv.origSl} ${cv.origDvt} × ${cv.heso} = ${cv.sl} ${cv.dvt}`:'';
+    it.lichSu.push({ngay,loai:'nhap',sl,tu:'',den:kho,lydo:`Nhập từ Chi${r.ten_ncc&&r.ten_ncc!=='—'?' ('+r.ten_ncc+')':''}${qdNote}`,ref_chi:r.id,nguoi:currentUser?.fullname||'Kế toán',vitri});
   }
   r.kho_pushed=true; r.kho_pushed_to=kho;
 }
@@ -6958,7 +6996,7 @@ document.getElementById('catalog-tbody').innerHTML=items.map(it=>{
   return `<tr>
     <td style="font-size:11px;color:var(--text-muted);font-weight:600;">${it.code}</td>
     <td><div style="font-weight:500;">${it.name}</div>${itemLoaiList(it).map(k=>`<span class="badge ${k==='thuc-pham'?'badge-green':k==='tieu-dung'?'badge-blue':'badge-navy'}" style="font-size:9px;margin-top:2px;margin-right:3px;display:inline-block;">${LOAI_HANG_LABEL[k]||k}</span>`).join('')}${it.note?`<div style="font-size:11px;color:var(--text-muted);">${it.note}</div>`:''}</td>
-    <td>${it.dvt}</td>
+    <td>${it.dvt}${(parseFloat(it.quyDoi)>0&&it.dvtKho)?`<div style="font-size:10px;color:var(--text-muted);white-space:nowrap;">→ ${it.quyDoi} ${it.dvtKho}/kho</div>`:''}</td>
     <td>${catBophans(it).map(b=>`<span class="badge badge-navy" style="margin:1px;">${BP_LABELS[b]||b}</span>`).join('')||'—'}</td>
     <td style="max-width:180px;">${nccBadges||'\u2014'}</td>
     <td style="color:var(--green);font-weight:700;">${fmt(p.min)}<div style="font-size:9px;color:var(--text-muted);font-weight:400;">t\u1ef1 t\u00ednh</div></td>
@@ -7106,7 +7144,7 @@ const suppliers=aiReadSuppliers();
 const nccIds=[...new Set(suppliers.map(s=>s.nccId))];   // suy ra danh s\u00e1ch NCC li\u00ean k\u1ebft
 const bophans=aiReadBophans();
 if(!bophans.length){ showToast('Ch\u1ecdn \u00edt nh\u1ea5t 1 b\u1ed9 ph\u1eadn s\u1eed d\u1ee5ng!',2500,'error'); return; }
-const base={code:document.getElementById('ai-code').value.trim(),name,dvt:document.getElementById('ai-dvt').value,bophans,bophan:bophans[0],loaiHangs:aiReadLoaiList(),nccIds,suppliers,note:document.getElementById('ai-note').value.trim()};
+const base={code:document.getElementById('ai-code').value.trim(),name,dvt:document.getElementById('ai-dvt').value,dvtKho:document.getElementById('ai-dvt-kho').value,quyDoi:parseFloat(document.getElementById('ai-quydoi').value)||0,bophans,bophan:bophans[0],loaiHangs:aiReadLoaiList(),nccIds,suppliers,note:document.getElementById('ai-note').value.trim()};
 if(editingItemId){
   const idx=catalogItems.findIndex(x=>x.id===editingItemId);
   if(idx>-1) catalogItems[idx]={...catalogItems[idx],...base};
@@ -9717,6 +9755,9 @@ function editItem(id){
   document.getElementById('ai-name').value=it.name||'';
   document.getElementById('ai-code').value=it.code||'';
   fillDvtSelect(it.dvt||'');
+  fillDvtKhoSelect(it.dvtKho||'');
+  { const q=document.getElementById('ai-quydoi'); if(q) q.value=it.quyDoi?it.quyDoi:''; }
+  aiSyncQuydoiDvt();
   dxvtMgrBtnVisibility();
   renderAiBophanChecks(catBophans(it));
   aiFillLoaiBox(itemLoaiList(it));
@@ -9758,8 +9799,10 @@ function dxvtMgrBtnVisibility(){
 function openAddItemModal(){
   editingItemId=null; editingCatalogId=null;
   document.getElementById('ai-modal-title').textContent='📦 Thêm Mặt Hàng';
-  ['ai-name','ai-code','ai-note'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['ai-name','ai-code','ai-note','ai-quydoi'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   fillDvtSelect('');
+  fillDvtKhoSelect('');
+  aiSyncQuydoiDvt();
   dxvtMgrBtnVisibility();
   const hist=document.getElementById('ai-history-wrap'); if(hist) hist.style.display='none';
   renderAiBophanChecks([]);
