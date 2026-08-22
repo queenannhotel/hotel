@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.18s';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.18t';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -2436,8 +2436,8 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
       <label style="margin:0;">Mặt hàng nhập <span style="color:var(--red)">*</span></label>
       <button class="btn btn-ghost btn-sm" type="button" onclick="khoAddRow('kn')">＋ Thêm món</button>
     </div>
-    <div style="display:grid;grid-template-columns:1.5fr 60px 1.5fr 30px;gap:6px;font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.3px;padding:0 8px;margin-bottom:3px;">
-      <span>Tên hàng</span><span>SL Nhập</span><span>Lý do</span><span></span>
+    <div style="display:grid;grid-template-columns:1.5fr 60px 96px 1.3fr 30px;gap:6px;font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.3px;padding:0 8px;margin-bottom:3px;">
+      <span>Tên hàng</span><span>SL Nhập</span><span>ĐVT</span><span>Lý do</span><span></span>
     </div>
     <div id="kn-items"></div>
     <div class="form-group" style="margin-bottom:12px;">
@@ -8572,6 +8572,14 @@ function khoCatConvert(it){
   if(khoDvt(it.dvt)===khoDvt(newDvt)) return null;   // đã ở ĐVT kho → không cần quy đổi
   return {heso, newDvt, catDvt:(cat.dvt||'').trim()};
 }
+// Thông tin quy đổi theo TÊN mặt hàng (không phụ thuộc ĐVT dòng kho) — dùng cho ô chọn ĐVT khi nhập tay.
+function khoCatInfo(name){
+  const cat=(typeof catalogItems!=='undefined'?catalogItems:[]).find(c=>khoNorm(c.name)===khoNorm(name));
+  if(!cat) return null;
+  const heso=parseFloat(cat.quyDoi)||0, newDvt=(cat.dvtKho||'').trim(), catDvt=(cat.dvt||'').trim();
+  if(!(heso>0 && newDvt)) return null;
+  return {heso, newDvt, catDvt};
+}
 function convertKhoItemUnit(id){
   if(currentUser?.role!=='giamdoc'){ showToast('Chỉ Giám đốc được quy đổi ĐVT',2500,'error'); return; }
   const it0=KHO_DATA.find(x=>x.id===id); if(!it0) return;
@@ -8980,10 +8988,12 @@ function saveKhoItem(){
 function khoRowHtml(px){
   const isXuat = px==='kx';
   const lydoPh = px==='kh' ? 'Lý do huỷ (bắt buộc)' : (px==='kn' ? 'Lý do nhập' : 'Lý do xuất');
-  const grid = isXuat ? '1.4fr 74px 60px 1.4fr 30px' : '1.5fr 60px 1.5fr 30px';
+  const grid = isXuat ? '1.4fr 74px 60px 1.4fr 30px' : (px==='kn' ? '1.5fr 60px 96px 1.3fr 30px' : '1.5fr 60px 1.5fr 30px');
   // Xuất: ô SL Tồn CK (cuối kỳ) giữa Tên hàng và SL Xuất → SL Xuất = tồn kho − Tồn CK
   const tonckCell = isXuat ? `<input type="number" class="kxr-tonck" min="0" placeholder="Tồn CK" title="SL tồn cuối kỳ (đếm thực tế) — SL Xuất = tồn kho − Tồn CK" oninput="khoRowXuatCalc(this.closest('.kho-item-row'))">` : '';
   const slPh = isXuat ? 'SL Xuất' : (px==='kn' ? 'SL Nhập' : 'SL');
+  // Nhập: ô chọn ĐVT (đvt nhỏ nhất / đvt quy đổi) — nạp option khi chọn mặt hàng.
+  const dvtCell = px==='kn' ? `<select class="knr-dvtsel" title="Đơn vị nhập" onchange="khoRowDvtChange(this)" style="height:34px;"><option value="">ĐVT</option></select>` : '';
   return `<div class="${px}r kho-item-row" data-dvt="" style="display:grid;grid-template-columns:${grid};gap:6px;align-items:start;margin-bottom:6px;padding:8px;background:var(--cream);border:1px solid var(--border);border-radius:8px;">
     <div class="form-group" style="margin:0;">
       <div class="select-wrap"><input class="${px}r-ten" autocomplete="off" placeholder="Gõ tên hàng..." oninput="khoRowTenInput(this,'${px}')" onfocus="khoRowTenInput(this,'${px}')" onblur="setTimeout(()=>{const dd=this.closest('.select-wrap')?.querySelector('.dropdown-list');if(dd)dd.classList.remove('open');},200)"><div class="dropdown-list"></div></div>
@@ -8991,6 +9001,7 @@ function khoRowHtml(px){
     </div>
     ${tonckCell}
     <input type="number" class="${px}r-sl" min="1" value="1" placeholder="${slPh}" oninput="khoRowBalance(this.closest('.kho-item-row'),'${px}')">
+    ${dvtCell}
     <input class="${px}r-lydo" placeholder="${lydoPh}">
     <button class="btn btn-ghost btn-sm" type="button" onclick="khoRemoveRow(this,'${px}')" title="Xoá dòng" style="height:34px;padding:0;">🗑</button>
   </div>`;
@@ -9027,7 +9038,19 @@ function khoSelectItem(el,px,id){
   if(px==='kn'){
     const c=(catalogItems||[]).find(x=>x.id===id); if(!c) return;
     row.querySelector('.knr-ten').value=c.name||'';
-    row.dataset.dvt=c.dvt||'';
+    const sel=row.querySelector('.knr-dvtsel');
+    const info=khoCatInfo(c.name);
+    if(sel){
+      if(info){
+        // Có quy đổi → cho chọn: đvt nhỏ nhất (kho) hoặc đvt quy đổi (mua ×hệ số). Mặc định đvt nhỏ nhất.
+        sel.innerHTML=`<option value="${esc(info.newDvt)}">${esc(info.newDvt)} (nhỏ nhất)</option><option value="${esc(info.catDvt)}">${esc(info.catDvt)} (quy đổi ×${info.heso})</option>`;
+        sel.value=info.newDvt;
+      } else {
+        sel.innerHTML=`<option value="${esc(c.dvt||'')}">${esc(c.dvt||'—')}</option>`;
+        sel.value=c.dvt||'';
+      }
+    }
+    row.dataset.dvt=(sel&&sel.value)||c.dvt||'';
     khoRowBalance(row,'kn'); return;
   }
   const it=KHO_DATA.find(x=>x.id===id); if(!it) return;
@@ -9035,6 +9058,8 @@ function khoSelectItem(el,px,id){
   row.dataset.dvt=it.dvt||'';
   if(px==='kx') khoRowXuatCalc(row); else khoRowBalance(row,px);
 }
+// Đổi ĐVT nhập (đvt nhỏ ↔ đvt quy đổi) → cập nhật dataset để lưu quy đổi đúng.
+function khoRowDvtChange(sel){ const row=sel.closest('.kho-item-row'); if(!row) return; row.dataset.dvt=sel.value||''; khoRowBalance(row,'kn'); }
 // Xuất: SL Xuất = tồn kho (đúng kho chọn) − SL Tồn CK. Nhập Tồn CK → tự điền SL Xuất.
 function khoRowXuatCalc(row){
   if(!row) return;
@@ -9162,12 +9187,17 @@ function saveKhoNhap(){
   const rows=khoReadRows('kn');
   if(!rows.length){ showToast('Vui lòng nhập ít nhất 1 món (tên + số lượng)!',2600,'error'); return; }
   rows.forEach(r=>{
-    const dvt=(r.dvt||'').trim()||'Cái';
+    // Quy đổi nếu chọn ĐVT mua (VD hộp) → nhân hệ số ra ĐVT kho (gói); chọn ĐVT nhỏ thì giữ nguyên.
+    const cv=khoConvertIntake(r.ten, r.sl, r.dvt);
+    const dvt=(cv.dvt||'').trim()||'Cái';
+    const sl=cv.sl;
     // Khớp theo ĐÚNG vị trí → nhập vào vị trí mới tạo dòng mới, không dồn vào vị trí khác.
     let it=KHO_DATA.find(x=>x.bophan===kho && khoNorm(x.ten)===khoNorm(r.ten) && khoDvt(x.dvt)===khoDvt(dvt) && khoVi(x.vitri)===khoVi(vitri));
     if(!it){ it={id:'KH'+Date.now()+Math.floor(Math.random()*1000),ma:'',ten:r.ten,dvt,bophan:kho,vitri,ton_dau:0,img:'📦',ghichu:'',lichSu:[]}; KHO_DATA.push(it); }
     if(!Array.isArray(it.lichSu)) it.lichSu=[];
-    it.lichSu.push({ngay,loai:'nhap',sl:r.sl,tu:'',den:kho,lydo:r.lydo||'Nhập hàng',img,nguoi,vitri});
+    const entry={ngay,loai:'nhap',sl,tu:'',den:kho,lydo:r.lydo||'Nhập hàng',img,nguoi,vitri};
+    if(cv.converted){ entry.qd_goc=cv.origSl; entry.qd_dvt=cv.origDvt; }
+    it.lichSu.push(entry);
   });
   mdClear('modal-kho-nhap');
   closeModal('modal-kho-nhap');
