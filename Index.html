@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.18q';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.18r';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -8561,6 +8561,36 @@ function _renderKhoTabInner(){
     return master+kids;
   }).join(''):`<tr><td colspan="11" style="text-align:center;padding:30px;color:var(--text-muted);">Kho trống — <a href="#" onclick="openKhoAddItem()" style="color:var(--gold);">+ Thêm hàng</a></td></tr>`;
 }
+// ===== Quy đổi ĐVT dòng tồn kho CŨ theo Danh mục (VD hộp → gói), cho hàng nhập trước khi có cấu hình =====
+// Trả về {heso,newDvt,catDvt} nếu mặt hàng có cấu hình quy đổi trong Danh mục và dòng CHƯA ở ĐVT kho; null nếu không.
+function khoCatConvert(it){
+  if(!it) return null;
+  const cat=(typeof catalogItems!=='undefined'?catalogItems:[]).find(c=>khoNorm(c.name)===khoNorm(it.ten));
+  if(!cat) return null;
+  const heso=parseFloat(cat.quyDoi)||0, newDvt=(cat.dvtKho||'').trim();
+  if(!(heso>0 && newDvt)) return null;
+  if(khoDvt(it.dvt)===khoDvt(newDvt)) return null;   // đã ở ĐVT kho → không cần quy đổi
+  return {heso, newDvt, catDvt:(cat.dvt||'').trim()};
+}
+function convertKhoItemUnit(id){
+  if(currentUser?.role!=='giamdoc'){ showToast('Chỉ Giám đốc được quy đổi ĐVT',2500,'error'); return; }
+  const it=KHO_DATA.find(x=>x.id===id); if(!it) return;
+  const cv=khoCatConvert(it);
+  if(!cv){ showToast('Mặt hàng chưa cấu hình quy đổi trong Danh mục, hoặc đã ở ĐVT kho.',3200,'info'); return; }
+  const {heso,newDvt,catDvt}=cv;
+  const hasTransfer=(it.lichSu||[]).some(h=>h.loai==='transfer-in'||h.loai==='transfer-out');
+  let msg=`Quy đổi tồn kho "${it.ten}" từ ${it.dvt} sang ${newDvt} (×${heso})?\nTồn đầu + toàn bộ số lượng trong lịch sử sẽ được nhân ${heso}.`;
+  if(khoDvt(it.dvt)!==khoDvt(catDvt)) msg+=`\n\n⚠ ĐVT hiện tại (${it.dvt}) không khớp ĐVT mua (${catDvt}) trong Danh mục — kiểm tra kỹ hệ số.`;
+  if(hasTransfer) msg+=`\n\n⚠ Mặt hàng có dòng Chuyển kho — vế bên kho kia KHÔNG tự quy đổi, cần chỉnh riêng.`;
+  msg+=`\n\nHành động này không thể tự hoàn tác.`;
+  if(!confirm(msg)) return;
+  it.ton_dau=(parseFloat(it.ton_dau)||0)*heso;
+  (it.lichSu||[]).forEach(h=>{ h.sl=(parseFloat(h.sl)||0)*heso; });
+  const oldDvt=it.dvt; it.dvt=newDvt;
+  it.ghichu=((it.ghichu||'').trim()?it.ghichu.trim()+' | ':'')+`Đã quy đổi ${oldDvt}→${newDvt} ×${heso} (${new Date().toLocaleDateString('vi-VN')})`;
+  renderKhoTab(); syncNow();
+  showToast(`✅ Đã quy đổi "${it.ten}" sang ${newDvt} (×${heso})`,2800,'success');
+}
 // 1 dòng mặt hàng tại 1 vị trí (isChild=true → thụt lề, làm dòng con trong nhóm nhiều vị trí).
 function _khoDeptRow(it, isChild){
   const s=calcKyStats(it);
@@ -8585,6 +8615,7 @@ function _khoDeptRow(it, isChild){
       <button class="btn btn-gold btn-sm" onclick="openTransfer('${it.id}')" title="Chuyển sang kho khác">🔄</button>
       <button class="btn btn-ghost btn-sm" onclick="openKhoHistory('${it.id}')" title="Lịch sử">📋</button>
       <button class="btn btn-ghost btn-sm" onclick="editKhoItem('${it.id}')">✏</button>
+      ${currentUser?.role==='giamdoc'&&khoCatConvert(it)?`<button class="btn btn-gold btn-sm" onclick="convertKhoItemUnit('${it.id}')" title="Quy đổi ĐVT theo Danh mục (${it.dvt}→${khoCatConvert(it).newDvt})">🔁</button>`:''}
       ${currentUser?.role==='giamdoc'?`<button class="btn btn-danger btn-sm" onclick="deleteKhoItem('${it.id}')" title="Xoá mặt hàng (chỉ Giám đốc)">🗑</button>`:''}
     </div></td>
   </tr>`;
