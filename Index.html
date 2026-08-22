@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.18r';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.18s';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -8574,22 +8574,29 @@ function khoCatConvert(it){
 }
 function convertKhoItemUnit(id){
   if(currentUser?.role!=='giamdoc'){ showToast('Chỉ Giám đốc được quy đổi ĐVT',2500,'error'); return; }
-  const it=KHO_DATA.find(x=>x.id===id); if(!it) return;
-  const cv=khoCatConvert(it);
+  const it0=KHO_DATA.find(x=>x.id===id); if(!it0) return;
+  const cv=khoCatConvert(it0);
   if(!cv){ showToast('Mặt hàng chưa cấu hình quy đổi trong Danh mục, hoặc đã ở ĐVT kho.',3200,'info'); return; }
   const {heso,newDvt,catDvt}=cv;
-  const hasTransfer=(it.lichSu||[]).some(h=>h.loai==='transfer-in'||h.loai==='transfer-out');
-  let msg=`Quy đổi tồn kho "${it.ten}" từ ${it.dvt} sang ${newDvt} (×${heso})?\nTồn đầu + toàn bộ số lượng trong lịch sử sẽ được nhân ${heso}.`;
-  if(khoDvt(it.dvt)!==khoDvt(catDvt)) msg+=`\n\n⚠ ĐVT hiện tại (${it.dvt}) không khớp ĐVT mua (${catDvt}) trong Danh mục — kiểm tra kỹ hệ số.`;
+  // Đổi TẤT CẢ dòng cùng mặt hàng trong CÙNG kho còn ở ĐVT mua → gộp về 1 dòng gói (cùng vị trí).
+  const targets=KHO_DATA.filter(x=> x.bophan===it0.bophan && khoNorm(x.ten)===khoNorm(it0.ten) && khoDvt(x.dvt)===khoDvt(catDvt));
+  if(!targets.length){ showToast('Không có dòng nào cần quy đổi.',2500,'info'); return; }
+  const hasTransfer=targets.some(t=>(t.lichSu||[]).some(h=>h.loai==='transfer-in'||h.loai==='transfer-out'));
+  let msg=`Quy đổi tồn kho "${it0.ten}" từ ${it0.dvt} sang ${newDvt} (×${heso})?\nTồn đầu + toàn bộ số lượng trong lịch sử sẽ được nhân ${heso}.`;
+  if(targets.length>1) msg+=`\n\nCó ${targets.length} dòng cùng mặt hàng sẽ được quy đổi & gộp lại.`;
+  if(khoDvt(it0.dvt)!==khoDvt(catDvt)) msg+=`\n\n⚠ ĐVT hiện tại (${it0.dvt}) không khớp ĐVT mua (${catDvt}) trong Danh mục — kiểm tra kỹ hệ số.`;
   if(hasTransfer) msg+=`\n\n⚠ Mặt hàng có dòng Chuyển kho — vế bên kho kia KHÔNG tự quy đổi, cần chỉnh riêng.`;
   msg+=`\n\nHành động này không thể tự hoàn tác.`;
   if(!confirm(msg)) return;
-  it.ton_dau=(parseFloat(it.ton_dau)||0)*heso;
-  (it.lichSu||[]).forEach(h=>{ h.sl=(parseFloat(h.sl)||0)*heso; });
-  const oldDvt=it.dvt; it.dvt=newDvt;
-  it.ghichu=((it.ghichu||'').trim()?it.ghichu.trim()+' | ':'')+`Đã quy đổi ${oldDvt}→${newDvt} ×${heso} (${new Date().toLocaleDateString('vi-VN')})`;
-  renderKhoTab(); syncNow();
-  showToast(`✅ Đã quy đổi "${it.ten}" sang ${newDvt} (×${heso})`,2800,'success');
+  const stamp=new Date().toLocaleDateString('vi-VN');
+  targets.forEach(t=>{
+    (t.lichSu||[]).forEach(h=>{ const orig=parseFloat(h.sl)||0; h.sl=orig*heso; h.qd_goc=orig; h.qd_dvt=t.dvt; });
+    t.ton_dau=(parseFloat(t.ton_dau)||0)*heso;
+    const oldDvt=t.dvt; t.dvt=newDvt;
+    t.ghichu=((t.ghichu||'').trim()?t.ghichu.trim()+' | ':'')+`Đã quy đổi ${oldDvt}→${newDvt} ×${heso} (${stamp})`;
+  });
+  renderKhoTab(); syncNow();   // khoMergeDuplicates gộp các dòng gói cùng vị trí thành 1
+  showToast(`✅ Đã quy đổi "${it0.ten}" sang ${newDvt} (×${heso})${targets.length>1?` — gộp ${targets.length} dòng`:''}`,2800,'success');
 }
 // 1 dòng mặt hàng tại 1 vị trí (isChild=true → thụt lề, làm dòng con trong nhóm nhiều vị trí).
 function _khoDeptRow(it, isChild){
@@ -8701,7 +8708,7 @@ function openKhoHistoryByMa(maOrTen){
     return `<tr>
       <td style="font-size:12px;">${h.ngay}</td>
       <td><span class="badge badge-navy" style="font-size:10px;">${loaiMap[h.loai]||h.loai}</span> <span style="font-size:10px;color:var(--text-muted);">[${KHO_BP_LABELS[h.bophan]||h.bophan}]</span></td>
-      <td style="font-weight:700;color:${sc};">${sg}${h.sl}</td>
+      <td style="font-weight:700;color:${sc};">${sg}${h.sl}${h.qd_goc!=null?` <span style="color:var(--text-muted);font-size:10px;font-weight:400;">(${h.qd_goc} ${esc(h.qd_dvt||'')})</span>`:''}</td>
       <td style="font-size:11px;">${esc(h.vitri||h._vitri||'—')}</td>
       <td style="font-size:11px;color:var(--text-muted);">${route||'—'}</td>
       <td style="font-size:12px;">${esc(h.lydo)||'—'}</td>
@@ -8878,7 +8885,7 @@ function openKhoHistory(itemId){
     return `<tr>
       <td style="font-size:12px;">${h.ngay}</td>
       <td><span class="badge badge-navy" style="font-size:10px;">${loaiMap[h.loai]||h.loai}</span></td>
-      <td style="font-weight:700;color:${sc};">${sg}${h.sl}</td>
+      <td style="font-weight:700;color:${sc};">${sg}${h.sl}${h.qd_goc!=null?` <span style="color:var(--text-muted);font-size:10px;font-weight:400;">(${h.qd_goc} ${esc(h.qd_dvt||'')})</span>`:''}</td>
       <td style="font-size:11px;">${esc(h.vitri||it.vitri||'—')}</td>
       <td style="font-size:11px;color:var(--text-muted);">${h.tu?KHO_BP_LABELS[h.tu]||h.tu:''}${h.den?' → '+(KHO_BP_LABELS[h.den]||h.den):''}</td>
       <td style="font-size:12px;">${h.lydo||'—'}</td>
