@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.18p';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.18q';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -2458,6 +2458,23 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
     <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
       <button class="btn btn-ghost" onclick="closeModal('modal-kho-nhap')">Huỷ</button>
       <button class="btn btn-gold" onclick="saveKhoNhap()">✅ Xác nhận Nhập</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL SỬA 1 DÒNG KHO (Nhập/Xuất/Huỷ) — chỉ Giám đốc ===== -->
+<div class="modal-overlay" id="modal-kho-move-edit">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title">✏️ Sửa dòng kho</span><button class="close-btn" onclick="closeModal('modal-kho-move-edit')">✕</button></div>
+    <div style="font-weight:600;margin-bottom:12px;" id="kme-ten">—</div>
+    <div class="form-row">
+      <div class="form-group"><label>Số lượng <span style="color:var(--red);">*</span></label><input type="number" id="kme-sl" min="0" step="any"></div>
+      <div class="form-group"><label>Ngày</label><input type="date" id="kme-ngay"></div>
+    </div>
+    <div class="form-row full"><div class="form-group"><label>Ghi chú / Lý do</label><input type="text" id="kme-lydo" placeholder="Lý do / ghi chú"></div></div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
+      <button class="btn btn-ghost" onclick="closeModal('modal-kho-move-edit')">Huỷ</button>
+      <button class="btn btn-gold" onclick="saveKhoMoveEdit()">💾 Lưu</button>
     </div>
   </div>
 </div>
@@ -8671,13 +8688,17 @@ function renderKhoLogTab(type){
   KHO_DATA.forEach(it=>{
     if(search && !((it.ma||'')+(it.ten||'')).toLowerCase().includes(search)) return;
     if(fLoai && !loaiListOfName(it.ten).includes(fLoai)) return;
-    (it.lichSu||[]).filter(h=>loaiSet.includes(h.loai)).forEach(h=>all.push({...h,ma:it.ma,ten:it.ten,dvt:it.dvt,bophan:it.bophan}));
+    (it.lichSu||[]).forEach((h,idx)=>{ if(!loaiSet.includes(h.loai)) return; all.push({...h,_itemId:it.id,_idx:idx,ma:it.ma,ten:it.ten,dvt:it.dvt,bophan:it.bophan}); });
   });
   const parseD=s=>{const p=(s||'').split('/');return new Date(+p[2]||0,(+p[1]||1)-1,+p[0]||1).getTime();};
   all.sort((a,b)=>parseD(b.ngay)-parseD(a.ngay));
   const thMap={xuat:['SL xuất','var(--yellow)'],nhap:['SL nhập','var(--green)'],huy:['SL huỷ','var(--red)']};
   const [slLabel,slColor]=thMap[type];
-  document.getElementById('kho-thead').innerHTML=`<tr><th>Ngày</th><th>Mã</th><th>Tên hàng</th><th>Kho</th><th>${slLabel}</th><th>ĐVT</th><th>Ghi chú / Lý do</th>${type!=='nhap'?'<th>Ảnh</th>':''}<th>Người TH</th></tr>`;
+  const isGD = currentUser?.role==='giamdoc';
+  const colspan = (type!=='nhap'?9:8)+(isGD?1:0);
+  document.getElementById('kho-thead').innerHTML=`<tr><th>Ngày</th><th>Mã</th><th>Tên hàng</th><th>Kho</th><th>${slLabel}</th><th>ĐVT</th><th>Ghi chú / Lý do</th>${type!=='nhap'?'<th>Ảnh</th>':''}<th>Người TH</th>${isGD?'<th>Thao tác</th>':''}</tr>`;
+  // Dòng "thường" được sửa/xoá: nhập tay (không ref_chi), xuất, huỷ. Dòng từ Chi / chuyển kho → khoá (sửa ở nguồn).
+  const editable=h=>((h.loai==='nhap'&&!h.ref_chi)||h.loai==='xuat'||h.loai==='huy');
   document.getElementById('kho-tbody').innerHTML=all.length?all.map(h=>`<tr>
     <td style="font-size:12px;">${h.ngay}</td>
     <td style="font-size:11px;color:var(--text-muted);">${h.ma}</td>
@@ -8688,9 +8709,51 @@ function renderKhoLogTab(type){
     <td style="font-size:12px;">${h.lydo||'—'}</td>
     ${type!=='nhap'?`<td>${h.img?`<a href="${h.img}" target="_blank" style="color:var(--gold);font-size:12px;">📷 Xem</a>`:'—'}</td>`:''}
     <td style="font-size:12px;">${h.nguoi||'—'}</td>
-  </tr>`).join(''):`<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--text-muted);">Chưa có dữ liệu</td></tr>`;
+    ${isGD?`<td>${editable(h)?`<div style="display:flex;gap:3px;"><button class="btn btn-ghost btn-sm" onclick="editKhoMove('${h._itemId}',${h._idx})" title="Sửa dòng">✏</button><button class="btn btn-danger btn-sm" onclick="deleteKhoMove('${h._itemId}',${h._idx})" title="Xoá dòng (chỉ Giám đốc)">🗑</button></div>`:`<span style="font-size:10px;color:var(--text-muted);white-space:nowrap;">🔗 sửa ở nguồn</span>`}</td>`:''}
+  </tr>`).join(''):`<tr><td colspan="${colspan}" style="text-align:center;padding:30px;color:var(--text-muted);">Chưa có dữ liệu</td></tr>`;
 }
 
+// ===== Sửa / Xoá 1 dòng chuyển động kho (Nhập/Xuất/Huỷ) — chỉ Giám đốc =====
+let editingKhoMoveItemId=null, editingKhoMoveIdx=null;
+function _khoMoveLinked(h){ return !!(h && (h.ref_chi || h.loai==='transfer-in' || h.loai==='transfer-out')); }
+function _vnToIso(ngay){ const p=(ngay||'').split('/'); return p.length===3?`${p[2]}-${String(p[1]).padStart(2,'0')}-${String(p[0]).padStart(2,'0')}`:''; }
+function editKhoMove(itemId,idx){
+  if(currentUser?.role!=='giamdoc'){ showToast('Chỉ Giám đốc được sửa dòng kho',2500,'error'); return; }
+  const it=KHO_DATA.find(x=>x.id===itemId); if(!it||!Array.isArray(it.lichSu)) return;
+  const h=it.lichSu[idx]; if(!h) return;
+  if(_khoMoveLinked(h)){ showToast('🔗 Dòng liên kết — sửa ở nguồn (phiếu Chi / Chuyển kho)',3000,'info'); return; }
+  editingKhoMoveItemId=itemId; editingKhoMoveIdx=idx;
+  const set=(id,v)=>{const e=document.getElementById(id); if(e) e.value=v;};
+  const tenEl=document.getElementById('kme-ten'); if(tenEl) tenEl.textContent=`${it.ten} (${it.dvt||''})`;
+  set('kme-sl', h.sl); set('kme-ngay', _vnToIso(h.ngay)); set('kme-lydo', h.lydo||'');
+  openModal('modal-kho-move-edit');
+}
+function saveKhoMoveEdit(){
+  if(currentUser?.role!=='giamdoc'){ showToast('Chỉ Giám đốc được sửa dòng kho',2500,'error'); return; }
+  const it=KHO_DATA.find(x=>x.id===editingKhoMoveItemId); if(!it||!Array.isArray(it.lichSu)) return;
+  const h=it.lichSu[editingKhoMoveIdx]; if(!h){ closeModal('modal-kho-move-edit'); return; }
+  const sl=parseFloat(document.getElementById('kme-sl').value)||0;
+  if(sl<=0){ showToast('Số lượng phải lớn hơn 0',2500,'error'); return; }
+  const iso=document.getElementById('kme-ngay').value||'';
+  h.sl=sl;
+  if(iso) h.ngay=iso.split('-').reverse().join('/');
+  h.lydo=(document.getElementById('kme-lydo').value||'').trim();
+  closeModal('modal-kho-move-edit');
+  editingKhoMoveItemId=null; editingKhoMoveIdx=null;
+  renderKhoTab(); syncNow();
+  showToast('✅ Đã cập nhật dòng kho',2000,'success');
+}
+function deleteKhoMove(itemId,idx){
+  if(currentUser?.role!=='giamdoc'){ showToast('Chỉ Giám đốc được xoá dòng kho',2500,'error'); return; }
+  const it=KHO_DATA.find(x=>x.id===itemId); if(!it||!Array.isArray(it.lichSu)) return;
+  const h=it.lichSu[idx]; if(!h) return;
+  if(_khoMoveLinked(h)){ showToast('🔗 Dòng liên kết — xoá ở nguồn (phiếu Chi / Chuyển kho)',3000,'info'); return; }
+  const loaiLbl=h.loai==='xuat'?'xuất':h.loai==='huy'?'huỷ':'nhập';
+  if(!confirm(`Xoá dòng ${loaiLbl} ${h.sl} ${it.dvt||''} "${it.ten}" ngày ${h.ngay}? Hành động này KHÔNG thể hoàn tác.`)) return;
+  it.lichSu.splice(idx,1);
+  renderKhoTab(); syncNow();
+  showToast('✅ Đã xoá dòng kho',2000,'success');
+}
 function updateKhoVitri(id,val){const it=KHO_DATA.find(x=>x.id===id);if(it)it.vitri=val;}
 
 function openTransfer(itemId){
