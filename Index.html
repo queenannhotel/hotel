@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.18u';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.18v';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -838,7 +838,7 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
     <div class="nav-item" onclick="showPage('nhan-su',this)" data-perm="ketoan,giamdoc"><span class="icon">👔</span> Nhân Sự & Lương</div>
     <div class="nav-section">Mua Hàng</div>
     <div class="nav-item" onclick="showPage('de-xuat',this)" data-perm="all"><span class="icon">🛒</span> Đề xuất Mua hàng<span class="notif-dot" id="notif-dx">3</span></div>
-    <div class="nav-item" onclick="showPage('yeu-cau-transfer',this)" data-perm="all"><span class="icon">🔄</span> Yêu cầu Transfer</div>
+    <div class="nav-item" onclick="showPage('yeu-cau-transfer',this)" data-perm="all"><span class="icon">🔄</span> Yêu cầu Transfer<span class="notif-dot" id="notif-tr" style="display:none;"></span></div>
     <div class="nav-item" onclick="showPage('nha-cung-cap',this)" data-perm="ketoan,giamdoc"><span class="icon">🏪</span> Nhà Cung Cấp</div>
     <div class="nav-section" data-perm="ketoan,giamdoc,truong-bp">Kho</div>
     <div class="nav-item" onclick="showPage('kho',this)" data-perm="ketoan,giamdoc,truong-bp"><span class="icon">🏭</span> Quản Lý Kho</div>
@@ -9604,7 +9604,7 @@ function trVisibleFor(d){
   if(currentUser?.role==='truong-bp') return userBophans(currentUser).includes(d.bophan);
   return true;   // ketoan/giamdoc thấy hết
 }
-function renderTrTab(){ try{ renderTrList(); }catch(e){} const ls=document.getElementById('tr-panel-ls'); if(ls&&ls.style.display!=='none'){ try{ renderTrHistory(); }catch(e){} } }
+function renderTrTab(){ try{ syncMobNotif(); }catch(e){} try{ renderTrList(); }catch(e){} const ls=document.getElementById('tr-panel-ls'); if(ls&&ls.style.display!=='none'){ try{ renderTrHistory(); }catch(e){} } }
 function renderTrList(){
   const tb=document.getElementById('tr-tbody'); if(!tb) return;
   const today=new Date().toLocaleDateString('vi-VN');
@@ -10016,6 +10016,10 @@ function syncMobNotif(){
     const dot=document.getElementById(id);
     if(dot){ dot.textContent=pending; dot.style.display=pending?'inline':'none'; }
   });
+  // Badge số Yêu cầu Transfer chờ duyệt (ẩn khi =0) — giống kiểu đề xuất
+  const trPending=(TR_DATA||[]).filter(d=>d.status==='cho-duyet').length;
+  const trDot=document.getElementById('notif-tr');
+  if(trDot){ trDot.textContent=trPending; trDot.style.display=trPending?'inline':'none'; }
 }
 function checkMobileLayout(){
   // Nút ☰ luôn hiện: mobile/iPad để mở menu, desktop để thu/mở sidebar
