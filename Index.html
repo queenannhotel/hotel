@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.18v';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.18w';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -1358,7 +1358,7 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
         </div>
         <div class="card"><div class="table-wrap wide">
           <table><thead><tr>
-            <th>Ngày</th><th>Mã</th><th>Bộ phận</th><th>Người YC</th><th>Danh sách mặt hàng</th><th>Trạng thái</th>
+            <th>Ngày</th><th>Mã</th><th>Bộ phận</th><th>Người YC</th><th>Danh sách mặt hàng</th><th>Trạng thái</th><th id="tr-hist-act-th" style="display:none;">Hành động</th>
           </tr></thead><tbody id="tr-hist-body"></tbody></table>
         </div></div>
       </div>
@@ -9644,6 +9644,15 @@ function renderTrHistory(){
     return true;
   }).slice().sort((a,b)=>{ const pa=vnToIso(a.ngay), pb=vnToIso(b.ngay); return pb<pa?-1:pb>pa?1:0; });
   const rc=document.getElementById('tr-hist-count'); if(rc) rc.textContent=rows.length+' yêu cầu';
+  // Cột "Hành động" — chỉ Giám đốc thấy: xem chi tiết, sửa, xoá.
+  const isGD=currentUser?.role==='giamdoc';
+  const actTh=document.getElementById('tr-hist-act-th'); if(actTh) actTh.style.display=isGD?'':'none';
+  const colspan=isGD?7:6;
+  const actCell=d=>`<td><div style="display:flex;gap:4px;flex-wrap:wrap;">`
+    +`<button class="btn btn-ghost btn-sm" onclick="openTrFulfill('${d.id}')" title="Xem chi tiết">📄</button>`
+    +`<button class="btn btn-ghost btn-sm" onclick="editTr('${d.id}')" title="Sửa">✏</button>`
+    +`<button class="btn btn-danger btn-sm" onclick="deleteTr('${d.id}')" title="Xoá">🗑</button>`
+    +`</div></td>`;
   tb.innerHTML=rows.length? rows.map(d=>`<tr>
       <td style="font-size:12px;font-weight:600;color:var(--navy);">${esc(d.ngay)||'—'}</td>
       <td style="font-weight:700;">${esc(d.code||d.id)}</td>
@@ -9651,7 +9660,8 @@ function renderTrHistory(){
       <td>${esc(d.nguoi)||'—'}</td>
       <td style="min-width:230px;">${trItemsHtml(d)}</td>
       <td>${trStatusBadge(d.status)}</td>
-    </tr>`).join('') : `<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted);">Không có yêu cầu nào phù hợp</td></tr>`;
+      ${isGD?actCell(d):''}
+    </tr>`).join('') : `<tr><td colspan="${colspan}" style="text-align:center;padding:24px;color:var(--text-muted);">Không có yêu cầu nào phù hợp</td></tr>`;
 }
 
 function calcChiModal(){
