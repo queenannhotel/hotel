@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.19d';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.19e';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -3467,7 +3467,7 @@ async function enterApp(session){
   // Cờ dx._done chống tạo trùng khi đăng nhập lại.
   if(currentUser.role==='ketoan'||currentUser.role==='giamdoc'){
     DX_DATA.filter(d=>d.status==='da-duyet' && !d._done).forEach(dx=> finalizeDxApproved(dx));
-    try{ const m2=migrateChiKho(); const m1=mergeKhoDuplicates(); if(m1||m2) syncNow(); }catch(e){}   // đồng bộ Chi↔Kho rồi GỘP trùng sau cùng (dọn nốt dòng vừa tạo)
+    try{ const doCK=!localStorage.getItem('qah_chikho_migrate_v1'); const m2=doCK?migrateChiKho():false; const m1=mergeKhoDuplicates(); if(doCK)localStorage.setItem('qah_chikho_migrate_v1','1'); if(m1||m2) syncNow(); }catch(e){}   // migrateChiKho chỉ 1 lần/máy (khỏi tự tái tạo dòng kho mỗi phiên); mergeKhoDuplicates giữ chạy (chỉ gộp)
   }
   try{ syncChiNccDefaults(); }catch(e){}   // căn Hoá đơn/PTTT các bản Chi cũ theo NCC
   updateNsKpi();
@@ -4274,6 +4274,8 @@ function confirmChiSyncKho(){
 // Đẩy 1 mặt hàng Chi vào kho gắn (gắn ref_chi để rút chính xác; dedup chống trùng).
 function addChiKhoEntry(r){
   const kho=r.kho||'kt', ten=r.ten_hang; if(!ten) return;
+  // Món này đã bị xoá tay (đang ở Thùng rác) → KHÔNG nhập lại từ phiếu Chi, tránh "sống lại" khi mở app.
+  if((KHO_DELETED||[]).some(it=>Array.isArray(it.lichSu)&&it.lichSu.some(h=>h.ref_chi===r.id))){ r.kho_pushed=true; r.kho_pushed_to=kho; return; }
   const dvtMua=(r.dvt||'').trim()||'Cái';
   // Quy đổi ĐVT theo cấu hình Danh mục (1 đvt mua = hệ số đvt kho). Phiếu Chi vẫn giữ đvt mua.
   const cv=khoConvertIntake(ten, parseFloat(r.sl)||0, dvtMua);
