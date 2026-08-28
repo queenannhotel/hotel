@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.19b';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.19c';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -53,7 +53,7 @@ async function clearLocalData(){
   YC_DATA=[];HV_LINEN=[];NS_LUONG=[];NS_BHXH=[];NS_TNCN=[];catalogItems=[];
   WS_DATA_BY_DATE={};ROOM_STATUS_BY_DATE={};AM_DATA_BY_DATE={};
   HV_REWASH_DATA={};HV_REWASH_COLS=[];
-  QUY_TX=[];QUY_UNG=[];QUY_TQ_DAU={amount:0};HK_STAFF=[];MB_HISTORY=[];HV_NONO_OVERRIDE={};BP_LOCK={locked:false};
+  QUY_TX=[];QUY_UNG=[];QUY_TQ_DAU={amount:0};HK_STAFF=[];MB_HISTORY=[];MB_ITEM_MAP={};HV_NONO_OVERRIDE={};BP_LOCK={locked:false};
   showToast('✅ Đã xóa toàn bộ dữ liệu — trang sẽ tải lại',2000,'success');
   setTimeout(()=>location.reload(),1500);
 }
@@ -155,7 +155,7 @@ function _lsSaveRaw(fromRemote){
     thu:THU_DATA,chi:CHI_DATA,dx:DX_DATA,ncc:NCC_DATA,kho:_khoLite(KHO_DATA),yc:YC_DATA,ycDeleted:YC_DELETED,transferReq:TR_DATA,
     hvLinen:HV_LINEN,hvRewash:HV_REWASH_DATA,hvCols:HV_REWASH_COLS,
     nsLuong:NS_LUONG,sxData:SX_DATA,nsBhxh:NS_BHXH,nsTncn:NS_TNCN,cats:CATS,dvtList:DVT_LIST,
-    quyTx:QUY_TX,quyUng:QUY_UNG,quyTqDau:QUY_TQ_DAU,hkStaff:HK_STAFF,mbHistory:MB_HISTORY,hvNono:HV_NONO_OVERRIDE,bpLock:BP_LOCK,
+    quyTx:QUY_TX,quyUng:QUY_UNG,quyTqDau:QUY_TQ_DAU,hkStaff:HK_STAFF,mbHistory:MB_HISTORY,mbItemMap:MB_ITEM_MAP,hvNono:HV_NONO_OVERRIDE,bpLock:BP_LOCK,
   };
   // Bậc 1: đầy đủ (kèm map buồng phòng theo ngày). Bậc 2: lược các map đó (chúng có sẵn trên cloud) để cache
   // phần tài chính vẫn vừa bộ nhớ máy nhỏ (iPad ~5MB). Bậc nào ghi được thì thôi.
@@ -204,6 +204,7 @@ function lsLoad(){
     if(Array.isArray(d.hkStaff)) HK_STAFF=d.hkStaff;
     if(Array.isArray(d.mbHistory)) MB_HISTORY=d.mbHistory;
     if(d.hvNono&&typeof d.hvNono==='object') HV_NONO_OVERRIDE=d.hvNono;
+    if(d.mbItemMap&&typeof d.mbItemMap==='object') MB_ITEM_MAP=d.mbItemMap;
     if(d.bpLock&&typeof d.bpLock==='object') BP_LOCK=d.bpLock;
     return true;
   }catch(e){return false;}
@@ -1688,6 +1689,7 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
             <span style="font-size:12px;color:var(--text-muted);">Tháng:</span>
             <input type="month" id="mb-rep-thang" onchange="renderMbReport()" style="font-size:12px;padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;">
             <button class="btn btn-gold btn-sm" onclick="openMbXuat()">⬇ Xuất hàng</button>
+            <button class="btn btn-ghost btn-sm" onclick="openMbMap()">🔗 Gắn tên kho</button>
           </div>
           <div class="card" style="padding:0;overflow:hidden;"><div style="overflow-x:auto;">
             <table class="amenity-table" style="min-width:900px;" id="mb-rep-table"><thead id="mb-rep-thead"></thead><tbody id="mb-rep-tbody"></tbody></table>
@@ -2400,6 +2402,19 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
     <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
       <button class="btn btn-ghost" onclick="closeModal('modal-mb-xuat')">Huỷ</button>
       <button class="btn btn-gold" onclick="saveMbXuat()">✅ Xác nhận Xuất</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL GẮN TÊN KHO HK ↔ MÓN MINIBAR ===== -->
+<div class="modal-overlay" id="modal-mb-map">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title">🔗 Gắn tên hàng Kho HK ↔ Món minibar</span><button class="close-btn" onclick="closeModal('modal-mb-map')">✕</button></div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Mỗi mặt hàng trong Kho HK chọn ứng với 1 trong 9 món minibar (hoặc "— bỏ qua"). Hệ thống gợi ý sẵn theo từ khoá — chỉnh lại cho đúng rồi Lưu.</div>
+    <div id="mbmap-body" style="max-height:52vh;overflow-y:auto;"></div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
+      <button class="btn btn-ghost" onclick="closeModal('modal-mb-map')">Huỷ</button>
+      <button class="btn btn-gold" onclick="saveMbMap()">✅ Lưu</button>
     </div>
   </div>
 </div>
@@ -5712,6 +5727,7 @@ const MB_ITEMS=['Coca Cola','Sprite','Fanta','Bia Tiger','Suối Dasani 500ml','
 const MB_REPORT_ITEMS=['COCA COLA','FANTA','SPRITE','BIA TIGER','SUỐI DASANI','BIRD NEST','SNACK','MI LY MODERN','CHOCOPIE'];
 const MB_SMILE_MAP={'COCA COLA':'COCA COLA','COCACOLA':'COCA COLA','FANTA':'FANTA','SPRITE':'SPRITE','TIGER':'BIA TIGER','BIA TIGER':'BIA TIGER','DASANI':'SUỐI DASANI','SUOI DASANI':'SUỐI DASANI','SUỐI DASANI':'SUỐI DASANI','BIRD NEST':'BIRD NEST','NUOC YEN':'BIRD NEST','NƯỚC YẾN':'BIRD NEST','SNACK':'SNACK','MI LY MODERN':'MI LY MODERN','MI LY':'MI LY MODERN','MÌ LY':'MI LY MODERN','CHOCOPIE':'CHOCOPIE'};
 function mbMapName(raw){ const k=String(raw||'').trim().toUpperCase().replace(/\s+/g,' '); return MB_SMILE_MAP[k]||String(raw||'').trim(); }
+let MB_ITEM_MAP={};  // Ánh xạ tay tên hàng Kho HK → 1 trong 9 món minibar: { khoNorm(tên): canon } (đồng bộ)
 let MB_HISTORY=[];   // Lịch sử sử dụng minibar theo từng phòng (đồng bộ) — nguồn cho sheet Báo cáo
 let MB_DATE_DATA={};
 ALL_ROOMS.forEach(r=>{MB_DATE_DATA[r]={};MB_ITEMS.forEach(m=>{MB_DATE_DATA[r][m]='2026-09-15';});});
@@ -6137,6 +6153,10 @@ const MB_KHO_MATCH={
   'SNACK':['snack'], 'MI LY MODERN':['mì ly','mi ly'], 'CHOCOPIE':['chocopie']
 };
 function mbCanonOf(name){
+  // 1) Ưu tiên ánh xạ tay (bảng "Gắn tên kho") theo tên đã chuẩn hoá.
+  const mapped=MB_ITEM_MAP[khoNorm(name)];
+  if(mapped && MB_REPORT_ITEMS.includes(mapped)) return mapped;
+  // 2) Tự nhận theo từ khoá.
   const s=String(name||'').toLowerCase();
   for(const canon of MB_REPORT_ITEMS){ if((MB_KHO_MATCH[canon]||[]).some(k=>s.includes(k))) return canon; }
   return null;
@@ -6245,6 +6265,31 @@ function saveMbXuat(){
   try{ renderKhoTab(); }catch(e){}
   renderMbReport(); syncNow();
   showToast(`✅ Đã xuất ${resolved.length} món minibar`,2400,'success');
+}
+// Bảng "Gắn tên kho": liệt kê mọi mặt hàng Kho HK (duy nhất theo tên chuẩn hoá) → chọn ứng 1 trong 9 món.
+function openMbMap(){
+  const seen=new Set(); const items=[];
+  (KHO_DATA||[]).filter(it=>it.bophan==='hk').forEach(it=>{ const key=khoNorm(it.ten); if(!key||seen.has(key)) return; seen.add(key); items.push({key, ten:it.ten}); });
+  items.sort((a,b)=>(a.ten||'').localeCompare(b.ten||'','vi'));
+  const optList=canon=>MB_REPORT_ITEMS.map(c=>`<option value="${esc(c)}" ${c===canon?'selected':''}>${c}</option>`).join('');
+  const body=document.getElementById('mbmap-body');
+  body.innerHTML=items.length?items.map(o=>{
+    const cur=(MB_ITEM_MAP[o.key] && MB_REPORT_ITEMS.includes(MB_ITEM_MAP[o.key])) ? MB_ITEM_MAP[o.key] : mbCanonOf(o.ten);
+    return `<div style="display:grid;grid-template-columns:1.4fr 1fr;gap:8px;align-items:center;margin-bottom:6px;padding:7px 8px;background:var(--cream);border:1px solid var(--border);border-radius:8px;">
+      <div style="font-weight:600;font-size:13px;">${esc(o.ten)}</div>
+      <select class="mbmap-sel" data-key="${esc(o.key)}" style="height:34px;font-size:13px;"><option value="">— (bỏ qua)</option>${optList(cur)}</select>
+    </div>`;
+  }).join(''):`<div style="padding:16px;text-align:center;color:var(--text-muted);">Kho HK chưa có mặt hàng nào.</div>`;
+  openModal('modal-mb-map');
+}
+function saveMbMap(){
+  document.querySelectorAll('#mbmap-body .mbmap-sel').forEach(sel=>{
+    const key=sel.dataset.key, val=sel.value;
+    if(val && MB_REPORT_ITEMS.includes(val)) MB_ITEM_MAP[key]=val; else delete MB_ITEM_MAP[key];
+  });
+  closeModal('modal-mb-map');
+  renderMbReport(); syncNow();
+  showToast('✅ Đã lưu ánh xạ tên kho ↔ món minibar',2400,'success');
 }
 // Lịch sử: liệt kê từng phiếu (phòng) trong khoảng ngày, xổ ra chi tiết mặt hàng.
 function renderMbHistory(){
@@ -10382,6 +10427,7 @@ const COLLECTIONS = {
   hkStaff:   { read:()=>[{id:'_', obj:HK_STAFF}], write:r=>{const x=r.find(v=>v.id==='_'); HK_STAFF=(x&&Array.isArray(x.obj))?x.obj:[];}, render:()=>{try{renderWsStaffBar();}catch(e){}} },
   mbHistory: { read:()=>_byIdDump(MB_HISTORY), write:r=>{MB_HISTORY=r.map(x=>x.obj);}, render:()=>{try{renderMinibar();}catch(e){}} },
   bpLock:    { read:()=>[{id:'_', obj:BP_LOCK}], write:r=>{const x=r.find(v=>v.id==='_'); BP_LOCK=(x&&x.obj&&typeof x.obj==='object')?x.obj:{locked:false};}, render:()=>{try{renderBpLockBtn();}catch(e){} try{ if(_pageActive('buong-phong')) renderWorksheet(); }catch(e){}} },
+  mbItemMap: { read:()=>[{id:'_', obj:MB_ITEM_MAP}], write:r=>{const x=r.find(v=>v.id==='_'); MB_ITEM_MAP=(x&&x.obj&&typeof x.obj==='object')?x.obj:{};}, render:()=>{try{ if(mbView==='report') renderMbReport(); }catch(e){}} },
 };
 
 // lastSnapshot phản ánh trạng thái ĐÃ ở trên cloud: {collection:{id:json}}
@@ -10444,6 +10490,7 @@ const WRITE_MATRIX = {
   hvCols:['giamdoc','truong-bp'], sx:['giamdoc','truong-bp'],
   quyTx:['giamdoc','ketoan'], quyUng:['giamdoc','ketoan'], quyTqDau:['giamdoc'],
   bpLock:['giamdoc'],   // chỉ Giám đốc bật/tắt khoá HK
+  mbItemMap:['giamdoc','truong-bp','ketoan'],   // ánh xạ tên kho ↔ món minibar
 };
 // Ánh xạ collection → tab: ai được CẤP TAB tương ứng cũng được ghi/đồng bộ nhóm đó (ngoài quyền theo role).
 const COLLECTION_TAB = {
@@ -10451,7 +10498,7 @@ const COLLECTION_TAB = {
   nsLuong:'nhan-su', bhxh:'nhan-su', tncn:'nhan-su',
   dx:'de-xuat', kho:'kho', transferReq:'yeu-cau-transfer',
   quyTx:'quy-tien-mat', quyUng:'quy-tien-mat',
-  yc:'buong-phong', ycDeleted:'buong-phong', wsData:'buong-phong', roomStatus:'buong-phong', hkStaff:'buong-phong', mbHistory:'buong-phong', hvNono:'buong-phong',
+  yc:'buong-phong', ycDeleted:'buong-phong', wsData:'buong-phong', roomStatus:'buong-phong', hkStaff:'buong-phong', mbHistory:'buong-phong', mbItemMap:'buong-phong', hvNono:'buong-phong',
   amData:'buong-phong', mbData:'buong-phong', hvLinen:'buong-phong', hvRewash:'buong-phong',
   hvCols:'buong-phong', sx:'buong-phong',
 };   // 'cats' KHÔNG map → giữ chỉ Giám đốc. 'bpLock' KHÔNG map → tránh TBP HK ghi qua fallback theo tab (chỉ Giám đốc).
