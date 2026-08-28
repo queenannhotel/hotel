@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.18z';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.19a';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -1245,6 +1245,11 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
           <div class="form-group"><label>Số tiền</label><input type="number" id="qtx-sotien" min="0" placeholder="VNĐ"></div>
         </div>
         <div id="qtx-avail-row" style="display:none;align-items:center;gap:10px;font-size:12px;color:var(--text-muted);margin:-4px 0 8px;">Số dư hiện có: <b id="qtx-avail" style="color:var(--yellow);">—</b> <button type="button" class="btn btn-ghost btn-sm" id="qtx-fill-btn" onclick="qtxFillAll()">Nộp hết</button></div>
+        <div class="form-group" id="qtx-sodu-row" style="display:none;">
+          <label>Số dư (chốt) — chỉ Giám đốc</label>
+          <input type="number" id="qtx-sodu" placeholder="VNĐ">
+          <div style="font-size:11px;color:var(--text-muted);margin-top:3px;">Nhập số dư đúng cho dòng này. Để trống = chụp lại số dư tổng hiện tại.</div>
+        </div>
         <div class="form-group"><label>Lý do</label><input id="qtx-lydo" placeholder="Nội dung"></div>
         <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
           <button class="btn btn-ghost" onclick="closeModal('modal-quy-tx')">Huỷ</button>
@@ -4460,7 +4465,7 @@ function renderQuyKt(){
     <td style="font-weight:600;">${fmt(t.soDuSau!=null ? t.soDuSau : bal[t.id])}</td>
     <td style="font-size:12px;">${esc(t.lydo)||'—'}</td>
     <td style="font-size:12px;">${esc(t.nguoi)||'—'}</td>
-    <td><button class="btn btn-danger btn-sm" onclick="deleteQuyTx('${t.id}')" title="Xoá">🗑</button></td>
+    <td><div style="display:flex;gap:3px;">${currentUser?.role==='giamdoc'?`<button class="btn btn-ghost btn-sm" onclick="editQuyTx('${t.id}')" title="Sửa số dư">✏</button>`:''}<button class="btn btn-danger btn-sm" onclick="deleteQuyTx('${t.id}')" title="Xoá">🗑</button></div></td>
   </tr>`).join(''):`<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted);">Chưa có giao dịch</td></tr>`;
 }
 function renderQuyTq(){
@@ -4537,6 +4542,8 @@ function openQuyTx(mode){
   document.getElementById('qtx-ngay').value=new Date().toISOString().slice(0,10);
   document.getElementById('qtx-sotien').value='';
   document.getElementById('qtx-lydo').value='';
+  document.getElementById('qtx-sodu-row').style.display='none';
+  document.getElementById('qtx-sodu').value='';
   qtxUpdateAvailRow();
   openModal('modal-quy-tx');
 }
@@ -4548,6 +4555,13 @@ function editQuyTx(id){
   document.getElementById('qtx-ngay').value=vnToIso(t.ngay);
   document.getElementById('qtx-sotien').value=t.sotien;
   document.getElementById('qtx-lydo').value=t.lydo||'';
+  // Ô ghi đè Số dư: chỉ hiện khi Giám đốc sửa dòng bên tab Kế toán (cột Số dư chỉ có ở đó).
+  const sdRow=document.getElementById('qtx-sodu-row');
+  if(currentQtmTab==='kt' && currentUser?.role==='giamdoc'){
+    sdRow.style.display='';
+    const disp = t.soDuSau!=null ? t.soDuSau : quyKtRunningMap()[t.id];
+    document.getElementById('qtx-sodu').value = (disp!=null ? disp : '');
+  } else { sdRow.style.display='none'; document.getElementById('qtx-sodu').value=''; }
   qtxUpdateAvailRow();
   openModal('modal-quy-tx');
 }
@@ -4560,7 +4574,11 @@ function saveQuyTx(){
   if(isFinite(avail) && sotien > avail+1){ showToast(`Số tiền (${fmt(sotien)}) vượt quá số dư hiện có (${fmt(avail)}).`,3400,'error'); return; }
   const lydo=document.getElementById('qtx-lydo').value.trim(), ngay=iso.split('-').reverse().join('/');
   // Chụp số dư TỔNG của quỹ (đúng con số ô "Số dư Quỹ TM Kế toán") NGAY sau giao dịch → cố định, không tính lại.
-  if(editId){ const t=QUY_TX.find(x=>x.id===editId); if(t){ t.ngay=ngay; t.sotien=sotien; t.lydo=lydo; t.soDuSau=quyKtBalance(); } }
+  if(editId){ const t=QUY_TX.find(x=>x.id===editId); if(t){ t.ngay=ngay; t.sotien=sotien; t.lydo=lydo;
+    const sdRow=document.getElementById('qtx-sodu-row');
+    if(sdRow && sdRow.style.display!=='none'){ const sdv=document.getElementById('qtx-sodu').value; t.soDuSau=(sdv===''?quyKtBalance():(parseFloat(sdv)||0)); }
+    else t.soDuSau=quyKtBalance();
+  } }
   else { const t={id:'CF'+Date.now(), ngay, kind:mode, sotien, lydo, nguoi:currentUser?.fullname||currentUser?.role||''}; QUY_TX.push(t); t.soDuSau=quyKtBalance(); }
   closeModal('modal-quy-tx');
   renderQuyTienMat(); syncNow();
