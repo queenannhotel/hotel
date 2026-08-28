@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.18x';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.18y';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -4427,21 +4427,36 @@ function renderQuyTienMat(){
   if(currentQtmTab==='tq' && !isGd) currentQtmTab='kt';
   switchQtmTab(currentQtmTab, null);
 }
+// Số dư quỹ LUỸ KẾ theo NGÀY tại mỗi giao dịch nộp/ứng = tiền mặt thực tế TÍNH ĐẾN NGÀY đó − Σnộp + Σứng
+// (cộng dồn theo thứ tự ngày tới giao dịch đó). Trả {id: số dư}. Dùng cho cả hiển thị và chốt (snapshot).
+function quyKtRunningMap(){
+  const bal={}; let nop=0, ung=0;
+  QUY_TX.filter(t=>['nop','ung'].includes(t.kind))
+    .slice().sort((a,b)=>vnToIso(a.ngay).localeCompare(vnToIso(b.ngay))||String(a.id).localeCompare(String(b.id)))
+    .forEach(t=>{ if(t.kind==='nop') nop+=(parseFloat(t.sotien)||0); else ung+=(parseFloat(t.sotien)||0);
+      bal[t.id]=cashActual(vnToIso(t.ngay)) - nop + ung; });
+  return bal;
+}
+// Chốt 1 lần số dư luỹ kế theo ngày cho các dòng CŨ chưa chuẩn (sdV!==2) — sửa lại các dòng bản cũ chốt sai
+// (bản trước chốt nhầm tổng quỹ tại lúc bấm). Sau khi sdV=2 thì giữ cố định, không tính lại → thu/chi ngày cũ
+// thêm sau này KHÔNG làm đổi số dư đã chốt. Trả true nếu có thay đổi (để syncNow).
+function migrateQuyBal(){
+  const need=(QUY_TX||[]).some(t=>['nop','ung'].includes(t.kind) && t.sdV!==2);
+  if(!need) return false;
+  const bal=quyKtRunningMap();
+  QUY_TX.forEach(t=>{ if(['nop','ung'].includes(t.kind) && t.sdV!==2){ t.soDuSau=bal[t.id]; t.sdV=2; } });
+  return true;
+}
 function renderQuyKt(){
+  if(migrateQuyBal()){ try{ syncNow(); }catch(e){} }   // chốt lại số dư luỹ kế cho dòng cũ (1 lần)
   const setT=(id,v)=>{const e=document.getElementById(id); if(e) e.textContent=v;};
   setT('qtm-kt-balance', fmt(quyKtBalance()));
   setT('qtm-kt-cash', fmt(cashActual()));
   setT('qtm-kt-nop', fmt(quySumKind('nop')));
   setT('qtm-kt-ung', fmt(quySumKind('ung')));
   const from=document.getElementById('qtm-kt-from')?.value||'', to=document.getElementById('qtm-kt-to')?.value||'', loai=document.getElementById('qtm-kt-loai')?.value||'';
-  // Số dư quỹ ĐÚNG TẠI THỜI ĐIỂM mỗi giao dịch = tiền mặt thực tế TÍNH ĐẾN NGÀY đó − nộp + ứng (cộng dồn tới giao dịch đó).
-  // Dùng cashActual(ngày) để KHÔNG cộng dồn tiền Thu/Chi phát sinh ở các ngày SAU vào số dư của giao dịch cũ.
-  const bal={};
-  { let nop=0, ung=0;
-    QUY_TX.filter(t=>['nop','ung'].includes(t.kind))
-      .slice().sort((a,b)=>vnToIso(a.ngay).localeCompare(vnToIso(b.ngay))||String(a.id).localeCompare(String(b.id)))
-      .forEach(t=>{ if(t.kind==='nop') nop+=(parseFloat(t.sotien)||0); else ung+=(parseFloat(t.sotien)||0);
-        bal[t.id]=cashActual(vnToIso(t.ngay)) - nop + ung; }); }
+  // Fallback cho dòng chưa có soDuSau (hiếm, ngay sau migrate mọi dòng đều có).
+  const bal=quyKtRunningMap();
   let rows=QUY_TX.filter(t=>['nop','ung'].includes(t.kind)).filter(t=>{const iso=vnToIso(t.ngay);return (!from||iso>=from)&&(!to||iso<=to);});
   if(loai) rows=rows.filter(t=>t.kind===loai);
   rows.sort((a,b)=>vnToIso(b.ngay).localeCompare(vnToIso(a.ngay)));
@@ -4553,8 +4568,8 @@ function saveQuyTx(){
   const avail=qtxAvail(mode, editId);
   if(isFinite(avail) && sotien > avail+1){ showToast(`Số tiền (${fmt(sotien)}) vượt quá số dư hiện có (${fmt(avail)}).`,3400,'error'); return; }
   const lydo=document.getElementById('qtx-lydo').value.trim(), ngay=iso.split('-').reverse().join('/');
-  if(editId){ const t=QUY_TX.find(x=>x.id===editId); if(t){ t.ngay=ngay; t.sotien=sotien; t.lydo=lydo; t.soDuSau=quyKtBalance(); } }
-  else { const t={id:'CF'+Date.now(), ngay, kind:mode, sotien, lydo, nguoi:currentUser?.fullname||currentUser?.role||''}; QUY_TX.push(t); t.soDuSau=quyKtBalance(); }
+  if(editId){ const t=QUY_TX.find(x=>x.id===editId); if(t){ t.ngay=ngay; t.sotien=sotien; t.lydo=lydo; t.soDuSau=quyKtRunningMap()[t.id]; t.sdV=2; } }
+  else { const t={id:'CF'+Date.now(), ngay, kind:mode, sotien, lydo, nguoi:currentUser?.fullname||currentUser?.role||''}; QUY_TX.push(t); t.soDuSau=quyKtRunningMap()[t.id]; t.sdV=2; }
   closeModal('modal-quy-tx');
   renderQuyTienMat(); syncNow();
   showToast('✅ Đã lưu giao dịch quỹ',2200,'success');
@@ -4626,7 +4641,7 @@ function approveQuyUng(id){
   const soDuyet=parseFloat(String(v).replace(/[^\d.-]/g,''))||0;
   if(soDuyet<=0){ showToast('Số tiền không hợp lệ',2200,'error'); return; }
   d.status='duyet'; d.soDuyet=soDuyet;
-  { const t={id:'CF'+Date.now(), ngay:d.ngay, kind:'ung', sotien:soDuyet, lydo:'Ứng theo YC ngày '+d.ngay, ref:d.id, nguoi:currentUser?.fullname||''}; QUY_TX.push(t); t.soDuSau=quyKtBalance(); }
+  { const t={id:'CF'+Date.now(), ngay:d.ngay, kind:'ung', sotien:soDuyet, lydo:'Ứng theo YC ngày '+d.ngay, ref:d.id, nguoi:currentUser?.fullname||''}; QUY_TX.push(t); t.soDuSau=quyKtRunningMap()[t.id]; t.sdV=2; }
   renderQuyTienMat(); syncNow();
   showToast('✅ Đã duyệt ứng '+fmt(soDuyet),2600,'success');
 }
