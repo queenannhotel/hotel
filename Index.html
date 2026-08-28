@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.19e';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.19f';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -615,11 +615,11 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
 .mb-room-chip.sel{background:var(--gold);border-color:var(--gold);color:#fff;font-weight:600;}
 /* Amenity table */
 .amenity-table td,.amenity-table th{padding:5px 8px;border:1px solid var(--border);font-size:11px;text-align:center;}
-.amenity-table td:first-child,.amenity-table th:first-child{
+.amenity-table tbody td:first-child,.amenity-table thead tr:first-child th:first-child{
   position:sticky;left:0;z-index:2;background:#fff;text-align:left!important;
   border-right:2px solid var(--border);min-width:130px;white-space:nowrap;
 }
-.amenity-table thead th:first-child{background:var(--navy);z-index:4;}
+.amenity-table thead tr:first-child th:first-child{background:var(--navy);z-index:4;}
 .amenity-table th{background:var(--navy);color:var(--gold);font-size:10px;}
 /* Khách yêu cầu */
 .req-card{border:1.5px solid var(--border);border-radius:10px;padding:12px 15px;margin-bottom:10px;background:#fff;}
