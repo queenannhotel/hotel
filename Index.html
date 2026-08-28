@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.19a';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.19b';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -1687,11 +1687,12 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
           <div style="display:flex;gap:10px;margin-bottom:12px;align-items:center;flex-wrap:wrap;">
             <span style="font-size:12px;color:var(--text-muted);">Tháng:</span>
             <input type="month" id="mb-rep-thang" onchange="renderMbReport()" style="font-size:12px;padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;">
+            <button class="btn btn-gold btn-sm" onclick="openMbXuat()">⬇ Xuất hàng</button>
           </div>
           <div class="card" style="padding:0;overflow:hidden;"><div style="overflow-x:auto;">
             <table class="amenity-table" style="min-width:900px;" id="mb-rep-table"><thead id="mb-rep-thead"></thead><tbody id="mb-rep-tbody"></tbody></table>
           </div></div>
-          <div style="margin-top:8px;font-size:11px;color:var(--text-muted);">* Số liệu tổng hợp từ sheet Lịch sử Minibar (Import từ Smile)</div>
+          <div style="margin-top:8px;font-size:11px;color:var(--text-muted);">* <b>Xuất</b> = phiếu xuất Kho HK + tiêu thụ Smile + yêu cầu khách · <b>Nhập</b> = nhập Kho HK (đvt sau quy đổi) · <b>Tồn</b> = cuối tháng trước · <b>CK</b> = Tồn − Xuất + Nhập. Nút "⬇ Xuất hàng" ghi thẳng sang Quản lý kho.</div>
         </div>
         <div id="mb-view-history" style="display:none;">
           <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;flex-wrap:wrap;">
@@ -2380,6 +2381,25 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
     <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
       <button class="btn btn-ghost" onclick="closeModal('modal-kho-xuat')">Huỷ</button>
       <button class="btn btn-gold" onclick="saveKhoXuat()">✅ Xác nhận Xuất</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL XUẤT HÀNG MINIBAR (song song Quản lý kho) ===== -->
+<div class="modal-overlay" id="modal-mb-xuat">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title">⬇ Xuất hàng Minibar</span><button class="close-btn" onclick="closeModal('modal-mb-xuat')">✕</button></div>
+    <div class="form-row">
+      <div class="form-group"><label>Ngày xuất</label><input type="date" id="mbx-ngay"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1.6fr 74px 1.4fr;gap:6px;font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.3px;padding:0 8px;margin-bottom:3px;">
+      <span>Tên hàng</span><span>SL Xuất</span><span>Lý do</span>
+    </div>
+    <div id="mbx-items"></div>
+    <div style="margin-top:8px;font-size:11px;color:var(--text-muted);">Ghi vào Kho HK đúng vị trí sẵn của hàng — hiện luôn bên Quản lý kho.</div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
+      <button class="btn btn-ghost" onclick="closeModal('modal-mb-xuat')">Huỷ</button>
+      <button class="btn btn-gold" onclick="saveMbXuat()">✅ Xác nhận Xuất</button>
     </div>
   </div>
 </div>
@@ -6109,28 +6129,122 @@ function _mbEnsureHistRange(){
   if(f&&!f.value) f.value=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`;
   if(t&&!t.value){ const ld=new Date(d.getFullYear(),d.getMonth()+1,0); t.value=ld.toISOString().slice(0,10); }
 }
-// Báo cáo: mặt hàng × ngày trong tháng + cột Tổng — lấy SL từ MB_HISTORY (đã map tên).
+// ===== Minibar Báo cáo: THẺ KHO cho 9 món (Xuất/Nhập theo ngày, Tồn cuối tháng trước, CK) =====
+// Khớp tên (KHO/Smile/YC) → 1 trong 9 canon MB_REPORT_ITEMS (bền hơn mbMapName cho tên có đuôi như 'Suối Dasani 500ml').
+const MB_KHO_MATCH={
+  'COCA COLA':['coca'], 'FANTA':['fanta'], 'SPRITE':['sprite'], 'BIA TIGER':['tiger'],
+  'SUỐI DASANI':['dasani'], 'BIRD NEST':['bird nest','nước yến','nuoc yen','yến','yen'],
+  'SNACK':['snack'], 'MI LY MODERN':['mì ly','mi ly'], 'CHOCOPIE':['chocopie']
+};
+function mbCanonOf(name){
+  const s=String(name||'').toLowerCase();
+  for(const canon of MB_REPORT_ITEMS){ if((MB_KHO_MATCH[canon]||[]).some(k=>s.includes(k))) return canon; }
+  return null;
+}
+function mbKhoRows(canon){ return (KHO_DATA||[]).filter(x=>x.bophan==='hk' && mbCanonOf(x.ten)===canon); }
+// Dòng kho hk khớp canon còn tồn nhiều nhất (để hiện tồn + ghi phiếu xuất đúng vị trí sẵn của hàng).
+function mbKhoItemFor(canon){ return mbKhoRows(canon).slice().sort((a,b)=>calcKyStats(b).con-calcKyStats(a).con)[0]||null; }
+// Tồn của 1 dòng kho tính đến hết ngày cutoffISO: ton_dau + Σ net movement (ngay ≤ cutoff, bỏ nhap 'đầu kỳ').
+function khoStockAsOf(it, cutoffISO){
+  let bal=parseFloat(it.ton_dau)||0;
+  (it.lichSu||[]).forEach(h=>{
+    const iso=vnToIso(h.ngay); if(!iso||iso>cutoffISO) return;
+    const sl=parseFloat(h.sl)||0;
+    if(h.loai==='nhap'){ if(!String(h.lydo||'').includes('đầu kỳ')) bal+=sl; }
+    else if(h.loai==='transfer-in'||h.loai==='chuyen-den') bal+=sl;
+    else if(h.loai==='chuyen-di'||h.loai==='xuat'||h.loai==='transfer-out'||h.loai==='huy') bal-=sl;
+  });
+  return bal;
+}
 function renderMbReport(){
   _mbEnsureMonthDefault();
   const thang=document.getElementById('mb-rep-thang')?.value||curMonth();
   const [y,m]=thang.split('-').map(Number);
   const daysInMonth=new Date(y,m,0).getDate();
   const days=Array.from({length:daysInMonth},(_,i)=>i+1);
+  const cutoffISO=(()=>{const d=new Date(y,m-1,0);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;})();  // cuối tháng trước
   const today=new Date(); const todayD=today.getDate(), todayMon=today.getMonth()+1, todayY=today.getFullYear();
-  // grid[item][day] = tổng SL
-  const grid={}; MB_REPORT_ITEMS.forEach(it=>{ grid[it]={}; });
-  (MB_HISTORY||[]).forEach(rec=>{
-    const iso=rec.ngay||''; const p=iso.split('-'); if(p.length<3) return;
-    if(parseInt(p[0])!==y||parseInt(p[1])!==m) return;
-    const day=parseInt(p[2]);
-    (rec.items||[]).forEach(it=>{ const nm=mbMapName(it.ten); if(grid[nm]){ grid[nm][day]=(grid[nm][day]||0)+(parseFloat(it.sl)||0); } });
+  const inMonth=iso=>{const p=String(iso||'').split('-'); return p.length>=3 && +p[0]===y && +p[1]===m ? +p[2] : 0;};
+  // rows[canon] = {ton, xut[day], nhp[day], dvt}
+  const R={}; MB_REPORT_ITEMS.forEach(c=>{ R[c]={ton:0,xut:{},nhp:{},dvt:''}; });
+  MB_REPORT_ITEMS.forEach(canon=>{
+    const r=R[canon];
+    mbKhoRows(canon).forEach(it=>{
+      if(!r.dvt && it.dvt) r.dvt=it.dvt;
+      r.ton+=khoStockAsOf(it, cutoffISO);
+      (it.lichSu||[]).forEach(h=>{
+        const d=inMonth(vnToIso(h.ngay)); if(!d) return; const sl=parseFloat(h.sl)||0;
+        if(h.loai==='xuat'||h.loai==='transfer-out') r.xut[d]=(r.xut[d]||0)+sl;
+        else if(h.loai==='nhap'){ if(!String(h.lydo||'').includes('đầu kỳ')) r.nhp[d]=(r.nhp[d]||0)+sl; }
+        else if(h.loai==='transfer-in'||h.loai==='chuyen-den') r.nhp[d]=(r.nhp[d]||0)+sl;
+        else if(h.loai==='chuyen-di') r.nhp[d]=(r.nhp[d]||0)-sl;
+      });
+    });
   });
-  document.getElementById('mb-rep-thead').innerHTML=`<tr><th>Mặt hàng</th>${days.map(d=>`<th style="${d===todayD&&m===todayMon&&y===todayY?'background:var(--navy);color:var(--gold);font-weight:700;':''}">${d}</th>`).join('')}<th>Tổng T${m}</th></tr>`;
-  document.getElementById('mb-rep-tbody').innerHTML=MB_REPORT_ITEMS.map(item=>{
-    let rowTotal=0;
-    const cells=days.map(d=>{ const val=grid[item][d]||0; if(val>0) rowTotal+=val; return `<td style="text-align:center;${val>0?'font-weight:600;color:var(--navy);background:#EEF3FB;':''}">${val||''}</td>`; });
-    return `<tr><td style="font-weight:500;padding-left:8px;white-space:nowrap;">${item}</td>${cells.join('')}<td style="font-weight:700;text-align:center;color:var(--navy);">${rowTotal||''}</td></tr>`;
+  // Tiêu thụ Smile → cộng vào Xuất
+  (MB_HISTORY||[]).forEach(rec=>{ const d=inMonth(rec.ngay); if(!d) return;
+    (rec.items||[]).forEach(it=>{ const c=mbCanonOf(it.ten); if(c) R[c].xut[d]=(R[c].xut[d]||0)+(parseFloat(it.sl)||0); }); });
+  // Yêu cầu khách (YC_DATA, ngay vn) → cộng vào Xuất
+  (YC_DATA||[]).forEach(rec=>{ const d=inMonth(vnToIso(rec.ngay)); if(!d) return;
+    (rec.items||[]).forEach(it=>{ const c=mbCanonOf(it.ten); if(c) R[c].xut[d]=(R[c].xut[d]||0)+(parseFloat(it.sl)||0); }); });
+  // thead 2 tầng
+  const dayTh=days.map(d=>`<th colspan="2" style="${d===todayD&&m===todayMon&&y===todayY?'background:var(--navy);color:var(--gold);font-weight:700;':''}">${d}</th>`).join('');
+  const daySub=days.map(()=>`<th style="font-size:9px;color:var(--red);">X</th><th style="font-size:9px;color:var(--green);">N</th>`).join('');
+  document.getElementById('mb-rep-thead').innerHTML=
+    `<tr><th rowspan="2">Mặt hàng</th><th rowspan="2" style="background:#FFF7E6;">Tồn</th>${dayTh}<th rowspan="2">Tổng Xuất</th><th rowspan="2">Tổng Nhập</th><th rowspan="2" style="background:#FFF7E6;">Tổng CK</th></tr>`+
+    `<tr>${daySub}</tr>`;
+  document.getElementById('mb-rep-tbody').innerHTML=MB_REPORT_ITEMS.map(canon=>{
+    const r=R[canon]; let tX=0,tN=0;
+    const cells=days.map(d=>{ const x=r.xut[d]||0, n=r.nhp[d]||0; tX+=x; tN+=n;
+      return `<td style="text-align:center;font-size:11px;${x?'color:var(--red);font-weight:600;background:#FDECEC;':''}">${x||''}</td><td style="text-align:center;font-size:11px;${n?'color:var(--green);font-weight:600;background:#EAF7EE;':''}">${n||''}</td>`;
+    }).join('');
+    const ck=r.ton - tX + tN;
+    return `<tr><td style="font-weight:500;padding-left:8px;white-space:nowrap;">${canon}${r.dvt?` <span style="color:var(--text-muted);font-size:10px;">(${esc(r.dvt)})</span>`:''}</td>`+
+      `<td style="text-align:center;font-weight:600;background:#FFFBF2;">${r.ton||0}</td>${cells}`+
+      `<td style="text-align:center;font-weight:700;color:var(--red);">${tX||''}</td>`+
+      `<td style="text-align:center;font-weight:700;color:var(--green);">${tN||''}</td>`+
+      `<td style="text-align:center;font-weight:700;color:var(--navy);background:#FFFBF2;">${ck}</td></tr>`;
   }).join('');
+}
+// Nút Xuất hàng minibar: mở form 9 món (kèm tồn) → ghi phiếu xuất thẳng vào Kho HK (giống Quản lý kho).
+function openMbXuat(){
+  document.getElementById('mbx-ngay').value=new Date().toISOString().slice(0,10);
+  document.getElementById('mbx-items').innerHTML=MB_REPORT_ITEMS.map(canon=>{
+    const it=mbKhoItemFor(canon); const con=it?calcKyStats(it).con:0; const dvt=it?.dvt||'';
+    return `<div class="mbxr kho-item-row" data-canon="${esc(canon)}" style="display:grid;grid-template-columns:1.6fr 74px 1.4fr;gap:6px;align-items:start;margin-bottom:6px;padding:8px;background:var(--cream);border:1px solid var(--border);border-radius:8px;">
+      <div><div style="font-weight:600;font-size:13px;">${canon}</div><div style="font-size:10px;color:${con>0?'var(--green)':'var(--text-muted)'};margin-top:2px;">Tồn: ${con}${dvt?' '+esc(dvt):''}</div></div>
+      <input type="number" class="mbxr-sl" min="0" value="0" style="height:34px;">
+      <input class="mbxr-lydo" placeholder="Lý do xuất" style="height:34px;">
+    </div>`;
+  }).join('');
+  openModal('modal-mb-xuat');
+}
+function saveMbXuat(){
+  const iso=document.getElementById('mbx-ngay').value; if(!iso){ showToast('Chọn ngày xuất',2000,'error'); return; }
+  const ngay=iso.split('-').reverse().join('/');
+  const nguoi=currentUser?.fullname||currentUser?.role||'';
+  const rows=[...document.querySelectorAll('#mbx-items .mbxr')].map(row=>({
+    canon:row.dataset.canon,
+    sl:parseInt(row.querySelector('.mbxr-sl')?.value)||0,
+    lydo:(row.querySelector('.mbxr-lydo')?.value||'').trim(),
+  })).filter(r=>r.sl>0);
+  if(!rows.length){ showToast('Nhập SL xuất cho ít nhất 1 món',2400,'error'); return; }
+  // Validate trước (không ghi một phần nếu có dòng sai).
+  const resolved=[];
+  for(const r of rows){
+    const it=mbKhoItemFor(r.canon);
+    if(!it){ showToast(`"${r.canon}" chưa có trong Kho HK — không xuất được`,3200,'error'); return; }
+    const con=calcKyStats(it).con;
+    if(r.sl>con){ showToast(`"${r.canon}" chỉ còn ${con} trong Kho HK`,3200,'error'); return; }
+    resolved.push({it,r});
+  }
+  resolved.forEach(({it,r})=>{
+    it.lichSu.push({ngay,loai:'xuat',sl:r.sl,tu:'hk',den:'',lydo:r.lydo||'Xuất minibar',img:'',nguoi,vitri:it.vitri||''});
+  });
+  closeModal('modal-mb-xuat');
+  try{ renderKhoTab(); }catch(e){}
+  renderMbReport(); syncNow();
+  showToast(`✅ Đã xuất ${resolved.length} món minibar`,2400,'success');
 }
 // Lịch sử: liệt kê từng phiếu (phòng) trong khoảng ngày, xổ ra chi tiết mặt hàng.
 function renderMbHistory(){
