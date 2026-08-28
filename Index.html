@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.18w';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.18x';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -70,7 +70,8 @@ const TAB_COLLECTIONS = {
   'danh-muc': ['catalog'],
   'kho': ['kho'],
   'nhan-su': ['nsLuong','bhxh','tncn'],
-  'buong-phong': ['wsData','roomStatus','amData','mbData','hvLinen','hvRewash','hvCols','yc','ycDeleted','sx','hkStaff','mbHistory','hvNono'],
+  'buong-phong': ['wsData','roomStatus','amData','mbData','hvLinen','hvRewash','hvCols','sx','hkStaff','mbHistory','hvNono'],
+  'khach-yeu-cau': ['yc','ycDeleted'],   // tách riêng ra sidebar — Xóa data ở trang này chỉ xoá YC
 };
 // Xóa data ở Buồng phòng tách theo TỪNG SHEET đang mở (currentBpTab)
 const BP_SHEET_COLLECTIONS = {
@@ -79,9 +80,8 @@ const BP_SHEET_COLLECTIONS = {
   amenity:['amData'],
   'hang-vai':['hvLinen','hvRewash','hvCols','hvNono'],
   'setup-xe':['sx'],
-  'yeu-cau':['yc','ycDeleted'],
 };
-const BP_SHEET_LABELS = { worksheet:'Worksheet', minibar:'Minibar', amenity:'Amenity', 'hang-vai':'Hàng Vải', 'setup-xe':'Setup Xe', 'yeu-cau':'Khách Yêu Cầu' };
+const BP_SHEET_LABELS = { worksheet:'Worksheet', minibar:'Minibar', amenity:'Amenity', 'hang-vai':'Hàng Vải', 'setup-xe':'Setup Xe' };
 
 // Chỉ xoá dữ liệu của TAB đang mở (không xoá toàn bộ như clearLocalData).
 async function clearTabData(){
@@ -844,6 +844,7 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
     <div class="nav-item" onclick="showPage('kho',this)" data-perm="ketoan,giamdoc,truong-bp"><span class="icon">🏭</span> Quản Lý Kho</div>
     <div class="nav-section" data-perm="ketoan,giamdoc,truong-bp">Buồng Phòng</div>
     <div class="nav-item" onclick="showPage('buong-phong',this)" data-perm="ketoan,giamdoc,truong-bp"><span class="icon">🛏</span> Buồng Phòng</div>
+    <div class="nav-item" onclick="showPage('khach-yeu-cau',this)" data-perm="ketoan,giamdoc,truong-bp"><span class="icon">📞</span> Khách Yêu Cầu<span class="notif-dot" id="notif-yc" style="display:none;"></span></div>
     <div class="nav-section" data-perm="ketoan,giamdoc">Hệ Thống</div>
     <div class="nav-item" onclick="showPage('danh-muc',this)" data-perm="ketoan,giamdoc"><span class="icon">📦</span> Danh Mục Hàng Hoá</div>
     <div class="nav-item" onclick="showPage('bao-cao',this)" data-perm="ketoan,giamdoc"><span class="icon">📈</span> Báo Cáo Tài Chính</div>
@@ -1176,7 +1177,7 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
       <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;">
         <div class="bp-tab active" id="qtm-subtab-kt"  onclick="switchQtmTab('kt',this)"  style="font-size:12px;padding:6px 16px;">🧾 Quỹ TM Kế toán</div>
         <div class="bp-tab"        id="qtm-subtab-tq"  onclick="switchQtmTab('tq',this)"  style="font-size:12px;padding:6px 16px;">🔐 Quỹ TM Thủ quỹ</div>
-        <div class="bp-tab"        id="qtm-subtab-ung" onclick="switchQtmTab('ung',this)" style="font-size:12px;padding:6px 16px;">📝 Yêu cầu ứng tiền</div>
+        <div class="bp-tab"        id="qtm-subtab-ung" onclick="switchQtmTab('ung',this)" style="font-size:12px;padding:6px 16px;">📝 Yêu cầu ứng tiền<span class="notif-dot" id="notif-ung" style="display:none;margin-left:6px;"></span></div>
       </div>
 
       <!-- Sheet Kế toán -->
@@ -1606,7 +1607,7 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
         <div style="display:flex;gap:8px;align-items:center;">
           <button id="bp-lock-btn" style="display:none;" class="btn btn-ghost btn-sm" onclick="toggleBpLock()"></button>
           <div style="display:flex;gap:8px;" id="bp-action-btns">
-            <button class="btn btn-gold btn-sm" onclick="openModal('modal-bp-yc')">+ Tạo yêu cầu</button>
+            <button class="btn btn-ghost btn-sm" onclick="importSmileFile()">📥 Import Smile</button><button class="btn btn-gold btn-sm" onclick="saveWsData()">💾 Lưu WS</button>
           </div>
         </div>
       </div>
@@ -1618,7 +1619,6 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
         <div class="bp-tab"          onclick="switchBpTab('amenity',this)">🧴 Amenity</div>
         <div class="bp-tab"          onclick="switchBpTab('hang-vai',this)">👕 Hàng Vải</div>
         <div class="bp-tab"          onclick="switchBpTab('setup-xe',this)">🛒 Setup Xe</div>
-        <div class="bp-tab"          onclick="switchBpTab('yeu-cau',this)">📞 Khách Yêu Cầu</div>
       </div>
 
       <!-- ===== WORKSHEET ===== -->
@@ -1806,7 +1806,17 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
       </div>
 
       <!-- ===== KHÁCH YÊU CẦU ===== -->
-      <div id="bp-panel-yeu-cau" style="display:none;">
+    </div>
+
+    <!-- KHÁCH YÊU CẦU (tách riêng ra sidebar — vẫn thuộc nhóm Buồng phòng) -->
+    <div class="page" id="page-khach-yeu-cau">
+      <div class="section-header">
+        <span class="section-title">📞 Khách Yêu Cầu</span>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button class="btn btn-gold btn-sm" onclick="openBpYcModal()">+ Tạo yêu cầu</button>
+        </div>
+      </div>
+      <div id="bp-panel-yeu-cau">
         <!-- Sub-tabs -->
         <div style="display:flex;gap:6px;margin-bottom:16px;">
           <div class="bp-tab active" id="yc-subtab-ds" onclick="switchYcTab('ds',this)" style="font-size:12px;padding:6px 16px;">📋 Danh sách yêu cầu</div>
@@ -3454,6 +3464,10 @@ function applyPermissions(){
       // Chuyển Khoản kế thừa quyền của Công Nợ (ai xem được Công Nợ thì thấy luôn) — khỏi cấp lại tab.
       const ok = role==='giamdoc' || allowedTabs.includes('chuyen-khoan') || allowedTabs.includes('cong-no');
       el.classList.toggle('hidden-nav', !ok);
+    } else if(pageId==='khach-yeu-cau'){
+      // Khách Yêu Cầu kế thừa quyền của Buồng phòng (tách ra sidebar nhưng cùng nhóm quyền).
+      const ok = role==='giamdoc' || allowedTabs.includes('khach-yeu-cau') || allowedTabs.includes('buong-phong');
+      el.classList.toggle('hidden-nav', !ok);
     } else {
       if(role==='giamdoc' || allowedTabs.includes(pageId)) el.classList.remove('hidden-nav');
       else el.classList.add('hidden-nav');
@@ -4407,6 +4421,7 @@ function switchQtmTab(tab,el){
   if(tab==='ung') renderQuyUng();
 }
 function renderQuyTienMat(){
+  try{ syncMobNotif(); }catch(e){}   // cập nhật badge Yêu cầu ứng tiền dù đang ở sub-tab nào
   const isGd=currentUser?.role==='giamdoc';
   const tqBtn=document.getElementById('qtm-subtab-tq'); if(tqBtn) tqBtn.style.display=isGd?'':'none';
   if(currentQtmTab==='tq' && !isGd) currentQtmTab='kt';
@@ -4466,6 +4481,7 @@ function renderQuyTq(){
 function canEditQuyUng(d){ const r=currentUser?.role; if(r==='giamdoc') return true; return r==='ketoan' && d.status==='cho'; }
 function canApproveQuyUng(d){ return currentUser?.role==='giamdoc' && d.status==='cho'; }
 function renderQuyUng(){
+  try{ syncMobNotif(); }catch(e){}   // cập nhật badge Yêu cầu ứng tiền
   const rows=QUY_UNG.slice().sort((a,b)=>vnToIso(b.ngay).localeCompare(vnToIso(a.ngay)));
   const stLabel={cho:['Chờ duyệt','var(--yellow)'],duyet:['Đã duyệt','var(--green)'],khong:['Không duyệt','var(--red)']};
   const body=document.getElementById('qtm-ung-body');
@@ -5730,13 +5746,12 @@ function switchBpTab(tab,el){
   currentBpTab=tab;
   document.querySelectorAll('.bp-tab').forEach(t=>t.classList.remove('active'));
   el.classList.add('active');
-  ['worksheet','minibar','amenity','hang-vai','setup-xe','yeu-cau'].forEach(t=>{
+  ['worksheet','minibar','amenity','hang-vai','setup-xe'].forEach(t=>{
     const p=document.getElementById('bp-panel-'+t);if(p)p.style.display=t===tab?'block':'none';
   });
   const ab=document.getElementById('bp-action-btns');
   if(ab){
     if(tab==='worksheet') ab.innerHTML=`<button class="btn btn-ghost btn-sm" onclick="importSmileFile()">📥 Import Smile</button><button class="btn btn-gold btn-sm" onclick="saveWsData()">💾 Lưu WS</button>`;
-    else if(tab==='yeu-cau') ab.innerHTML=`<button class="btn btn-gold btn-sm" onclick="openBpYcModal()">+ Tạo yêu cầu</button>`;
     else if(tab==='hang-vai') ab.innerHTML=`<button class="btn btn-gold btn-sm" onclick="openHvNhapSachModal()">+ Nhập sạch</button>`;
     else ab.innerHTML='';
   }
@@ -5745,7 +5760,6 @@ function switchBpTab(tab,el){
   if(tab==='amenity')renderAmenity();
   if(tab==='hang-vai')renderHangVai();
   if(tab==='setup-xe')renderSetupXe();
-  if(tab==='yeu-cau'){renderYeuCau();}
   try{ renderBpLockBtn(); }catch(e){}
 }
 
@@ -7654,6 +7668,7 @@ function saveYeuCau(){
   closeModal('modal-bp-yc');renderYeuCau();renderYeuCauStats();
 }
 function renderYeuCau(){
+  try{ syncMobNotif(); }catch(e){}   // cập nhật badge Khách Yêu Cầu (không phụ thuộc bộ lọc)
   const fL=document.getElementById('yc-f-loai')?.value||'';
   const fS=document.getElementById('yc-f-status')?.value||'';
   const rows=YC_DATA.filter(yc=>(!fL||ycServices(yc).some(s=>s.loaiLabel===fL))&&(!fS||yc.status===fS));
@@ -9290,7 +9305,7 @@ function exportKhoExcel(){ exportExcel('kho'); return; /* dùng exportExcel th�
   const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='Kho_QueenAnn.csv';a.click();
 }
 
-const PAGE_TITLES={dashboard:'Dashboard Tài Chính','thu-chi':'Quản Lý Thu Chi','quy-tien-mat':'Quỹ Tiền Mặt','tab-thu':'Ghi Thu','tab-chi':'Ghi Chi','cong-no':'Theo Dõi Công Nợ','chuyen-khoan':'Chuyển Khoản','nhan-su':'Nhân Sự & Lương','kho':'Quản Lý Kho','buong-phong':'Buồng Phòng','de-xuat':'Đề Xuất Mua Hàng','yeu-cau-transfer':'Yêu Cầu Transfer','nha-cung-cap':'Nhà Cung Cấp','danh-muc':'Danh Mục Hàng Hoá','bao-cao':'Báo Cáo Tài Chính','quan-ly-tk':'Quản Lý Tài Khoản','cai-dat':'Cài Đặt Hệ Thống'};
+const PAGE_TITLES={dashboard:'Dashboard Tài Chính','thu-chi':'Quản Lý Thu Chi','quy-tien-mat':'Quỹ Tiền Mặt','tab-thu':'Ghi Thu','tab-chi':'Ghi Chi','cong-no':'Theo Dõi Công Nợ','chuyen-khoan':'Chuyển Khoản','nhan-su':'Nhân Sự & Lương','kho':'Quản Lý Kho','buong-phong':'Buồng Phòng','khach-yeu-cau':'Khách Yêu Cầu','de-xuat':'Đề Xuất Mua Hàng','yeu-cau-transfer':'Yêu Cầu Transfer','nha-cung-cap':'Nhà Cung Cấp','danh-muc':'Danh Mục Hàng Hoá','bao-cao':'Báo Cáo Tài Chính','quan-ly-tk':'Quản Lý Tài Khoản','cai-dat':'Cài Đặt Hệ Thống'};
 // Mặc định LẦN ĐẦU mở tab trong phiên: lọc theo ngày hôm nay (user đổi khoảng ngày sau thì giữ nguyên).
 let _tabDateInit={};
 function ensureTabToday(fromId,toId,key){
@@ -9321,6 +9336,7 @@ function showPage(id,el){
   if(id==='quan-ly-tk') renderUsersTable();
   if(id==='de-xuat'){ ensureTabToday('dx-from','dx-to','dx'); renderDxTable(); }
   if(id==='yeu-cau-transfer') renderTrTab();
+  if(id==='khach-yeu-cau'){ initBpPhongDropdowns(); renderYeuCau(); }
   if(id==='tab-thu'){ ensureTabToday('thu-from','thu-to','thu'); renderThuTab(); }
   if(id==='tab-chi'){ ensureTabToday('chi-from','chi-to','chi'); renderChiTab(); }
   if(id==='thu-chi') syncThuChiSummary();
@@ -10030,6 +10046,14 @@ function syncMobNotif(){
   const trPending=(TR_DATA||[]).filter(d=>d.status==='cho-duyet').length;
   const trDot=document.getElementById('notif-tr');
   if(trDot){ trDot.textContent=trPending; trDot.style.display=trPending?'inline':'none'; }
+  // Badge số Khách Yêu Cầu chờ xử lý (sidebar)
+  const ycPending=(typeof YC_DATA!=='undefined'?YC_DATA:[]).filter(d=>d.status==='cho-xu-ly').length;
+  const ycDot=document.getElementById('notif-yc');
+  if(ycDot){ ycDot.textContent=ycPending; ycDot.style.display=ycPending?'inline':'none'; }
+  // Badge số Yêu cầu ứng tiền chờ duyệt (sub-tab Quỹ TM)
+  const ungPending=(typeof QUY_UNG!=='undefined'?QUY_UNG:[]).filter(d=>d.status==='cho').length;
+  const ungDot=document.getElementById('notif-ung');
+  if(ungDot){ ungDot.textContent=ungPending; ungDot.style.display=ungPending?'inline':'none'; }
 }
 function checkMobileLayout(){
   // Nút ☰ luôn hiện: mobile/iPad để mở menu, desktop để thu/mở sidebar
