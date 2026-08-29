@@ -3,7 +3,7 @@
 // Deploy: Supabase Dashboard -> Edge Functions -> function tên "send-push", dán file này, Deploy.
 // Secrets cần đặt (Dashboard -> Edge Functions -> Secrets):
 //   VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT (vd: mailto:gm@queenannhotelvn.com)
-// (SUPABASE_URL và SUPABASE_SERVICE_ROLE_KEY đã có sẵn trong môi trường Edge Function.)
+// (SUPABASE_URL, SUPABASE_ANON_KEY và SUPABASE_SERVICE_ROLE_KEY đã có sẵn trong môi trường Edge Function.)
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 import webpush from "npm:web-push@3.6.7";
@@ -11,26 +11,43 @@ import webpush from "npm:web-push@3.6.7";
 // .trim() để chống trường hợp secret bị dính khoảng trắng/xuống dòng khi dán.
 const env = (k: string) => (Deno.env.get(k) ?? "").trim();
 
-const cors = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
-const json = (obj: unknown, status = 200) =>
+// Chỉ cho phép gọi từ origin của app (chặn trang lạ gọi để gửi push giả/phishing).
+const ALLOWED_ORIGINS = ["https://queenannhotel.github.io"];
+function corsFor(req: Request) {
+  const origin = req.headers.get("Origin") || "";
+  const allow = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  return {
+    "Access-Control-Allow-Origin": allow,
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Vary": "Origin",
+  };
+}
+const json = (obj: unknown, status = 200, cors: Record<string, string> = {}) =>
   new Response(JSON.stringify(obj), { status, headers: { ...cors, "Content-Type": "application/json" } });
 
 Deno.serve(async (req) => {
+  const cors = corsFor(req);
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   try {
+    // XÁC THỰC người gọi: phải là user đã đăng nhập hợp lệ (JWT phiên), không nhận anon/không token.
+    const authHeader = req.headers.get("Authorization") || "";
+    const authed = createClient(env("SUPABASE_URL"), env("SUPABASE_ANON_KEY"), {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: { user }, error: authErr } = await authed.auth.getUser();
+    if (authErr || !user) return json({ ok: false, error: "unauthorized" }, 401, cors);
+
     const VAPID_PUBLIC  = env("VAPID_PUBLIC_KEY");
     const VAPID_PRIVATE = env("VAPID_PRIVATE_KEY");
     const VAPID_SUBJECT = env("VAPID_SUBJECT") || "mailto:admin@example.com";
     if (!VAPID_PUBLIC || !VAPID_PRIVATE) {
-      return json({ ok: false, error: "Thiếu secret VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY" }, 400);
+      return json({ ok: false, error: "Thiếu secret VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY" }, 400, cors);
     }
     webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE);
 
     const { title, body, tag, url, tab, ownerEmail, excludeEndpoint } = await req.json();
+    // Dùng service_role để đọc danh sách subscription + gửi (bỏ qua RLS an toàn vì đã xác thực người gọi ở trên).
     const supabase = createClient(env("SUPABASE_URL"), env("SUPABASE_SERVICE_ROLE_KEY"));
 
     const { data: subs, error } = await supabase
@@ -88,8 +105,8 @@ Deno.serve(async (req) => {
       }
     }));
 
-    return json({ ok: true, sent, removed, skipped });
+    return json({ ok: true, sent, removed, skipped }, 200, cors);
   } catch (e) {
-    return json({ ok: false, error: String(e) }, 400);
+    return json({ ok: false, error: String(e) }, 400, corsFor(req));
   }
 });
