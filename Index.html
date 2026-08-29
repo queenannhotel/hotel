@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.19f';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.20a';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -220,18 +220,7 @@ async function gsRead(tab){
   }catch(e){console.warn('gsRead',tab,e);return null;}
 }
 
-async function gsWrite(tab,rows){
-  // Dùng GET để tránh CORS - Apps Script doGet nhận action=write
-  try{
-    const url=`${GS_URL}?action=write&sheet=${encodeURIComponent(tab)}&data=${encodeURIComponent(JSON.stringify(rows))}`;
-    const r=await fetch(url,{cache:'no-cache'});
-    const d=await r.json();
-    return d.ok===true;
-  }catch(e){
-    console.warn('gsWrite error',tab,e);
-    return false;
-  }
-}
+// (Đã gỡ gsWrite/gsSaveAll — code chết & ghi Google Sheet không xác thực. Đồng bộ dùng Supabase.)
 
 // ===== LOAD: GS trước, fallback LocalStorage =====
 async function gsLoadAll(){
@@ -271,34 +260,6 @@ async function gsLoadAll(){
   }catch(e){
     const ok=lsLoad();
     showToast(ok?'⚠️ Không kết nối GS — dùng data local':'📋 Bắt đầu mới',2500,'error');
-  }
-}
-
-// ===== SAVE: GS + LocalStorage cùng lúc =====
-async function gsSaveAll(){
-  showToast('💾 Đang lưu...',1500,'info');
-  const h_thu=[['ID','Ngày','Mô tả','Số tiền','Danh mục','Bộ phận','PTTT','Người ghi']];
-  const h_chi=[['ID','Ngày','Mô tả','Số tiền','Danh mục','Bộ phận','PTTT','Người ghi','Trạng thái','Hoá đơn','Ghi chú']];
-  const h_yc=[['ID','Phòng','Loại','Loại Label','Giờ','Người','Items','Ghi chú','Status','Ngày']];
-  const h_hv=[['Loại','Ngày','Sạch','Dơ']];
-  const h_kho=[['ID','Mã','Tên','ĐVT','Bộ phận','Vị trí','Tồn đầu','Hình','Ghi chú','Lịch sử']];
-  const h_dx=[['ID','Tên','SL','ĐVT','Đơn giá','Bộ phận','Lý do','Status','Ngày','Flow','NCC','Ghi chú']];
-  lsSave(); // Lưu local ngay
-  try{
-    await Promise.all([
-      gsWrite('ThuChi_Thu',[...h_thu,...THU_DATA.map(r=>[r.id,r.ngay,r.mota,r.sotien,r.danhmuc,r.bophan,r.pttt,r.nguoi||''])]),
-      gsWrite('ThuChi_Chi',[...h_chi,...CHI_DATA.map(r=>[r.id,r.ngay,r.mota,r.sotien,r.danhmuc,r.bophan,r.pttt,r.nguoi||'',r.trangthai||'',r.hoadon||'',r.ghichu||''])]),
-      gsWrite('YeuCau',[...h_yc,...YC_DATA.map(r=>[r.id,r.phong,r.loai,r.loaiLabel,r.gio,r.nguoi,JSON.stringify(r.items||[]),r.ghichu||'',r.status,r.ngay])]),
-      gsWrite('HV_Linen',[...h_hv,...HV_LINEN.map(r=>[r.loai,r.ngay,r.clean||0,r.dirty||0])]),
-      gsWrite('KhoData',[...h_kho,...KHO_DATA.map(r=>[r.id,r.ma,r.ten,r.dvt,r.bophan,r.vitri,r.ton_dau,r.img||'',r.ghichu||'',JSON.stringify(r.lichSu||[])])]),
-      gsWrite('DeXuat',[...h_dx,...DX_DATA.map(r=>[r.id,r.ten,r.sl,r.dvt,r.dongia,r.bophan,r.lydo,r.status,r.ngay,JSON.stringify(r.flow||[]),r.ncc||'',r.ghichu||''])]),
-      gsWrite('NhaCungCap',[['ID','Tên','DM','SĐT','Email','Người LH','Địa chỉ','Ghi chú'],...NCC_DATA.map(r=>[r.id,r.ten,r.danhmuc||'',r.sdt||'',r.email||'',r.nguoi||'',r.diachi||'',r.ghichu||''])]),
-      gsWrite('WorksheetData',[['DateKey','Data'],...Object.entries(WS_DATA_BY_DATE).map(([k,v])=>[k,JSON.stringify(v)])]),
-      gsWrite('RoomStatus',[['DateKey','Data'],...Object.entries(ROOM_STATUS_BY_DATE).map(([k,v])=>[k,JSON.stringify(v)])]),
-    ]);
-    showToast('✅ Đã lưu & đồng bộ Google Sheets!',2500,'success');
-  }catch(e){
-    showToast('💾 Đã lưu local (GS offline)',2000,'info');
   }
 }
 
@@ -3585,9 +3546,9 @@ let _permList=[]; // cache danh sách user_perms cho màn quản lý (chỉ giá
 function _usersInfoPanel(msg){
   const tb=document.getElementById('users-tbody'); if(!tb) return;
   const meta=(currentUser&&ROLE_META[currentUser.role])||{};
-  const me=currentUser?`<div style="margin-bottom:6px;"><strong>${currentUser.fullname}</strong>
-      <span class="badge" style="background:${meta.bg||'#eee'};color:${meta.color||'#333'};margin-left:6px;">${meta.label||currentUser.role}</span></div>
-      <div style="font-size:12px;color:var(--text-muted);">Email: ${currentUser.email}${currentUser.bophan?' · Bộ phận: '+currentUser.bophan:''}</div>`:'';
+  const me=currentUser?`<div style="margin-bottom:6px;"><strong>${esc(currentUser.fullname)}</strong>
+      <span class="badge" style="background:${meta.bg||'#eee'};color:${meta.color||'#333'};margin-left:6px;">${esc(meta.label||currentUser.role)}</span></div>
+      <div style="font-size:12px;color:var(--text-muted);">Email: ${esc(currentUser.email)}${currentUser.bophan?' · Bộ phận: '+esc(currentUser.bophan):''}</div>`:'';
   tb.innerHTML=`<tr><td colspan="8" style="padding:20px;">
     <div style="background:var(--gold-pale);border:1px solid rgba(201,168,76,.4);border-radius:10px;padding:16px 18px;">
       <div style="font-weight:600;color:var(--navy);margin-bottom:8px;">🔐 Tài khoản bảo mật qua Supabase Auth</div>${me}
@@ -3615,9 +3576,9 @@ async function renderUsersTable(){
       const allowedTabs=hasCustom?u.tabs:(DEFAULT_TABS[u.role]||[]);
       const tabBadges=AU_ALL_TABS.filter(t=>allowedTabs.includes(t.id)).map(t=>`<span class="badge ${t.id.startsWith('kho')?'badge-blue':'badge-navy'}" style="font-size:10px;margin:1px;">${t.label}</span>`).join('');
       return `<tr>
-        <td><strong>${u.email}</strong></td>
-        <td>${u.fullname||'—'}</td>
-        <td><span class="badge" style="background:${meta.bg||'#eee'};color:${meta.color||'#333'};">${meta.label||u.role}</span></td>
+        <td><strong>${esc(u.email)}</strong></td>
+        <td>${esc(u.fullname||'—')}</td>
+        <td><span class="badge" style="background:${meta.bg||'#eee'};color:${meta.color||'#333'};">${esc(meta.label||u.role)}</span></td>
         <td>${userBophans(u).map(b=>`<span class="badge badge-navy" style="font-size:10px;margin:1px;">${BP_LABELS_USR[b]||b}</span>`).join('')||'—'}</td>
         <td style="max-width:340px;">${tabBadges||'—'} ${hasCustom?'':'<span style="font-size:10px;color:var(--text-muted);">(mặc định)</span>'}</td>
         <td><button class="btn btn-primary btn-sm" onclick="editUser('${u.email}')">✏ Sửa tab</button></td>
@@ -5102,14 +5063,14 @@ function syncThuChiSummary() {
     const ttBadge = (r.loai==='chi' && ttTag[r.tt]) ? ` <span class="badge ${ttTag[r.tt][0]}" style="font-size:9px;">${ttTag[r.tt][1]}</span>` : '';
     return `<tr>
     <td style="font-size:11px;color:var(--text-muted);">${i+1}</td>
-    <td style="font-size:12px;">${r.ngay}</td>
+    <td style="font-size:12px;">${esc(r.ngay)}</td>
     <td><span class="badge ${r.loai==='thu'?'badge-green':'badge-red'}">${r.loai==='thu'?'Thu':'Chi'}</span>${ttBadge}</td>
-    <td>${r.mota}</td>
-    <td style="font-size:12px;">${r.bophan}</td>
-    <td><span class="badge ${ptttBadge[r.pttt]||'badge-navy'}" style="font-size:10px;">${r.pttt||'—'}</span></td>
+    <td>${esc(r.mota)}</td>
+    <td style="font-size:12px;">${esc(r.bophan)}</td>
+    <td><span class="badge ${ptttBadge[r.pttt]||'badge-navy'}" style="font-size:10px;">${esc(r.pttt||'—')}</span></td>
     <td class="amount-pos">${thuTxt}</td>
     <td class="amount-neg">${r.chi?fmt(r.chi):'—'}</td>
-    <td style="font-size:12px;">${r.nguoi}</td>
+    <td style="font-size:12px;">${esc(r.nguoi)}</td>
   </tr>`;}).join('')||`<tr><td colspan="9" style="text-align:center;padding:28px;color:var(--text-muted);">Không có dữ liệu</td></tr>`;
 }
 function renderThuChi(){ syncThuChiSummary(); }
@@ -5436,11 +5397,11 @@ function renderNsLuong(){
   document.getElementById('tbl-ns-luong').innerHTML = rows.length
     ? rows.map((r,i)=>`<tr>
         <td style="font-size:12px;">${r.thang.slice(0,7).split('-').reverse().join('/')}</td>
-        <td><span class="badge ${NS_LOAI_BADGE[r.loai]||'badge-navy'}">${NS_LOAI_LABELS[r.loai]||r.loai}</span></td>
-        <td>${r.mota}</td>
+        <td><span class="badge ${NS_LOAI_BADGE[r.loai]||'badge-navy'}">${esc(NS_LOAI_LABELS[r.loai]||r.loai)}</span></td>
+        <td>${esc(r.mota)}</td>
         <td class="amount-neg" style="font-weight:700;">${fmt(r.sotien)}</td>
-        <td style="font-size:11px;color:var(--text-muted);">${r.ghichu||'—'}</td>
-        <td style="font-size:12px;">${r.nguoi}</td>
+        <td style="font-size:11px;color:var(--text-muted);">${esc(r.ghichu||'—')}</td>
+        <td style="font-size:12px;">${esc(r.nguoi)}</td>
         <td><div style="display:flex;gap:3px;"><button class="btn btn-ghost btn-sm" onclick="editNsLuong('${r.id}')" title="Sửa">✏</button><button class="btn btn-danger btn-sm" onclick="deleteNsLuong('${r.id}')" title="Xoá">🗑</button></div></td>
       </tr>`).join('')
     : `<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted);">Chưa có bản ghi lương/thưởng nào trong tháng này</td></tr>`;
@@ -5521,8 +5482,8 @@ function renderNsBhxh(){
     ? rows.map(r=>{
         const cty=bhxhCtyOf(r), nv=bhxhNvOf(r);
         return `<tr>
-          <td style="font-weight:500;">${r.ten}${r.ctyFull?` <span class="badge badge-green" style="font-size:9px;">Cty full</span>`:''}${r.bhytOnly?` <span class="badge badge-blue" style="font-size:9px;">Chỉ BHYT</span>`:''}</td>
-          <td><span class="badge badge-navy" style="font-size:10px;">${r.bophan}</span></td>
+          <td style="font-weight:500;">${esc(r.ten)}${r.ctyFull?` <span class="badge badge-green" style="font-size:9px;">Cty full</span>`:''}${r.bhytOnly?` <span class="badge badge-blue" style="font-size:9px;">Chỉ BHYT</span>`:''}</td>
+          <td><span class="badge badge-navy" style="font-size:10px;">${esc(r.bophan)}</span></td>
           <td>${fmt(r.luong)}</td>
           <td class="amount-neg" style="font-weight:600;">${fmt(cty)}</td>
           <td style="color:var(--text-muted);">${fmt(nv)}</td>
@@ -5638,8 +5599,8 @@ function renderNsTncn(){
     ? rows.map(r=>{
         const t=tinhTncn(r.thunhap,r.npt);
         return `<tr>
-          <td style="font-weight:500;">${r.ten}</td>
-          <td><span class="badge badge-navy" style="font-size:10px;">${r.bophan}</span></td>
+          <td style="font-weight:500;">${esc(r.ten)}</td>
+          <td><span class="badge badge-navy" style="font-size:10px;">${esc(r.bophan)}</span></td>
           <td>${fmt(r.thunhap)}</td>
           <td style="color:var(--text-muted);">${fmt(11000000+r.npt*4400000)}</td>
           <td style="font-weight:600;">${fmt(t.tnTinhThue)}</td>
@@ -6149,7 +6110,7 @@ function renderMbDate(){
 function renderMbStock(){
   const rows=[];KHO_DATA.filter(it=>it.bophan==='hk').forEach(it=>(it.lichSu||[]).forEach(h=>rows.push({...h,ten:it.ten})));
   rows.sort((a,b)=>b.ngay.localeCompare(a.ngay));
-  document.getElementById('mb-stock-body').innerHTML=rows.slice(0,20).map(h=>`<tr><td>${h.ngay}</td><td><span class="badge badge-navy" style="font-size:10px;">${h.loai}</span></td><td>${h.ten}</td><td style="font-weight:600;">${h.sl}</td><td>${h.lydo||'—'}</td></tr>`).join('')||`<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-muted);">Chưa có dữ liệu</td></tr>`;
+  document.getElementById('mb-stock-body').innerHTML=rows.slice(0,20).map(h=>`<tr><td>${esc(h.ngay)}</td><td><span class="badge badge-navy" style="font-size:10px;">${esc(h.loai)}</span></td><td>${esc(h.ten)}</td><td style="font-weight:600;">${h.sl}</td><td>${esc(h.lydo||'—')}</td></tr>`).join('')||`<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-muted);">Chưa có dữ liệu</td></tr>`;
 }
 
 // ===================== MINIBAR: BÁO CÁO & LỊCH SỬ (Import từ Smile) =====================
@@ -6949,13 +6910,13 @@ function showHvHistory(){
             <th>Thời gian</th><th>Loại</th><th>Ngày</th><th>Trường</th><th>Từ</th><th>→ Thành</th><th>Người sửa</th>
           </tr></thead>
           <tbody>${logs.slice(0,50).map(l=>`<tr>
-            <td style="font-size:11px;white-space:nowrap;">${l.ts}</td>
-            <td style="font-weight:500;">${l.loai}</td>
-            <td style="text-align:center;">${l.ngay}</td>
+            <td style="font-size:11px;white-space:nowrap;">${esc(l.ts)}</td>
+            <td style="font-weight:500;">${esc(l.loai)}</td>
+            <td style="text-align:center;">${esc(l.ngay)}</td>
             <td><span class="badge ${l.field==='clean'?'badge-green':'badge-yellow'}" style="font-size:10px;">${l.field==='clean'?'Sạch':'Dơ'}</span></td>
             <td style="text-align:center;color:var(--text-muted);">${l.from}</td>
             <td style="text-align:center;font-weight:600;color:var(--navy);">${l.to}</td>
-            <td style="font-size:11px;">${l.nguoi}</td>
+            <td style="font-size:11px;">${esc(l.nguoi)}</td>
           </tr>`).join('')}</tbody>
         </table>
       </div>
@@ -6989,11 +6950,11 @@ function renderSetupXe(){
       ? `<input type="number" class="ws-input" value="${tt}" min="0" style="width:55px;background:#EEF3FB;" oninput="SX_DATA[${idx}].sl_thuc_te=parseInt(this.value)||0;renderSetupXe();" title="Nhập tay">`
       : `<span style="font-weight:600;color:var(--navy);">${tt}</span><span style="font-size:9px;color:var(--text-muted);margin-left:3px;">(WS)</span>`;
     return`<tr>
-      <td style="font-weight:500;">${sx.ten}${sx.manual?'<span class="badge badge-yellow" style="font-size:9px;margin-left:4px;">Nhập tay</span>':''}</td>
+      <td style="font-weight:500;">${esc(sx.ten)}${sx.manual?'<span class="badge badge-yellow" style="font-size:9px;margin-left:4px;">Nhập tay</span>':''}</td>
       <td style="text-align:center;"><input type="number" class="ws-input" value="${sx.sl_setup}" style="width:55px;" oninput="SX_DATA[${idx}].sl_setup=parseInt(this.value)||0;renderSetupXe();" title="Sửa SL setup"></td>
       <td style="text-align:center;">${ttCell}</td>
       <td style="text-align:center;font-weight:700;font-size:14px;color:${diff>0?'var(--green)':diff<0?'var(--red)':'var(--text-muted)'};">${diff>0?'+'+diff:diff<0?diff:'✓'}</td>
-      <td style="font-size:11px;color:var(--text-muted);">${sx.ghichu||'—'}</td>
+      <td style="font-size:11px;color:var(--text-muted);">${esc(sx.ghichu||'—')}</td>
       <td><button class="btn btn-danger btn-sm" onclick="SX_DATA=SX_DATA.filter(x=>x.id!=='${sx.id}');renderSetupXe();syncNow()">🗑</button></td>
     </tr>`;
   }).join('')||`<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-muted);">Chưa có hàng setup</td></tr>`;
@@ -7222,11 +7183,11 @@ document.getElementById('catalog-count').textContent=items.length+' m\u1eb7t h\u
 document.getElementById('catalog-tbody').innerHTML=items.map(it=>{
   const p=calcPrices(it);
   const nccBadges=(it.nccIds||[]).map(nid=>{const nm=nccName(nid);return nm?`<span class="badge badge-blue" style="margin:2px;">${esc(nm)}</span>`:''}).join('');
-  const histRows=(it.purchaseHistory||[]).slice().reverse().slice(0,3).map(h=>`<div class="purchase-row"><span>${h.date}</span><span style="font-weight:600;color:var(--navy);">${fmt(h.price)}</span>${h.note?`<span style="color:var(--text-muted);font-size:10px;">${h.note}</span>`:''}</div>`).join('');
+  const histRows=(it.purchaseHistory||[]).slice().reverse().slice(0,3).map(h=>`<div class="purchase-row"><span>${esc(h.date)}</span><span style="font-weight:600;color:var(--navy);">${fmt(h.price)}</span>${h.note?`<span style="color:var(--text-muted);font-size:10px;">${esc(h.note)}</span>`:''}</div>`).join('');
   return `<tr>
-    <td style="font-size:11px;color:var(--text-muted);font-weight:600;">${it.code}</td>
-    <td><div style="font-weight:500;">${it.name}</div>${itemLoaiList(it).map(k=>`<span class="badge ${k==='thuc-pham'?'badge-green':k==='tieu-dung'?'badge-blue':'badge-navy'}" style="font-size:9px;margin-top:2px;margin-right:3px;display:inline-block;">${LOAI_HANG_LABEL[k]||k}</span>`).join('')}${it.note?`<div style="font-size:11px;color:var(--text-muted);">${it.note}</div>`:''}</td>
-    <td>${it.dvt}${(parseFloat(it.quyDoi)>0&&it.dvtKho)?`<div style="font-size:10px;color:var(--text-muted);white-space:nowrap;">→ ${it.quyDoi} ${it.dvtKho}/kho</div>`:''}</td>
+    <td style="font-size:11px;color:var(--text-muted);font-weight:600;">${esc(it.code)}</td>
+    <td><div style="font-weight:500;">${esc(it.name)}</div>${itemLoaiList(it).map(k=>`<span class="badge ${k==='thuc-pham'?'badge-green':k==='tieu-dung'?'badge-blue':'badge-navy'}" style="font-size:9px;margin-top:2px;margin-right:3px;display:inline-block;">${esc(LOAI_HANG_LABEL[k]||k)}</span>`).join('')}${it.note?`<div style="font-size:11px;color:var(--text-muted);">${esc(it.note)}</div>`:''}</td>
+    <td>${esc(it.dvt)}${(parseFloat(it.quyDoi)>0&&it.dvtKho)?`<div style="font-size:10px;color:var(--text-muted);white-space:nowrap;">→ ${it.quyDoi} ${esc(it.dvtKho)}/kho</div>`:''}</td>
     <td>${catBophans(it).map(b=>`<span class="badge badge-navy" style="margin:1px;">${BP_LABELS[b]||b}</span>`).join('')||'—'}</td>
     <td style="max-width:180px;">${nccBadges||'\u2014'}</td>
     <td style="color:var(--green);font-weight:700;">${fmt(p.min)}<div style="font-size:9px;color:var(--text-muted);font-weight:400;">t\u1ef1 t\u00ednh</div></td>
@@ -7887,12 +7848,12 @@ function renderYeuCau(){
         <!-- Trái: thông tin -->
         <div style="flex:1;min-width:0;">
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
-            <span style="font-weight:700;font-size:16px;color:var(--navy);">P.${yc.phong}</span>
+            <span style="font-weight:700;font-size:16px;color:var(--navy);">P.${esc(yc.phong)}</span>
             ${badges}
-            <span style="font-size:11px;color:var(--text-muted);">🕐 ${yc.gio} · ${yc.ngay} · ${yc.nguoi}</span>
+            <span style="font-size:11px;color:var(--text-muted);">🕐 ${esc(yc.gio)} · ${esc(yc.ngay)} · ${esc(yc.nguoi)}</span>
           </div>
           ${iStr?`<div style="margin-bottom:6px;">${iStr}</div>`:''}
-          ${yc.ghichu?`<div style="font-size:12px;color:var(--text-muted);">💬 ${yc.ghichu}</div>`:''}
+          ${yc.ghichu?`<div style="font-size:12px;color:var(--text-muted);">💬 ${esc(yc.ghichu)}</div>`:''}
         </div>
         <!-- Phải: trạng thái + nút -->
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex-shrink:0;">
@@ -7918,8 +7879,8 @@ function ycDelete(id){
   const yc=YC_DATA.find(x=>x.id===id); if(!yc) return;
   if(!bpGuardDate(bpViDateToISO(yc.ngay))) return;
   ycDeletingId=id;
-  const iStr=(yc.items||[]).map(i=>`${i.ten}×${i.sl}`).join(', ');
-  document.getElementById('yc-del-info').innerHTML=`<strong>P.${yc.phong}</strong> · ${yc.loaiLabel||yc.loai} · 🕐 ${yc.gio||''} ${yc.ngay||''}${iStr?`<br>${iStr}`:''}`;
+  const iStr=(yc.items||[]).map(i=>`${esc(i.ten)}×${i.sl}`).join(', ');
+  document.getElementById('yc-del-info').innerHTML=`<strong>P.${esc(yc.phong)}</strong> · ${esc(yc.loaiLabel||yc.loai)} · 🕐 ${esc(yc.gio||'')} ${esc(yc.ngay||'')}${iStr?`<br>${iStr}`:''}`;
   document.getElementById('yc-del-reason').value='';
   openModal('modal-yc-del');
 }
@@ -7941,11 +7902,11 @@ function renderYcDeleted(){
   const tb=document.getElementById('yc-deleted-body'); if(!tb) return;
   const rows=(YC_DELETED||[]);
   tb.innerHTML=rows.length?rows.map(yc=>{
-    const iStr=(yc.items||[]).map(i=>`${i.ten}×${i.sl}`).join(', ')||'—';
+    const iStr=(yc.items||[]).map(i=>`${esc(i.ten)}×${i.sl}`).join(', ')||'—';
     return `<tr>
-      <td style="font-size:12px;font-weight:600;color:var(--navy);">${yc.del_ngay||'—'}${yc.del_gio?' '+yc.del_gio:''}</td>
-      <td style="font-weight:700;">P.${yc.phong}</td>
-      <td><span class="badge badge-navy" style="font-size:11px;">${yc.loaiLabel||yc.loai||'—'}</span></td>
+      <td style="font-size:12px;font-weight:600;color:var(--navy);">${esc(yc.del_ngay||'—')}${yc.del_gio?' '+esc(yc.del_gio):''}</td>
+      <td style="font-weight:700;">P.${esc(yc.phong)}</td>
+      <td><span class="badge badge-navy" style="font-size:11px;">${esc(yc.loaiLabel||yc.loai||'—')}</span></td>
       <td style="font-size:12px;">${iStr}</td>
       <td style="font-size:12px;color:var(--text-muted);">🕐 ${yc.gio||''} ${yc.ngay||''}</td>
       <td style="font-size:12px;">${esc(yc.del_reason||'—')}</td>
@@ -8027,15 +7988,15 @@ function renderYeuCauStats(){
   document.getElementById('yc-stats-detail').innerHTML=ycNgay.length
     ?ycNgay.sort((a,b)=>(vnToIso(a.ngay).localeCompare(vnToIso(b.ngay)))||a.gio.localeCompare(b.gio)).map(yc=>{
         const [sc,sl]=sMap[yc.status]||['#888',yc.status];
-        const iStr=yc.items.map(i=>`${i.ten}×${i.sl}`).join(', ')||'—';
+        const iStr=yc.items.map(i=>`${esc(i.ten)}×${i.sl}`).join(', ')||'—';
         return`<tr>
           <td style="font-size:12px;white-space:nowrap;">${esc(yc.ngay)||'—'}</td>
-          <td style="font-weight:600;color:var(--navy);">${yc.gio}</td>
-          <td style="font-weight:700;">P.${yc.phong}</td>
-          <td><span class="badge badge-navy" style="font-size:11px;">${yc.loaiLabel}</span></td>
+          <td style="font-weight:600;color:var(--navy);">${esc(yc.gio)}</td>
+          <td style="font-weight:700;">P.${esc(yc.phong)}</td>
+          <td><span class="badge badge-navy" style="font-size:11px;">${esc(yc.loaiLabel)}</span></td>
           <td style="font-size:12px;">${iStr}</td>
-          <td style="font-size:12px;color:var(--text-muted);">${yc.ghichu||'—'}</td>
-          <td style="font-size:12px;">${yc.nguoi}</td>
+          <td style="font-size:12px;color:var(--text-muted);">${esc(yc.ghichu||'—')}</td>
+          <td style="font-size:12px;">${esc(yc.nguoi)}</td>
           <td><span style="padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600;color:${sc};background:${loaiBg[yc.loaiLabel]||'#eee'};">● ${sl}</span></td>
         </tr>`;
       }).join('')
@@ -8759,7 +8720,7 @@ function _renderKhoTabInner(){
     g.rows.forEach(it=>{ const s=calcKyStats(it); td+=parseFloat(it.ton_dau)||0; nh+=s.nhap; xu+=s.xuat; hu+=s.huy; co+=s.con; });
     const cc=co<=0?'var(--red)':co<=5?'var(--yellow)':'var(--green)';
     const first=g.rows[0];
-    const imgEl=first.img&&/^(https?:|data:|blob:)/.test(first.img)?`<img src="${first.img}" class="img-thumb" style="object-fit:cover;">`:`<div class="img-thumb">${esc(first.img)||'📦'}</div>`;
+    const imgEl=first.img&&/^(https?:|data:|blob:)/.test(first.img)?`<img src="${esc(first.img)}" class="img-thumb" style="object-fit:cover;">`:`<div class="img-thumb">${esc(first.img)||'📦'}</div>`;
     const master=`<tr style="cursor:pointer;background:var(--cream);" onclick="toggleKhoExpand('${esc(g.key).replace(/'/g,"\\'")}')">
       <td>${imgEl}</td>
       <td style="font-weight:600;min-width:140px;">${open?'▾':'▸'} ${esc(g.ten)}</td>
@@ -8826,27 +8787,27 @@ function convertKhoItemUnit(id){
 function _khoDeptRow(it, isChild){
   const s=calcKyStats(it);
   const cc=s.con<=0?'var(--red)':s.con<=5?'var(--yellow)':'var(--green)';
-  const imgEl=it.img&&/^(https?:|data:|blob:)/.test(it.img)?`<img src="${it.img}" class="img-thumb" style="object-fit:cover;">`:`<div class="img-thumb">${esc(it.img)||'📦'}</div>`;
+  const imgEl=it.img&&/^(https?:|data:|blob:)/.test(it.img)?`<img src="${esc(it.img)}" class="img-thumb" style="object-fit:cover;">`:`<div class="img-thumb">${esc(it.img)||'📦'}</div>`;
   const nameCell = isChild
     ? `<td style="font-size:12px;color:var(--text-muted);padding-left:24px;">↳ ${esc(it.ten)}</td>`
-    : `<td style="font-weight:500;min-width:140px;">${it.ten} <button class="btn btn-ghost btn-sm" onclick="editKhoItem('${it.id}')" title="Sửa mặt hàng" style="padding:1px 5px;font-size:11px;">✏</button></td>`;
+    : `<td style="font-weight:500;min-width:140px;">${esc(it.ten)} <button class="btn btn-ghost btn-sm" onclick="editKhoItem('${it.id}')" title="Sửa mặt hàng" style="padding:1px 5px;font-size:11px;">✏</button></td>`;
   return `<tr${isChild?' style="background:var(--bg);"':''}>
     <td>${isChild?'':imgEl}</td>
     ${nameCell}
     <td><select class="inline-select" onchange="updateKhoVitri('${it.id}',this.value)" style="font-size:11px;">${KHO_VITRI_LIST.map(v=>`<option ${it.vitri===v?'selected':''}>${v}</option>`).join('')}</select></td>
-    <td>${it.dvt}</td>
+    <td>${esc(it.dvt)}</td>
     <td style="text-align:center;font-weight:600;">${it.ton_dau}</td>
     <td style="text-align:center;color:var(--green);font-weight:600;">${s.nhap||'—'}</td>
     <td style="text-align:center;color:var(--yellow);">${s.xuat||'—'}</td>
     <td style="text-align:center;color:var(--red);">${s.huy||'—'}</td>
     <td style="text-align:center;font-weight:700;font-size:15px;color:${cc};">${s.con}</td>
-    <td style="font-size:11px;color:var(--text-muted);">${it.ghichu||'—'}</td>
+    <td style="font-size:11px;color:var(--text-muted);">${esc(it.ghichu||'—')}</td>
     <td><div style="display:flex;gap:3px;">
       <button class="btn btn-ghost btn-sm" onclick="openKhoVitriMove('${it.id}')" title="Chuyển vị trí (cùng kho)">📍</button>
       <button class="btn btn-gold btn-sm" onclick="openTransfer('${it.id}')" title="Chuyển sang kho khác">🔄</button>
       <button class="btn btn-ghost btn-sm" onclick="openKhoHistory('${it.id}')" title="Lịch sử">📋</button>
       <button class="btn btn-ghost btn-sm" onclick="editKhoItem('${it.id}')">✏</button>
-      ${currentUser?.role==='giamdoc'&&khoCatConvert(it)?`<button class="btn btn-gold btn-sm" onclick="convertKhoItemUnit('${it.id}')" title="Quy đổi ĐVT theo Danh mục (${it.dvt}→${khoCatConvert(it).newDvt})">🔁</button>`:''}
+      ${currentUser?.role==='giamdoc'&&khoCatConvert(it)?`<button class="btn btn-gold btn-sm" onclick="convertKhoItemUnit('${it.id}')" title="Quy đổi ĐVT theo Danh mục (${esc(it.dvt)}→${esc(khoCatConvert(it).newDvt)})">🔁</button>`:''}
       ${currentUser?.role==='giamdoc'?`<button class="btn btn-danger btn-sm" onclick="deleteKhoItem('${it.id}')" title="Xoá mặt hàng (chỉ Giám đốc)">🗑</button>`:''}
     </div></td>
   </tr>`;
@@ -8962,15 +8923,15 @@ function renderKhoLogTab(type){
   // Dòng "thường" được sửa/xoá: nhập tay (không ref_chi), xuất, huỷ. Dòng từ Chi / chuyển kho → khoá (sửa ở nguồn).
   const editable=h=>((h.loai==='nhap'&&!h.ref_chi)||h.loai==='xuat'||h.loai==='huy');
   document.getElementById('kho-tbody').innerHTML=all.length?all.map(h=>`<tr>
-    <td style="font-size:12px;">${h.ngay}</td>
-    <td style="font-size:11px;color:var(--text-muted);">${h.ma}</td>
-    <td style="font-weight:500;">${h.ten}</td>
-    <td><span class="badge badge-navy" style="font-size:10px;">${KHO_BP_LABELS[h.bophan]||h.bophan}</span></td>
+    <td style="font-size:12px;">${esc(h.ngay)}</td>
+    <td style="font-size:11px;color:var(--text-muted);">${esc(h.ma)}</td>
+    <td style="font-weight:500;">${esc(h.ten)}</td>
+    <td><span class="badge badge-navy" style="font-size:10px;">${esc(KHO_BP_LABELS[h.bophan]||h.bophan)}</span></td>
     <td style="text-align:center;font-weight:700;color:${slColor};">${h.sl}</td>
-    <td>${h.dvt}</td>
-    <td style="font-size:12px;">${h.lydo||'—'}</td>
-    ${type!=='nhap'?`<td>${h.img?`<a href="${h.img}" target="_blank" style="color:var(--gold);font-size:12px;">📷 Xem</a>`:'—'}</td>`:''}
-    <td style="font-size:12px;">${h.nguoi||'—'}</td>
+    <td>${esc(h.dvt)}</td>
+    <td style="font-size:12px;">${esc(h.lydo||'—')}</td>
+    ${type!=='nhap'?`<td>${h.img&&/^(https?:|data:|blob:)/.test(h.img)?`<a href="${esc(h.img)}" target="_blank" style="color:var(--gold);font-size:12px;">📷 Xem</a>`:'—'}</td>`:''}
+    <td style="font-size:12px;">${esc(h.nguoi||'—')}</td>
     ${isGD?`<td>${editable(h)?`<div style="display:flex;gap:3px;"><button class="btn btn-ghost btn-sm" onclick="editKhoMove('${h._itemId}',${h._idx})" title="Sửa dòng">✏</button><button class="btn btn-danger btn-sm" onclick="deleteKhoMove('${h._itemId}',${h._idx})" title="Xoá dòng (chỉ Giám đốc)">🗑</button></div>`:`<span style="font-size:10px;color:var(--text-muted);white-space:nowrap;">🔗 sửa ở nguồn</span>`}</td>`:''}
   </tr>`).join(''):`<tr><td colspan="${colspan}" style="text-align:center;padding:30px;color:var(--text-muted);">Chưa có dữ liệu</td></tr>`;
 }
@@ -9022,7 +8983,7 @@ function openTransfer(itemId){
   transferingItemId=itemId;
   const it=KHO_DATA.find(x=>x.id===itemId);if(!it)return;
   const s=calcKyStats(it);
-  document.getElementById('kt-item-info').innerHTML=`<div style="font-weight:600;">${it.ten} <span style="color:var(--text-muted);font-size:11px;">(${it.ma})</span></div><div style="font-size:12px;margin-top:4px;">Kho: <strong>${KHO_BP_LABELS[it.bophan]}</strong> | Còn: <strong style="color:var(--green);">${s.con} ${it.dvt}</strong></div>`;
+  document.getElementById('kt-item-info').innerHTML=`<div style="font-weight:600;">${esc(it.ten)} <span style="color:var(--text-muted);font-size:11px;">(${esc(it.ma)})</span></div><div style="font-size:12px;margin-top:4px;">Kho: <strong>${esc(KHO_BP_LABELS[it.bophan]||it.bophan)}</strong> | Còn: <strong style="color:var(--green);">${s.con} ${esc(it.dvt)}</strong></div>`;
   document.getElementById('kt-sl').value='1';
   document.getElementById('kt-sl').max=s.con;
   document.getElementById('kt-lydo').value='';
@@ -9099,7 +9060,7 @@ function openKhoHistory(itemId){
   const s=calcKyStats(it);
   document.getElementById('kho-hist-title').textContent=`📋 Lịch Sử: ${it.ten} (${it.ma})`;
   document.getElementById('kho-hist-summary').innerHTML=`
-    <div style="padding:8px 14px;background:var(--green-bg);border-radius:8px;font-size:13px;"><div style="font-size:10px;color:var(--text-muted);">Còn lại</div><div style="font-weight:700;color:var(--green);">${s.con} ${it.dvt}</div></div>
+    <div style="padding:8px 14px;background:var(--green-bg);border-radius:8px;font-size:13px;"><div style="font-size:10px;color:var(--text-muted);">Còn lại</div><div style="font-weight:700;color:var(--green);">${s.con} ${esc(it.dvt)}</div></div>
     <div style="padding:8px 14px;background:var(--cream);border-radius:8px;font-size:13px;"><div style="font-size:10px;color:var(--text-muted);">Tồn đầu kỳ</div><div style="font-weight:600;">${it.ton_dau}</div></div>
     <div style="padding:8px 14px;background:var(--red-bg);border-radius:8px;font-size:13px;"><div style="font-size:10px;color:var(--text-muted);">Đã xuất + huỷ</div><div style="font-weight:600;color:var(--red);">${s.xuat+s.huy}</div></div>`;
   const loaiMap={nhap:'Nhập vào',xuat:'Xuất ra','transfer-in':'Nhận Transfer','transfer-out':'Transfer đi',huy:'Huỷ','chuyen-den':'Chuyển đến (vị trí)','chuyen-di':'Chuyển đi (vị trí)'};
@@ -9107,13 +9068,13 @@ function openKhoHistory(itemId){
     const sc=h.loai==='nhap'||h.loai==='transfer-in'||h.loai==='chuyen-den'?'var(--green)':h.loai==='huy'?'var(--red)':'var(--yellow)';
     const sg=h.loai==='nhap'||h.loai==='transfer-in'||h.loai==='chuyen-den'?'+':'-';
     return `<tr>
-      <td style="font-size:12px;">${h.ngay}</td>
-      <td><span class="badge badge-navy" style="font-size:10px;">${loaiMap[h.loai]||h.loai}</span></td>
+      <td style="font-size:12px;">${esc(h.ngay)}</td>
+      <td><span class="badge badge-navy" style="font-size:10px;">${esc(loaiMap[h.loai]||h.loai)}</span></td>
       <td style="font-weight:700;color:${sc};">${sg}${h.sl}${h.qd_goc!=null?` <span style="color:var(--text-muted);font-size:10px;font-weight:400;">(${h.qd_goc} ${esc(h.qd_dvt||'')})</span>`:''}</td>
       <td style="font-size:11px;">${esc(h.vitri||it.vitri||'—')}</td>
-      <td style="font-size:11px;color:var(--text-muted);">${h.tu?KHO_BP_LABELS[h.tu]||h.tu:''}${h.den?' → '+(KHO_BP_LABELS[h.den]||h.den):''}</td>
-      <td style="font-size:12px;">${h.lydo||'—'}</td>
-      <td style="font-size:12px;">${h.nguoi||'—'}</td>
+      <td style="font-size:11px;color:var(--text-muted);">${esc(h.tu?KHO_BP_LABELS[h.tu]||h.tu:'')}${h.den?' → '+esc(KHO_BP_LABELS[h.den]||h.den):''}</td>
+      <td style="font-size:12px;">${esc(h.lydo||'—')}</td>
+      <td style="font-size:12px;">${esc(h.nguoi||'—')}</td>
     </tr>`;
   }).join('')||`<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--text-muted);">Chưa có lịch sử</td></tr>`;
   openModal('modal-kho-history');
