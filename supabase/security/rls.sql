@@ -27,9 +27,10 @@ create or replace function public.qah_can_write(coll text) returns boolean
         when 'truong-bp' then array['dx','kho','khoDeleted','yc','ycDeleted','transferReq','wsData','roomStatus','amData','mbData','hvLinen','hvRewash','hvCols','sx','hkStaff','mbHistory','hvNono','mbItemMap']
         else array[]::text[] end )
     -- Cấp tab tuỳ biến (user_perms.tabs) → cho ghi nhóm gắn với tab đó (khớp COLLECTION_TAB trong app)
+    -- user_perms.tabs lưu JSONB (mảng) → dùng to_jsonb + jsonb_array_elements_text (an toàn với jsonb/json/text[]).
     or exists (
         select 1 from public.user_perms up
-        where up.email = public.qah_email() and up.tabs is not null
+        where up.email = public.qah_email() and jsonb_typeof(to_jsonb(up.tabs)) = 'array'
           and (case coll
                 when 'thu' then 'tab-thu' when 'chi' then 'tab-chi' when 'ncc' then 'nha-cung-cap'
                 when 'catalog' then 'danh-muc' when 'dvtList' then 'danh-muc'
@@ -41,7 +42,8 @@ create or replace function public.qah_can_write(coll text) returns boolean
                 when 'mbItemMap' then 'buong-phong' when 'hvNono' then 'buong-phong' when 'amData' then 'buong-phong'
                 when 'mbData' then 'buong-phong' when 'hvLinen' then 'buong-phong' when 'hvRewash' then 'buong-phong'
                 when 'hvCols' then 'buong-phong' when 'sx' then 'buong-phong'
-                else null end) = any(up.tabs)
+                else null end)
+              in (select jsonb_array_elements_text(to_jsonb(up.tabs)))
       );
 $$;
 
