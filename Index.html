@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.20a';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.20b';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -165,13 +165,14 @@ function _lsSaveRaw(fromRemote){
   try{ _warnLsQuota(); }catch(_){}
   return false;
 }
-// Cảnh báo bộ nhớ máy đầy — CHỈ khi cloud CHƯA sẵn sàng (offline). Nếu đã đồng bộ cloud thì dữ liệu an toàn
-// trên máy chủ, không cần báo động (tránh báo giả khi bộ đệm cục bộ không chứa hết dữ liệu chữ).
+// Cảnh báo bộ nhớ máy đầy — CHỈ khi KHÔNG có cloud (chế độ chỉ-local). Nếu đã cấu hình cloud (sb) thì
+// dữ liệu VẪN đẩy lên máy chủ độc lập với việc ghi localStorage (đã đặt _dirty=true) → không báo động,
+// tránh báo giả "offline" lúc mới mở app khi cloudReady chưa kịp true. Trạng thái mạng đã có ở pill "Đã đồng bộ/Mất kết nối".
 let _lsQuotaWarnAt=0;
 function _warnLsQuota(){
-  if(sb && cloudReady){ console.warn('[LS] Bộ nhớ máy đầy nhưng cloud đã đồng bộ — bỏ qua cảnh báo (dữ liệu an toàn trên máy chủ).'); return; }
+  if(sb){ console.warn('[LS] Bộ nhớ máy đầy — bỏ qua cache cục bộ; dữ liệu vẫn đồng bộ lên cloud (an toàn trên máy chủ).'); return; }
   const now=Date.now(); if(now-_lsQuotaWarnAt<30000) return; _lsQuotaWarnAt=now;
-  try{ showToast('⚠️ Đang offline & bộ nhớ máy đầy — thay đổi tạm giữ trong máy, hãy kết nối mạng để đồng bộ lên máy chủ.',6500,'error'); }catch(e){}
+  try{ showToast('⚠️ Bộ nhớ máy đầy — không lưu thêm được. Vào Quản lý kho bấm 🗜 Nén ảnh cũ hoặc xoá bớt ảnh.',6500,'error'); }catch(e){}
 }
 function lsLoad(){
   try{
