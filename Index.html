@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.20c';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.20d';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -148,9 +148,49 @@ function _lsPut(str){
   try{ localStorage.setItem(LS_KEY,str); return true; }
   catch(e1){ try{ localStorage.removeItem(LS_KEY); }catch(_){}; localStorage.setItem(LS_KEY,str); return true; }
 }
+// ===== IndexedDB cho KHO (kèm ẢNH): localStorage ~5MB chứa không nổi ảnh, nên lưu kho đầy đủ ở IndexedDB
+// (dung lượng lớn hơn nhiều). Nhờ vậy mở lại app thấy kho + ảnh NGAY từ máy, khỏi chờ tải ảnh từ mạng.
+let _idbP=null;
+function _idb(){
+  if(_idbP) return _idbP;
+  _idbP=new Promise((res,rej)=>{
+    try{
+      const rq=indexedDB.open('qah_kho',1);
+      rq.onupgradeneeded=()=>{ try{ rq.result.createObjectStore('kv'); }catch(e){} };
+      rq.onsuccess=()=>res(rq.result);
+      rq.onerror=()=>rej(rq.error);
+    }catch(e){ rej(e); }
+  });
+  return _idbP;
+}
+function _idbGet(key){ return _idb().then(db=>new Promise((res,rej)=>{ const t=db.transaction('kv','readonly'); const r=t.objectStore('kv').get(key); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); })).catch(()=>null); }
+function _idbSet(key,val){ return _idb().then(db=>new Promise((res,rej)=>{ const t=db.transaction('kv','readwrite'); const r=t.objectStore('kv').put(val,key); r.onsuccess=()=>res(true); r.onerror=()=>rej(r.error); })).catch(()=>false); }
+// Lưu KHO đầy đủ (có ảnh) vào IndexedDB — gộp nhiều thay đổi trong ~2.5s thành 1 lần ghi.
+let _idbKhoT=null;
+function idbSaveKhoDebounced(){
+  clearTimeout(_idbKhoT);
+  _idbKhoT=setTimeout(()=>{ try{ _idbSet('kho', KHO_DATA); _idbSet('khoDeleted', KHO_DELETED); }catch(e){} }, 2500);
+}
+// Ưu tiên bản IDB (có ảnh), giữ thêm dòng chỉ-có-ở-local (id không nằm trong IDB) để không mất chỉnh sửa chưa đồng bộ.
+function _mergeKhoById(idbArr, localArr){
+  const ids=new Set((idbArr||[]).map(x=>String(x&&x.id)));
+  const extra=(localArr||[]).filter(x=>x&&!ids.has(String(x.id)));
+  return [...(idbArr||[]), ...extra];
+}
+// Nạp kho từ IndexedDB (nếu có) → hiện kho + ảnh tức thì khi mở app. Trả true nếu có dữ liệu.
+async function idbLoadKho(){
+  try{
+    const [k,kd]=await Promise.all([_idbGet('kho'), _idbGet('khoDeleted')]);
+    let hydrated=false;
+    if(Array.isArray(k) && k.length){ KHO_DATA=_mergeKhoById(k, KHO_DATA); hydrated=true; }
+    if(Array.isArray(kd)){ KHO_DELETED=_mergeKhoById(kd, KHO_DELETED); }
+    return hydrated;
+  }catch(e){ return false; }
+}
 function _lsSaveRaw(fromRemote){
   // fromRemote=true: thay đổi đã đến TỪ cloud → chỉ cache cục bộ, KHÔNG đánh dấu bẩn (khỏi flush lại vô ích).
   if(!fromRemote){ try{ _dirty=true; }catch(e){} }   // thay đổi cục bộ → đánh dấu để vòng nền đẩy lên cloud, kể cả khi lưu lỗi
+  try{ idbSaveKhoDebounced(); }catch(e){}   // lưu kho ĐẦY ĐỦ (có ảnh) vào IndexedDB để mở lại thấy ngay
   const base={
     thu:THU_DATA,chi:CHI_DATA,dx:DX_DATA,ncc:NCC_DATA,kho:_khoLite(KHO_DATA),khoDeleted:_khoLite(KHO_DELETED),yc:YC_DATA,ycDeleted:YC_DELETED,transferReq:TR_DATA,
     hvLinen:HV_LINEN,hvRewash:HV_REWASH_DATA,hvCols:HV_REWASH_COLS,
@@ -8737,7 +8777,9 @@ function _renderKhoTabInner(){
     </tr>`;
     const kids=open ? g.rows.slice().sort((a,b)=>(a.vitri||'').localeCompare(b.vitri||'','vi')).map(it=>_khoDeptRow(it,true)).join('') : '';
     return master+kids;
-  }).join(''):`<tr><td colspan="11" style="text-align:center;padding:30px;color:var(--text-muted);">Kho trống — <a href="#" onclick="openKhoAddItem()" style="color:var(--gold);">+ Thêm hàng</a></td></tr>`;
+  }).join(''):(sb && !_khoPullDone
+    ? `<tr><td colspan="11" style="text-align:center;padding:30px;color:var(--text-muted);">⏳ Đang tải kho hàng & ảnh từ máy chủ…</td></tr>`
+    : `<tr><td colspan="11" style="text-align:center;padding:30px;color:var(--text-muted);">Kho trống — <a href="#" onclick="openKhoAddItem()" style="color:var(--gold);">+ Thêm hàng</a></td></tr>`);
 }
 // ===== Quy đổi ĐVT dòng tồn kho CŨ theo Danh mục (VD hộp → gói), cho hàng nhập trước khi có cấu hình =====
 // Trả về {heso,newDvt,catDvt} nếu mặt hàng có cấu hình quy đổi trong Danh mục và dòng CHƯA ở ĐVT kho; null nếu không.
@@ -10644,7 +10686,9 @@ async function initCloud(){
   setInterval(()=>{ _flushWatchdog(); if(sb&&cloudReady&&_dirty){ _dirty=false; flushToCloud(); } }, 4000);
   // Kéo lại khi mạng có lại (đủ 2 pha)
   window.addEventListener('online', ()=>{ cloudPullAll(); });
-  // Pha 2: kéo ảnh kho ở nền; XONG mới chạy các migration phụ thuộc kho (trên kho đầy đủ từ cloud).
+  // Hiện kho + ẢNH ngay từ IndexedDB (bản đã lưu lần trước) trong khi chờ kéo bản mới → không còn "trống trơn".
+  try{ if(await idbLoadKho()){ try{ if(_pageActive('kho')) renderKhoTab(); }catch(e){} } }catch(e){}
+  // Pha 2: kéo ảnh kho ở nền (tự render lại kho nếu đang mở); XONG mới chạy migration phụ thuộc kho.
   cloudPullKho().then(()=>{ try{ runKhoOnceInit(); }catch(e){} });
 }
 // Các backfill 1 lần/thiết bị phụ thuộc dữ liệu kho — chạy SAU khi đã kéo xong ảnh kho.
