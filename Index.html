@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.20b';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.20c';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -10398,7 +10398,7 @@ if(CLOUD_ENABLED){
 function setSyncStatus(state){
   const dot=document.getElementById('sync-dot'), txt=document.getElementById('sync-text');
   if(!dot||!txt) return;
-  const M={ ok:['#2E7D5B','Đã đồng bộ'], sync:['#B7860A','Đang lưu…'], err:['#C0392B','Mất kết nối'], off:['#9ca3af','Chưa bật đồng bộ'] };
+  const M={ ok:['#2E7D5B','Đã đồng bộ'], sync:['#B7860A','Đang lưu…'], load:['#2563EB','Đang tải…'], err:['#C0392B','Mất kết nối'], off:['#9ca3af','Chưa bật đồng bộ'] };
   const m=M[state]||M.off; dot.style.background=m[0]; txt.textContent=m[1];
   const badge=txt.closest('button')||txt.parentElement;
   if(badge){ badge.title = state==='err' ? ('Lỗi đồng bộ: '+(_lastSyncErr||'mất kết nối')) : ''; badge.style.cursor = state==='err'?'help':''; badge.onclick = state==='err' ? (()=>_notifySyncErr(true)) : null; }
@@ -10445,23 +10445,30 @@ const COLLECTIONS = {
 let lastSnapshot = {};
 function _snapshotOf(name){ const s={}; COLLECTIONS[name].read().forEach(r=>{ s[r.id]=JSON.stringify(r.obj); }); return s; }
 
-// ----- KÉO VỀ: merge theo id, cloud thắng khi trùng, giữ lại bản chỉ-có-ở-local để seed lên -----
-async function cloudPullAll(){
+// ----- KÉO VỀ (2 pha): dữ liệu nhẹ trước cho app hiện nhanh; ảnh kho (nặng) kéo ở nền sau -----
+// 2 collection kho nhúng ảnh base64 → kéo riêng ở pha sau để không chặn app lúc mở.
+const IMG_COLLS=['kho','khoDeleted'];
+let _khoPullDone=false;   // chưa kéo xong ảnh kho thì KHÔNG flush kho (tránh đẩy bản cache đã lược ảnh đè lên cloud)
+// Kéo & merge CHỈ các collection trong `names`. filterKho: 'exclude' (pha 1) | 'only' (pha 2).
+async function _pullRecords(names, filterKho, statusLoad){
   if(!sb){ setSyncStatus('off'); return false; }
-  setSyncStatus('sync');
+  if(statusLoad) setSyncStatus('load');
   try{
     // Phân trang: PostgREST mặc định trả tối đa 1000 dòng → kéo theo trang để lấy ĐỦ mọi bản ghi.
     let all=[]; const PAGE=1000; let from=0;
     while(true){
-      const {data, error} = await sb.from('records').select('collection,id,data,deleted').range(from, from+PAGE-1);
+      let q=sb.from('records').select('collection,id,data,deleted');
+      if(filterKho==='exclude') q=q.not('collection','in','(kho,khoDeleted)');
+      else if(filterKho==='only') q=q.in('collection', IMG_COLLS);
+      const {data, error} = await q.range(from, from+PAGE-1);
       if(error) throw error;
       all=all.concat(data||[]);
       if(!data || data.length<PAGE) break;
       from+=PAGE;
     }
     const grouped={}; all.forEach(row=>{ (grouped[row.collection]=grouped[row.collection]||[]).push(row); });
-    lastSnapshot={};
-    Object.keys(COLLECTIONS).forEach(name=>{
+    // CHỈ duyệt `names` — KHÔNG reset lastSnapshot toàn cục (giữ snapshot các nhóm chưa kéo, tránh flush đẩy nhầm).
+    names.forEach(name=>{
       const grp=grouped[name]||[];
       const cloudRows=grp.filter(r=>!r.deleted).map(r=>({id:String(r.id), obj:r.data}));
       // TẤT CẢ id cloud biết tới (kể cả dòng đã xoá mềm) -> KHÔNG thêm lại (resurrect) dòng cloud đã xoá.
@@ -10474,15 +10481,29 @@ async function cloudPullAll(){
     });
     _lsSaveRaw();
     // Chỉ render nhóm của tab đang mở (tránh dựng lại mọi bảng nặng); tab khác sẽ render khi chuyển sang.
-    Object.keys(COLLECTIONS).forEach(name=>{ if(_shouldRenderColl(name)){ try{ COLLECTIONS[name].render(); }catch(e){} } });
+    names.forEach(name=>{ if(_shouldRenderColl(name)){ try{ COLLECTIONS[name].render(); }catch(e){} } });
     try{ updateDashboardKPI(); }catch(e){}
     if(_pageActive('dashboard')){ try{ renderDashDx(); }catch(e){} }
-    cloudReady=true; setSyncStatus('ok');
     return true;
   }catch(e){
-    console.error('cloudPullAll',e); setSyncStatus('err'); return false;
+    console.error('_pullRecords',names[0]||'?',e); setSyncStatus('err'); return false;
   }
 }
+// Pha 1: mọi collection TRỪ kho/khoDeleted → app sẵn sàng ngay.
+async function cloudPullLight(){
+  const names=Object.keys(COLLECTIONS).filter(n=>!IMG_COLLS.includes(n));
+  const ok=await _pullRecords(names,'exclude',true);
+  if(ok){ cloudReady=true; setSyncStatus('ok'); }
+  return ok;
+}
+// Pha 2 (nền): kéo ảnh kho, xong mới cho flush kho.
+async function cloudPullKho(){
+  const ok=await _pullRecords(IMG_COLLS,'only',false);
+  if(ok){ _khoPullDone=true; }
+  return ok;
+}
+// Kéo đủ 2 pha (dùng cho sự kiện 'online').
+async function cloudPullAll(){ const ok=await cloudPullLight(); await cloudPullKho(); return ok; }
 
 // ----- ĐẨY LÊN: so sánh snapshot, chỉ gửi bản ghi mới/đổi/xoá -----
 let _flushTimer=null, _flushing=false, _dirty=false, _flushStartAt=0;   // _dirty: có thay đổi cục bộ chưa đẩy → vòng 4s mới quét
@@ -10536,6 +10557,7 @@ async function flushToCloud(){
     // Đẩy theo TỪNG nhóm: một nhóm lỗi (vd bị RLS chặn) không làm kẹt các nhóm khác
     for(const name of Object.keys(COLLECTIONS)){
       if(!canWriteCollection(name)) continue; // vai trò này không được ghi nhóm này -> bỏ qua
+      if(IMG_COLLS.includes(name) && !_khoPullDone) continue; // chưa kéo xong ảnh kho -> chưa đẩy kho (khỏi đè ảnh cloud bằng bản cache đã lược ảnh)
       const cur=_snapshotOf(name); const prev=lastSnapshot[name]||{};
       const rows=[];
       for(const id in cur){ if(cur[id]!==prev[id]) rows.push({collection:name, id, data:JSON.parse(cur[id]), deleted:false, updated_at:new Date().toISOString()}); }
@@ -10615,7 +10637,18 @@ let _cloudInit=false;
 async function initCloud(){
   if(!sb){ setSyncStatus('off'); return; }
   if(_cloudInit) return; _cloudInit=true;
-  await cloudPullAll();
+  // Pha 1: kéo dữ liệu nhẹ (không ảnh kho) → app hiện & dùng được trong vài giây.
+  await cloudPullLight();
+  startRealtime();
+  // Xương sống: quét diff định kỳ để bắt mọi thay đổi (kể cả chỗ không gọi lsSave)
+  setInterval(()=>{ _flushWatchdog(); if(sb&&cloudReady&&_dirty){ _dirty=false; flushToCloud(); } }, 4000);
+  // Kéo lại khi mạng có lại (đủ 2 pha)
+  window.addEventListener('online', ()=>{ cloudPullAll(); });
+  // Pha 2: kéo ảnh kho ở nền; XONG mới chạy các migration phụ thuộc kho (trên kho đầy đủ từ cloud).
+  cloudPullKho().then(()=>{ try{ runKhoOnceInit(); }catch(e){} });
+}
+// Các backfill 1 lần/thiết bị phụ thuộc dữ liệu kho — chạy SAU khi đã kéo xong ảnh kho.
+function runKhoOnceInit(){
   // Backfill 1 lần/thiết bị: đưa vị trí 4 kho về mặc định rồi đẩy cloud (chỉ vai trò ghi được 'kho').
   try{
     if((currentUser?.role==='giamdoc'||currentUser?.role==='ketoan') && !localStorage.getItem('qah_vitri_default_v1')){
@@ -10637,11 +10670,6 @@ async function initCloud(){
       compressExistingKhoImages().then(({count,savedKB})=>{ if(count) showToast(`🗜 Đã tối ưu ${count} ảnh cũ (~${savedKB} KB)`,2600,'success'); }).catch(()=>{});
     }
   }catch(e){}
-  startRealtime();
-  // Xương sống: quét diff định kỳ để bắt mọi thay đổi (kể cả chỗ không gọi lsSave)
-  setInterval(()=>{ _flushWatchdog(); if(sb&&cloudReady&&_dirty){ _dirty=false; flushToCloud(); } }, 4000);
-  // Kéo lại khi mạng có lại
-  window.addEventListener('online', ()=>{ cloudPullAll(); });
 }
 if(!CLOUD_ENABLED){ window.addEventListener('DOMContentLoaded',()=>setSyncStatus('off')); }
 
