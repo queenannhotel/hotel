@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.20d';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.20e';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -910,20 +910,13 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
           <div class="card-header"><div class="card-title">📊 Thu Chi 6 Tháng Gần Nhất</div></div>
           <div class="card-body">
             <div style="display:flex;gap:10px;margin-bottom:8px;font-size:11px;"><span style="display:flex;align-items:center;gap:4px;"><span style="width:9px;height:9px;background:var(--green);border-radius:2px;display:inline-block;"></span>Thu</span><span style="display:flex;align-items:center;gap:4px;"><span style="width:9px;height:9px;background:var(--red);border-radius:2px;display:inline-block;"></span>Chi</span></div>
-            <div class="chart-bars">
-              <div class="bar-wrap"><div class="bar" style="height:55px;background:var(--green);opacity:.8;"></div><div class="bar-label">T2</div></div>
-              <div class="bar-wrap"><div class="bar" style="height:34px;background:var(--red);opacity:.8;"></div><div class="bar-label">T2</div></div>
-              <div class="bar-wrap"><div class="bar" style="height:68px;background:var(--green);opacity:.8;"></div><div class="bar-label">T4</div></div>
-              <div class="bar-wrap"><div class="bar" style="height:40px;background:var(--red);opacity:.8;"></div><div class="bar-label">T4</div></div>
-              <div class="bar-wrap"><div class="bar" style="height:72px;background:var(--green);opacity:.8;"></div><div class="bar-label">T5</div></div>
-              <div class="bar-wrap"><div class="bar" style="height:43px;background:var(--red);opacity:.8;"></div><div class="bar-label">T5</div></div>
-              <div class="bar-wrap"><div class="bar" style="height:78px;background:var(--green);"></div><div class="bar-label">T7</div></div>
-              <div class="bar-wrap"><div class="bar" style="height:50px;background:var(--red);"></div><div class="bar-label">T7</div></div>
+            <div class="chart-bars" id="db-chart-6m">
+              <div class="bar-wrap"><div class="bar" style="height:2px;background:var(--green);"></div><div class="bar-label">—</div></div>
             </div>
           </div>
         </div>
         <div class="card">
-          <div class="card-header"><div class="card-title">🏨 Nguồn Thu Tháng 7</div></div>
+          <div class="card-header"><div class="card-title" id="db-nguon-thu-title">🏨 Nguồn Thu Tháng Này</div></div>
           <div class="card-body">
             <div id="db-nguon-thu" style="color:var(--text-muted);font-size:13px;padding:12px 0;">Chưa có dữ liệu — nhập Thu Chi để xem thống kê</div>
           </div>
@@ -8218,6 +8211,25 @@ function updateDashboardKPI(){
   el('db-chi-change',`${chiThang.length} giao dịch T${m}/${y}`);
   el('db-ln-change',loiNhuan>=0?`▲ Có lãi`:`▼ Bị lỗ`);
   el('db-tl-change',`Tháng ${m}/${y}`);
+  el('db-nguon-thu-title',`🏨 Nguồn Thu Tháng ${m}`);   // tiêu đề theo tháng thực tế (trước đây cứng "Tháng 7")
+
+  // ----- Biểu đồ Thu/Chi 6 tháng gần nhất (dữ liệu thật, nhãn tháng đúng) -----
+  const chart=document.getElementById('db-chart-6m');
+  if(chart){
+    const inYM=(r,mm,yy)=>{const p=(r.ngay||'').split('/');return parseInt(p[1])===mm&&parseInt(p[2])===yy;};
+    const mons=[]; for(let i=5;i>=0;i--){ const d=new Date(y,(m-1)-i,1); mons.push({mm:d.getMonth()+1, yy:d.getFullYear()}); }
+    const rows=mons.map(o=>({
+      mm:o.mm,
+      thu:THU_DATA.filter(r=>inYM(r,o.mm,o.yy)).reduce((s,r)=>s+thuVnd(r),0),
+      chi:CHI_DATA.filter(r=>inYM(r,o.mm,o.yy)).reduce((s,r)=>s+chiAmt(r),0),
+    }));
+    const maxV=Math.max(1,...rows.flatMap(r=>[r.thu,r.chi])); const H=80;
+    chart.innerHTML=rows.map(r=>{
+      const hThu=Math.max(2,Math.round(r.thu/maxV*H)), hChi=Math.max(2,Math.round(r.chi/maxV*H));
+      return `<div class="bar-wrap"><div class="bar" style="height:${hThu}px;background:var(--green);" title="T${r.mm}: Thu ${fmt(r.thu)}"></div><div class="bar-label">T${r.mm}</div></div>`
+           + `<div class="bar-wrap"><div class="bar" style="height:${hChi}px;background:var(--red);" title="T${r.mm}: Chi ${fmt(r.chi)}"></div><div class="bar-label">T${r.mm}</div></div>`;
+    }).join('');
+  }
 
   // ----- Nguồn Thu Tháng: gom theo danh mục -----
   const nguon=document.getElementById('db-nguon-thu');
@@ -9603,8 +9615,19 @@ function showPage(id,el){
 function renderDashDx() {
   // Dashboard: truong-bp chỉ thấy của bộ phận mình; các vai trò khác thấy tất cả chờ duyệt
   const role=currentUser?.role, myBp=currentUser?.bophan;
-  let items = DX_DATA.filter(d=>d.status.startsWith('cho-duyet'));
+  let items = DX_DATA.filter(d=>d.status && d.status.startsWith('cho-duyet'));   // guard: bỏ phiếu cũ thiếu status (khỏi lỗi văng cả bảng)
   if(role==='truong-bp' && myBp) items = items.filter(d=>d.bophan===myBp);
+  // Đưa các phiếu ĐANG CHỜ ĐÚNG CẤP CỦA MÌNH duyệt lên đầu (Giám đốc → 'chờ GĐ duyệt' trước;
+  // Kế toán → 'chờ KT duyệt' trước), rồi mới tới việc mình duyệt được, cuối cùng xếp ngày mới nhất.
+  // Tránh phiếu chờ GĐ (thường là phiếu cũ) bị các phiếu mới cấp thấp đẩy khỏi danh sách.
+  const _myLvl={giamdoc:'gd',ketoan:'ketoan','truong-bp':'truong-bp'}[role]||null;
+  items.sort((a,b)=>{
+    const ap=(dxApproveLevel(a.status)===_myLvl)?0:1, bp=(dxApproveLevel(b.status)===_myLvl)?0:1;
+    if(ap!==bp) return ap-bp;
+    const aa=canApproveDx(a)?0:1, bb=canApproveDx(b)?0:1;
+    if(aa!==bb) return aa-bb;
+    return (vnToIso(b.ngay)||'').localeCompare(vnToIso(a.ngay)||'');
+  });
   const tbody=document.getElementById('dash-dx-tbody');
   if(!tbody) return;
   if(!items.length){
@@ -9612,7 +9635,7 @@ function renderDashDx() {
     return;
   }
   const BP_LABEL={'buong-phong':'Buồng phòng','nha-hang':'Nhà hàng','bep':'Bếp','le-tan':'Lễ tân','ky-thuat':'Kỹ thuật','sale':'Sale','hr':'HR','van-phong':'VP'};
-  tbody.innerHTML=items.slice(0,5).map(d=>{
+  tbody.innerHTML=items.slice(0,8).map(d=>{
     return `<tr>
     <td style="font-weight:700;color:var(--navy);">${esc(d.code||d.id)||'—'}</td>
     <td><span class="badge badge-navy" style="font-size:10px;">${esc(BP_LABEL[d.bophan]||d.bophan_label||d.bophan||'')}</span></td>
