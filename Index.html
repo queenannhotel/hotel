@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.20e';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.20f';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -1483,12 +1483,14 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
       <div id="ns-panel-bhxh" style="display:none;">
         <div class="section-header" style="margin-bottom:12px;">
           <div style="display:flex;gap:8px;align-items:center;">
-            <input type="month" id="ns-bhxh-thang" value="2026-07" onchange="renderNsBhxh()" style="font-size:12px;padding:6px 10px;">
+            <input type="month" id="ns-bhxh-thang" value="2026-07" onchange="bhxhOnMonthChange()" style="font-size:12px;padding:6px 10px;">
+            <button class="btn btn-ghost btn-sm" onclick="bhxhCopyFromPrev()" title="Chép danh sách nhân viên từ tháng gần nhất có dữ liệu">📋 Chép từ tháng trước</button>
           </div>
           <button class="btn btn-gold btn-sm" onclick="openNsBhxhModal()">+ Thêm BHXH nhân viên</button>
         </div>
         <div style="background:var(--gold-pale);border:1px solid rgba(201,168,76,.3);border-radius:10px;padding:10px 16px;margin-bottom:14px;font-size:12px;color:var(--yellow);">
-          ℹ️ Tỷ lệ BHXH: Công ty đóng <strong>21.5%</strong> (BHXH 17.5% + BHYT 3% + BHTN 1%) — Nhân viên đóng <strong>10.5%</strong> (BHXH 8% + BHYT 1.5% + BHTN 1%)
+          ℹ️ Tỷ lệ BHXH: Công ty đóng <strong>21.5%</strong> (BHXH 17.5% + BHYT 3% + BHTN 1%) — Nhân viên đóng <strong>10.5%</strong> (BHXH 8% + BHYT 1.5% + BHTN 1%)<br>
+          📋 Danh sách nhân viên <strong>tự chép sang tháng sau</strong> khi bạn mở tháng mới còn trống. Nếu đổi mức đóng / ngưng đóng thì <strong>sửa hoặc xoá ngay trong tháng đó</strong> (không ảnh hưởng tháng trước).
         </div>
         <div class="card">
           <div class="table-wrap wide">
@@ -5416,7 +5418,7 @@ function switchNsTab(tab, el){
     document.getElementById('ns-panel-'+t).style.display = t===tab?'block':'none';
   });
   if(tab==='luong') renderNsLuong();
-  if(tab==='bhxh')  renderNsBhxh();
+  if(tab==='bhxh'){ bhxhEnsureSeed(); renderNsBhxh(); }
   if(tab==='tncn')  renderNsTncn();
 }
 
@@ -5503,6 +5505,49 @@ function calcBhxhPreview(){
   const lc=document.getElementById('nsbh-cty-lbl'); if(lc) lc.textContent = `Công ty đóng (${ctyPct}%)`;
   const ln=document.getElementById('nsbh-nv-lbl'); if(ln) ln.textContent = `Nhân viên đóng (${nvPct}%)`;
   prev.style.display='block';
+}
+
+// ===== BHXH kế thừa tháng: nhân viên tháng trước tự chép sang tháng sau (sửa/ngưng trong từng tháng) =====
+function bhxhPrevMonth(ym){ const p=(ym||'').split('-'); const y=+p[0], m=+p[1]; if(!y||!m) return ''; const d=new Date(y, m-2, 1); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+function bhxhFmtM(ym){ const p=(ym||'').split('-'); return p[1]?`${p[1]}/${p[0]}`:ym; }
+// Chép nhân viên BHXH từ tháng `src` sang tháng `target` (chỉ người CHƯA có ở target). Id ổn định theo gốc → không nhân đôi khi đồng bộ/chép lại.
+function bhxhSeedMonth(target, src){
+  const srcRows = NS_BHXH.filter(r=>r.thang===src);
+  if(!srcRows.length) return 0;
+  const have = new Set(NS_BHXH.filter(r=>r.thang===target).map(r=>String(r.origin||r.id)));
+  let n=0;
+  srcRows.forEach(r=>{
+    const origin=String(r.origin||r.id);
+    if(have.has(origin)) return;
+    NS_BHXH.push({ id: origin+'@'+target, origin, ten:r.ten, bophan:r.bophan, luong:r.luong, ctyFull:!!r.ctyFull, bhytOnly:!!r.bhytOnly, thang:target, carried:true });
+    have.add(origin); n++;
+  });
+  return n;
+}
+// Tự chép khi MỞ 1 tháng còn TRỐNG mà tháng ngay trước đã có dữ liệu (chỉ vai trò được ghi BHXH).
+// Gắn với thao tác đổi tháng/mở tab (không chạy trong renderNsBhxh) để xoá hết 1 tháng không bị "chép lại".
+function bhxhEnsureSeed(){
+  try{ if(typeof canWriteCollection==='function' && !canWriteCollection('bhxh')) return 0; }catch(e){ return 0; }
+  const t=document.getElementById('ns-bhxh-thang')?.value||'';
+  if(!t) return 0;
+  if(NS_BHXH.some(r=>r.thang===t)) return 0;            // tháng đã có dữ liệu → không tự tạo
+  const prev=bhxhPrevMonth(t);
+  if(!NS_BHXH.some(r=>r.thang===prev)) return 0;        // tháng ngay trước trống → không tự tạo (dùng nút chép tay)
+  const n=bhxhSeedMonth(t, prev);
+  if(n){ try{syncNow();}catch(e){} try{showToast(`📋 Đã chép ${n} nhân viên BHXH từ tháng ${bhxhFmtM(prev)} sang ${bhxhFmtM(t)} — sửa/xoá nếu có thay đổi mức đóng hoặc ngưng đóng`,4500,'info');}catch(e){} }
+  return n;
+}
+function bhxhOnMonthChange(){ bhxhEnsureSeed(); renderNsBhxh(); }
+// Nút chép tay: lấy từ tháng GẦN NHẤT trước đó có dữ liệu (dùng khi tháng ngay trước trống, hoặc muốn kéo lại người còn thiếu).
+function bhxhCopyFromPrev(){
+  try{ if(typeof canWriteCollection==='function' && !canWriteCollection('bhxh')){ showToast('Bạn không có quyền ghi BHXH',2500,'error'); return; } }catch(e){}
+  const t=document.getElementById('ns-bhxh-thang')?.value||'';
+  if(!t){ showToast('Chọn tháng đã',2500,'error'); return; }
+  let src=''; NS_BHXH.forEach(r=>{ if(r.thang && r.thang<t && (!src||r.thang>src)) src=r.thang; });
+  if(!src){ showToast('Chưa có tháng trước nào có dữ liệu để chép',3000,'info'); return; }
+  const n=bhxhSeedMonth(t, src);
+  if(n){ renderNsBhxh(); try{syncNow();}catch(e){} showToast(`📋 Đã chép ${n} nhân viên từ tháng ${bhxhFmtM(src)}`,3500,'success'); }
+  else showToast(`Tháng này đã có đủ nhân viên từ tháng ${bhxhFmtM(src)}`,3000,'info');
 }
 
 function renderNsBhxh(){
