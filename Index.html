@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.20h';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.20i';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -9860,7 +9860,8 @@ function confirmTrApprove(id){ const d=TR_DATA.find(x=>x.id===id); if(!d||!canAp
 // ---- Thực hiện transfer (kế toán chọn kho nguồn, đích = kho bộ phận yêu cầu) → cập nhật kho ----
 let fulfillingTrId=null, trFulfillMode='new';   // 'new' | 'retry' (chuyển lại món chưa vào kho) | 'view'
 // Món "chưa vào kho": phiếu đã hoàn thành nhưng dòng đó có kho nguồn trùng kho đích (đã chuyển 0) hoặc đánh dấu moved=false.
-function trItemUnmoved(d,i){ const f=(d.fulfill||[])[i]; return !!(f && (f.moved===false || f.src===f.dest)); }
+// Món "chưa chắc đã vào kho": chưa có dấu moved:true (phiếu cũ hoàn thành trước bản vá, hoặc nguồn≡đích → chuyển 0).
+function trItemUnmoved(d,i){ const f=(d.fulfill||[])[i]; return !(f && f.moved===true); }
 function trHasUnmoved(d){ return d.status==='hoan-thanh' && (d.items||[]).some((it,i)=>trItemUnmoved(d,i)); }
 function openTrFulfill(id){
   const d=TR_DATA.find(x=>x.id===id); if(!d) return;
@@ -9872,7 +9873,7 @@ function openTrFulfill(id){
   const retry=done && trHasUnmoved(d);
   trFulfillMode = !done ? 'new' : (retry ? 'retry' : 'view');
   document.getElementById('tr-ff-title').textContent = retry?'♻️ Chuyển lại món chưa vào kho' : (done?'📄 Chi Tiết Transfer':'✅ Thực Hiện Transfer');
-  document.getElementById('tr-ff-info').innerHTML=`Yêu cầu <strong>${esc(d.code||d.id)}</strong> · Bộ phận: <strong>${esc(BP_LABELS[d.bophan]||d.bophan)}</strong> — ${retry?'các món <strong>chưa vào kho</strong> (kho nguồn trùng kho nhận) được mở để <strong>chọn lại kho nguồn</strong> và chuyển lại':'chọn kho chuyển về cho từng món'}`;
+  document.getElementById('tr-ff-info').innerHTML=`Yêu cầu <strong>${esc(d.code||d.id)}</strong> · Bộ phận: <strong>${esc(BP_LABELS[d.bophan]||d.bophan)}</strong> — ${retry?'các món <strong>chưa xác nhận vào kho</strong> được mở để chọn <strong>kho nguồn</strong> (khác kho nhận) rồi chuyển lại. <span style="color:var(--red);">⚠️ Chỉ chuyển lại món THỰC SỰ chưa có trong kho để tránh cộng trùng.</span>':'chọn kho chuyển về cho từng món'}`;
   const khoKeys=Object.keys(KHO_BP_LABELS);
   const selStyle='font-size:12px;padding:5px 8px;border:1.5px solid var(--border);border-radius:7px;';
   document.getElementById('tr-ff-body').innerHTML=(d.items||[]).map((it,i)=>{
@@ -9952,8 +9953,8 @@ function renderTrList(){
   const fB=document.getElementById('tr-f-bp')?.value||'';
   // Hiện: (1) mọi yêu cầu HÔM NAY, và (2) yêu cầu CHƯA XỬ LÝ của các ngày trước (chờ duyệt / đã duyệt nhưng chưa
   // thực hiện) — để không bị "rơi" khỏi danh sách khi qua ngày mới, kế toán vẫn duyệt/thực hiện được → kho mới nhảy số.
-  // "Cần xử lý" = chờ duyệt / đã duyệt (chưa thực hiện) HOẶC đã hoàn thành nhưng còn món CHƯA vào kho (nguồn trùng đích).
-  const canXuLy = d => d.status==='cho-duyet' || d.status==='da-duyet' || trHasUnmoved(d);
+  // "Cần xử lý" = chờ duyệt / đã duyệt (chưa thực hiện). (Phiếu đã hoàn thành nhưng chưa vào kho → cứu ở tab Lịch sử.)
+  const canXuLy = d => d.status==='cho-duyet' || d.status==='da-duyet';
   const rows=TR_DATA.filter(d=> trVisibleFor(d) && (d.ngay===today || canXuLy(d)) && (!fS||d.status===fS) && (!fB||d.bophan===fB))
     .sort((a,b)=>{ const c=(vnToIso(b.ngay)||'').localeCompare(vnToIso(a.ngay)||''); return c||(b.code||'').localeCompare(a.code||''); });   // ngày mới trước, rồi mã mới trước
   const rc=document.getElementById('tr-result-count'); if(rc) rc.textContent=rows.length+' yêu cầu';
@@ -9992,24 +9993,30 @@ function renderTrHistory(){
     return true;
   }).slice().sort((a,b)=>{ const pa=vnToIso(a.ngay), pb=vnToIso(b.ngay); return pb<pa?-1:pb>pa?1:0; });
   const rc=document.getElementById('tr-hist-count'); if(rc) rc.textContent=rows.length+' yêu cầu';
-  // Cột "Hành động" — chỉ Giám đốc thấy: xem chi tiết, sửa, xoá.
+  // Cột "Hành động": Kế toán/Giám đốc dùng để "♻️ Chuyển lại" phiếu chưa vào kho; sửa/xoá chỉ Giám đốc.
   const isGD=currentUser?.role==='giamdoc';
-  const actTh=document.getElementById('tr-hist-act-th'); if(actTh) actTh.style.display=isGD?'':'none';
-  const colspan=isGD?7:6;
-  const actCell=d=>`<td><div style="display:flex;gap:4px;flex-wrap:wrap;">`
-    +`<button class="btn btn-ghost btn-sm" onclick="openTrFulfill('${d.id}')" title="Xem chi tiết">📄</button>`
-    +`<button class="btn btn-ghost btn-sm" onclick="editTr('${d.id}')" title="Sửa">✏</button>`
-    +`<button class="btn btn-danger btn-sm" onclick="deleteTr('${d.id}')" title="Xoá">🗑</button>`
-    +`</div></td>`;
-  tb.innerHTML=rows.length? rows.map(d=>`<tr>
+  const isKtGd=isGD || currentUser?.role==='ketoan';
+  const actTh=document.getElementById('tr-hist-act-th'); if(actTh) actTh.style.display=isKtGd?'':'none';
+  const colspan=isKtGd?7:6;
+  const actCell=d=>{
+    const b=[];
+    if(isKtGd && d.status==='hoan-thanh' && trHasUnmoved(d)) b.push(`<button class="btn btn-gold btn-sm" onclick="openTrFulfill('${d.id}')" title="Có món chưa vào kho — chuyển lại">♻️ Chuyển lại</button>`);
+    else b.push(`<button class="btn btn-ghost btn-sm" onclick="openTrFulfill('${d.id}')" title="Xem chi tiết">📄</button>`);
+    if(isGD){ b.push(`<button class="btn btn-ghost btn-sm" onclick="editTr('${d.id}')" title="Sửa">✏</button>`); b.push(`<button class="btn btn-danger btn-sm" onclick="deleteTr('${d.id}')" title="Xoá">🗑</button>`); }
+    return `<td><div style="display:flex;gap:4px;flex-wrap:wrap;">${b.join('')}</div></td>`;
+  };
+  tb.innerHTML=rows.length? rows.map(d=>{
+    const canhBao = d.status==='hoan-thanh' && trHasUnmoved(d);
+    return `<tr${canhBao?' style="background:#FFF7ED;"':''}>
       <td style="font-size:12px;font-weight:600;color:var(--navy);">${esc(d.ngay)||'—'}</td>
       <td style="font-weight:700;">${esc(d.code||d.id)}</td>
       <td><span class="badge badge-navy" style="font-size:10px;">${esc(BP_LABELS[d.bophan]||d.bophan)||'—'}</span></td>
       <td>${esc(d.nguoi)||'—'}</td>
       <td style="min-width:230px;">${trItemsHtml(d)}</td>
-      <td>${trStatusBadge(d.status)}</td>
-      ${isGD?actCell(d):''}
-    </tr>`).join('') : `<tr><td colspan="${colspan}" style="text-align:center;padding:24px;color:var(--text-muted);">Không có yêu cầu nào phù hợp</td></tr>`;
+      <td>${trStatusBadge(d.status)}${canhBao?` <span class="badge badge-red" style="font-size:9px;white-space:nowrap;">⚠️ chưa vào kho</span>`:''}</td>
+      ${isKtGd?actCell(d):''}
+    </tr>`;
+  }).join('') : `<tr><td colspan="${colspan}" style="text-align:center;padding:24px;color:var(--text-muted);">Không có yêu cầu nào phù hợp</td></tr>`;
 }
 
 function calcChiModal(){
