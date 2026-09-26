@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.20f';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.20g';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -9930,8 +9930,11 @@ function renderTrList(){
   const today=new Date().toLocaleDateString('vi-VN');
   const fS=document.getElementById('tr-f-status')?.value||'';
   const fB=document.getElementById('tr-f-bp')?.value||'';
-  const rows=TR_DATA.filter(d=> d.ngay===today && trVisibleFor(d) && (!fS||d.status===fS) && (!fB||d.bophan===fB))
-    .sort((a,b)=>(b.code||'').localeCompare(a.code||''));   // cùng ngày → mã mới trước
+  // Hiện: (1) mọi yêu cầu HÔM NAY, và (2) yêu cầu CHƯA XỬ LÝ của các ngày trước (chờ duyệt / đã duyệt nhưng chưa
+  // thực hiện) — để không bị "rơi" khỏi danh sách khi qua ngày mới, kế toán vẫn duyệt/thực hiện được → kho mới nhảy số.
+  const chuaXong = s => s==='cho-duyet' || s==='da-duyet';
+  const rows=TR_DATA.filter(d=> trVisibleFor(d) && (d.ngay===today || chuaXong(d.status)) && (!fS||d.status===fS) && (!fB||d.bophan===fB))
+    .sort((a,b)=>{ const c=(vnToIso(b.ngay)||'').localeCompare(vnToIso(a.ngay)||''); return c||(b.code||'').localeCompare(a.code||''); });   // ngày mới trước, rồi mã mới trước
   const rc=document.getElementById('tr-result-count'); if(rc) rc.textContent=rows.length+' yêu cầu';
   tb.innerHTML=rows.length? rows.map(d=>{
     const btns=[];
@@ -9941,8 +9944,9 @@ function renderTrList(){
     if(isKtGd && d.status==='hoan-thanh') btns.push(`<button class="btn btn-ghost btn-sm" onclick="openTrFulfill('${d.id}')" title="Xem chi tiết">📄</button>`);
     if(canEditTr(d)) btns.push(`<button class="btn btn-ghost btn-sm" onclick="editTr('${d.id}')" title="Sửa">✏</button>`);
     if(canDeleteTr(d)) btns.push(`<button class="btn btn-danger btn-sm" onclick="deleteTr('${d.id}')" title="Xoá">🗑</button>`);
-    return `<tr>
-      <td style="font-weight:700;color:var(--navy);">${esc(d.code||d.id)}</td>
+    const tonDong = d.ngay!==today && chuaXong(d.status);
+    return `<tr${tonDong?' style="background:#FFF7ED;"':''}>
+      <td style="font-weight:700;color:var(--navy);">${esc(d.code||d.id)}${tonDong?` <span class="badge badge-yellow" style="font-size:9px;white-space:nowrap;">⏳ tồn đọng</span>`:''}</td>
       <td><span class="badge badge-navy" style="font-size:10px;">${esc(BP_LABELS[d.bophan]||d.bophan)||'—'}</span></td>
       <td>${esc(d.nguoi)||'—'}</td>
       <td style="min-width:230px;">${trItemsHtml(d)}</td>
@@ -9950,7 +9954,7 @@ function renderTrList(){
       <td>${trStatusBadge(d.status)}</td>
       <td><div style="display:flex;gap:4px;flex-wrap:wrap;">${btns.join('')}</div></td>
     </tr>`;
-  }).join('') : `<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted);">Hôm nay chưa có yêu cầu transfer nào</td></tr>`;
+  }).join('') : `<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted);">Chưa có yêu cầu transfer nào cần xử lý</td></tr>`;
 }
 function renderTrHistory(){
   const tb=document.getElementById('tr-hist-body'); if(!tb) return;
