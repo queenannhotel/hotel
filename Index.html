@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.20i';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.20j';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -9699,9 +9699,9 @@ function khoBalance(khoCode,ten,dvt){
 }
 function trBalance(dept,ten,dvt){ return khoBalance(trDeptKho(dept),ten,dvt); }
 // Chuyển 1 mặt hàng giữa 2 kho: trừ kho nguồn (transfer-out), cộng kho đích (transfer-in). Khớp theo tên+ĐVT.
-function khoTransferItem(ten,dvt,sl,srcKho,destKho,note,nguoi){
+function khoTransferItem(ten,dvt,sl,srcKho,destKho,note,nguoi,ngayIn){
   sl=parseFloat(sl)||0; if(!ten||sl<=0||!srcKho||!destKho||srcKho===destKho) return false;   // trả false = KHÔNG chuyển được (kho không nhảy số)
-  const ngay=new Date().toLocaleDateString('vi-VN');
+  const ngay=ngayIn||new Date().toLocaleDateString('vi-VN');   // ghi vào kho theo ngày phiếu (khi chuyển lại phiếu cũ)
   const match=x=>khoNorm(x.ten)===khoNorm(ten) && khoDvt(x.dvt)===khoDvt(dvt);
   // Kho nguồn: chọn dòng có số dư cao nhất; chưa có thì tạo (tồn 0 → số dư âm để dễ thấy cần bù)
   let src=KHO_DATA.filter(x=>x.bophan===srcKho && match(x)).sort((a,b)=>calcKyStats(b).con-calcKyStats(a).con)[0];
@@ -9870,42 +9870,46 @@ function openTrFulfill(id){
   const defDest=trDeptKho(d.bophan)||'kt';   // gợi ý kho về theo bộ phận, fallback Kho KT (đổi tay được)
   fulfillingTrId=id;
   const done=d.status==='hoan-thanh';
-  const retry=done && trHasUnmoved(d);
-  trFulfillMode = !done ? 'new' : (retry ? 'retry' : 'view');
-  document.getElementById('tr-ff-title').textContent = retry?'♻️ Chuyển lại món chưa vào kho' : (done?'📄 Chi Tiết Transfer':'✅ Thực Hiện Transfer');
-  document.getElementById('tr-ff-info').innerHTML=`Yêu cầu <strong>${esc(d.code||d.id)}</strong> · Bộ phận: <strong>${esc(BP_LABELS[d.bophan]||d.bophan)}</strong> — ${retry?'các món <strong>chưa xác nhận vào kho</strong> được mở để chọn <strong>kho nguồn</strong> (khác kho nhận) rồi chuyển lại. <span style="color:var(--red);">⚠️ Chỉ chuyển lại món THỰC SỰ chưa có trong kho để tránh cộng trùng.</span>':'chọn kho chuyển về cho từng món'}`;
+  // Phiếu đã hoàn thành → chế độ "redo": mỗi món có ô tích để chọn chuyển lại (mặc định tích món chưa chắc vào kho).
+  trFulfillMode = done ? 'redo' : 'new';
+  document.getElementById('tr-ff-title').textContent = done ? '♻️ Chuyển lại vào kho' : '✅ Thực Hiện Transfer';
+  document.getElementById('tr-ff-info').innerHTML=`Yêu cầu <strong>${esc(d.code||d.id)}</strong> · Bộ phận: <strong>${esc(BP_LABELS[d.bophan]||d.bophan)}</strong> · Ngày phiếu: <strong>${esc(d.ngay||'')}</strong> — ${done?'tích chọn món cần <strong>chuyển lại</strong>, chọn <strong>kho nguồn</strong> (khác kho nhận). Hàng sẽ ghi vào kho <strong>theo ngày phiếu</strong>. <span style="color:var(--red);">⚠️ Chỉ tích món THỰC SỰ chưa có trong kho để tránh cộng trùng.</span>':'chọn kho chuyển về cho từng món'}`;
   const khoKeys=Object.keys(KHO_BP_LABELS);
   const selStyle='font-size:12px;padding:5px 8px;border:1.5px solid var(--border);border-radius:7px;';
   document.getElementById('tr-ff-body').innerHTML=(d.items||[]).map((it,i)=>{
     const f=(d.fulfill||[])[i];
-    const rowUnmoved = done && trItemUnmoved(d,i);
-    const lock = (trFulfillMode==='view') || (trFulfillMode==='retry' && !rowUnmoved);   // retry: chỉ mở dòng chưa vào kho
+    const unmoved = trItemUnmoved(d,i);
     let src=f?f.src:'kt', dest=f?f.dest:defDest;
-    if(trFulfillMode==='retry' && rowUnmoved){ dest=defDest; src=(defDest!=='kt')?'kt':(khoKeys.find(k=>k!==defDest)||'kt'); }   // gợi ý nguồn KHÁC đích
-    const badge = rowUnmoved?` <span class="badge badge-red" style="font-size:9px;">chưa vào kho</span>`:(done?` <span class="badge badge-green" style="font-size:9px;">đã chuyển</span>`:'');
+    if(done){ dest=defDest; src=(defDest!=='kt')?'kt':(khoKeys.find(k=>k!==defDest)||'kt'); }   // gợi ý nguồn KHÁC đích
+    const chk = done ? `<label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" class="tr-ff-do" ${unmoved?'checked':''}> ` : '';
+    const chkEnd = done ? `</label>` : '';
+    const badge = done ? (unmoved?` <span class="badge badge-red" style="font-size:9px;">chưa vào kho</span>`:` <span class="badge badge-green" style="font-size:9px;">đã chuyển</span>`) : '';
     return `<tr>
-      <td style="font-weight:500;">${esc(it.ten)}${badge}</td>
+      <td style="font-weight:500;">${chk}${esc(it.ten)}${badge}${chkEnd}</td>
       <td style="text-align:center;">${esc(it.sl)} ${esc(it.dvt||'')}</td>
-      <td><select class="tr-ff-src" ${lock?'disabled':''} style="${selStyle}">${khoKeys.map(k=>`<option value="${k}" ${k===src?'selected':''}>${KHO_BP_LABELS[k]}</option>`).join('')}</select></td>
-      <td><select class="tr-ff-dest" ${lock?'disabled':''} style="${selStyle}">${khoKeys.map(k=>`<option value="${k}" ${k===dest?'selected':''}>${KHO_BP_LABELS[k]}</option>`).join('')}</select></td>
+      <td><select class="tr-ff-src" style="${selStyle}">${khoKeys.map(k=>`<option value="${k}" ${k===src?'selected':''}>${KHO_BP_LABELS[k]}</option>`).join('')}</select></td>
+      <td><select class="tr-ff-dest" style="${selStyle}">${khoKeys.map(k=>`<option value="${k}" ${k===dest?'selected':''}>${KHO_BP_LABELS[k]}</option>`).join('')}</select></td>
     </tr>`;
   }).join('');
-  const btn=document.getElementById('tr-ff-done-btn'); if(btn){ btn.style.display=(trFulfillMode==='view')?'none':''; try{ btn.textContent=retry?'♻️ Chuyển lại':'✅ Hoàn thành'; }catch(e){} }
+  const btn=document.getElementById('tr-ff-done-btn'); if(btn){ btn.style.display=''; try{ btn.textContent=done?'♻️ Chuyển lại':'✅ Hoàn thành'; }catch(e){} }
   openModal('modal-tr-fulfill');
 }
 function confirmTrFulfill(){
   const d=TR_DATA.find(x=>x.id===fulfillingTrId); if(!d) return;
-  if(d.status==='hoan-thanh' && trFulfillMode!=='retry'){ closeModal('modal-tr-fulfill'); return; }   // xem chi tiết → chỉ đóng
+  const redo = trFulfillMode==='redo';
   const defDest=trDeptKho(d.bophan)||'kt';
   const srcSels=[...document.querySelectorAll('#tr-ff-body .tr-ff-src')];
   const destSels=[...document.querySelectorAll('#tr-ff-body .tr-ff-dest')];
+  const doChks=[...document.querySelectorAll('#tr-ff-body .tr-ff-do')];   // ô tích chọn (chỉ ở chế độ redo)
   const items=d.items||[];
-  const target = i => trFulfillMode==='retry' ? trItemUnmoved(d,i) : true;   // retry: chỉ xử lý món chưa vào kho
+  const target = i => redo ? !!(doChks[i]?.checked) : true;   // redo: chỉ xử lý món được tích
+  if(redo && !items.some((it,i)=>target(i))){ showToast('Chưa tích món nào để chuyển lại.',3500,'info'); return; }
   // Chặn "hoàn thành ảo": kho nguồn TRÙNG kho nhận thì chuyển 0 → kho không nhảy số. Bắt chọn lại.
   const trung=[];
   items.forEach((it,i)=>{ if(!target(i)) return; const s=srcSels[i]?.value||'kt', de=destSels[i]?.value||defDest; if(s===de) trung.push(it.ten); });
   if(trung.length){ showToast('⚠️ Kho nguồn TRÙNG kho nhận ở: '+trung.join(', ')+'. Chọn kho nguồn KHÁC kho nhận rồi thử lại.',6500,'error'); return; }
   const nguoi=currentUser?.fullname||'Kế toán';
+  const ngayPhieu = d.ngay || new Date().toLocaleDateString('vi-VN');   // ghi kho theo NGÀY PHIẾU
   const fulfill=(d.fulfill||[]).slice(); let moved=0, processed=0;
   items.forEach((it,i)=>{
     if(!target(i)) return;
@@ -9913,7 +9917,7 @@ function confirmTrFulfill(){
     const srcKho=srcSels[i]?.value||'kt';
     const destKho=destSels[i]?.value||defDest;
     const note=`Transfer YC ${d.code||d.id}: ${KHO_BP_LABELS[srcKho]} → ${KHO_BP_LABELS[destKho]}`;
-    const ok=khoTransferItem(it.ten,it.dvt,it.sl,srcKho,destKho,note,nguoi);
+    const ok=khoTransferItem(it.ten,it.dvt,it.sl,srcKho,destKho,note,nguoi,ngayPhieu);
     if(ok) moved++;
     fulfill[i]={src:srcKho,dest:destKho,sl:it.sl,moved:!!ok};
   });
@@ -9922,7 +9926,7 @@ function confirmTrFulfill(){
   closeModal('modal-tr-fulfill');
   renderTrTab(); try{ renderKhoTab(); }catch(e){}
   syncNow();
-  showToast(moved<processed ? `⚠️ Đã chuyển ${moved}/${processed} món — kiểm tra lại các món còn lại` : '✅ Đã cập nhật kho ('+moved+' món)', moved<processed?6000:2500, moved<processed?'error':'success');
+  showToast(moved<processed ? `⚠️ Đã chuyển ${moved}/${processed} món — kiểm tra lại các món còn lại` : '✅ Đã cập nhật kho ('+moved+' món, ngày '+ngayPhieu+')', moved<processed?6000:3000, moved<processed?'error':'success');
 }
 function rejectTr(id){ const d=TR_DATA.find(x=>x.id===id); if(!d||!canApproveTr(d)) return; d.status='tu-choi'; renderTrTab(); syncNow(); showToast('Đã từ chối yêu cầu',2000,'info'); }
 function deleteTr(id){ const d=TR_DATA.find(x=>x.id===id); if(!d) return; if(!canDeleteTr(d)){ showToast('Bạn không có quyền xoá',2500,'error'); return; } if(!confirm(`Xoá yêu cầu transfer ${d.code||d.id}?`)) return; TR_DATA=TR_DATA.filter(x=>x.id!==id); renderTrTab(); syncNow(); }
@@ -9964,8 +9968,7 @@ function renderTrList(){
     const isKtGd=currentUser?.role==='ketoan'||currentUser?.role==='giamdoc';
     if(isKtGd && d.status==='da-duyet') btns.push(`<button class="btn btn-gold btn-sm" onclick="openTrFulfill('${d.id}')" title="Thực hiện transfer">▶ Thực hiện</button>`);
     const unmoved = trHasUnmoved(d);
-    if(isKtGd && d.status==='hoan-thanh' && unmoved) btns.push(`<button class="btn btn-gold btn-sm" onclick="openTrFulfill('${d.id}')" title="Có món chưa vào kho — chuyển lại">♻️ Chuyển lại</button>`);
-    if(isKtGd && d.status==='hoan-thanh' && !unmoved) btns.push(`<button class="btn btn-ghost btn-sm" onclick="openTrFulfill('${d.id}')" title="Xem chi tiết">📄</button>`);
+    if(isKtGd && d.status==='hoan-thanh') btns.push(`<button class="btn btn-gold btn-sm" onclick="openTrFulfill('${d.id}')" title="Chuyển lại vào kho / xem chi tiết">♻️ Chuyển lại</button>`);
     if(canEditTr(d)) btns.push(`<button class="btn btn-ghost btn-sm" onclick="editTr('${d.id}')" title="Sửa">✏</button>`);
     if(canDeleteTr(d)) btns.push(`<button class="btn btn-danger btn-sm" onclick="deleteTr('${d.id}')" title="Xoá">🗑</button>`);
     const tonDong = d.ngay!==today && (d.status==='cho-duyet'||d.status==='da-duyet');
@@ -10000,7 +10003,7 @@ function renderTrHistory(){
   const colspan=isKtGd?7:6;
   const actCell=d=>{
     const b=[];
-    if(isKtGd && d.status==='hoan-thanh' && trHasUnmoved(d)) b.push(`<button class="btn btn-gold btn-sm" onclick="openTrFulfill('${d.id}')" title="Có món chưa vào kho — chuyển lại">♻️ Chuyển lại</button>`);
+    if(isKtGd && d.status==='hoan-thanh') b.push(`<button class="btn btn-gold btn-sm" onclick="openTrFulfill('${d.id}')" title="Chuyển lại vào kho / xem chi tiết">♻️ Chuyển lại</button>`);
     else b.push(`<button class="btn btn-ghost btn-sm" onclick="openTrFulfill('${d.id}')" title="Xem chi tiết">📄</button>`);
     if(isGD){ b.push(`<button class="btn btn-ghost btn-sm" onclick="editTr('${d.id}')" title="Sửa">✏</button>`); b.push(`<button class="btn btn-danger btn-sm" onclick="deleteTr('${d.id}')" title="Xoá">🗑</button>`); }
     return `<td><div style="display:flex;gap:4px;flex-wrap:wrap;">${b.join('')}</div></td>`;
