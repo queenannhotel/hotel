@@ -6,7 +6,7 @@
 --
 -- ⚠️ QUAN TRỌNG: TEST theo TỪNG vai trò sau khi chạy (xem phần cuối file).
 --    Vai trò lấy từ JWT app_metadata.role (đặt tại Authentication -> Users -> user -> App metadata:
---    {"role":"giamdoc"} | "ketoan" | "hr" | "truong-bp" | "quanly"). Thiếu role => bị chặn ghi (đúng ý).
+--    {"role":"giamdoc"} | "ketoan" | "hr" | "truong-bp" | "quanly" | "kythuat"). Thiếu role => bị chặn ghi (đúng ý).
 -- =====================================================================
 
 -- ---------- Helpers: đọc vai trò & email từ JWT ----------
@@ -61,7 +61,9 @@ drop policy if exists records_select on public.records;
 drop policy if exists records_insert on public.records;
 drop policy if exists records_update on public.records;
 drop policy if exists records_delete on public.records;
-create policy records_select on public.records for select to authenticated using (true);
+-- Vai trò 'kythuat' (chỉ dùng web Tình trạng phòng) chỉ đọc được dữ liệu của web phòng.
+create policy records_select on public.records for select to authenticated
+  using (coalesce(public.qah_role(),'') <> 'kythuat' or collection in ('phReq','phDevices'));
 create policy records_insert on public.records for insert to authenticated with check (public.qah_can_write(collection));
 create policy records_update on public.records for update to authenticated using (public.qah_can_write(collection)) with check (public.qah_can_write(collection));
 create policy records_delete on public.records for delete to authenticated using (public.qah_can_write(collection));
