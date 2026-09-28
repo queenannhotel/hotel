@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.20j';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.20k';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -1194,6 +1194,7 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
             <select id="qtm-kt-loai" onchange="renderQuyKt()" style="font-size:12px;padding:6px 10px;"><option value="">Tất cả</option><option value="nop">Nộp tiền</option><option value="ung">Ứng tiền</option></select>
             <button class="btn btn-gold btn-sm" onclick="openQuyTx('nop')">⬆ Nộp tiền</button>
             <button class="btn btn-ghost btn-sm" onclick="openQuyUng()">📝 Yêu cầu ứng tiền</button>
+            <button id="qtm-kt-recalc" class="btn btn-ghost btn-sm" onclick="quyKtRecalcSoDu()" title="Tính lại số dư từng dòng theo đúng ngày phiếu (chỉ Giám đốc)" style="display:none;">🔄 Tính lại số dư</button>
           </div>
         </div>
         <div class="table-wrap wide"><table><thead><tr><th>Ngày</th><th>Loại</th><th>Số tiền</th><th>Số dư</th><th>Lý do</th><th>Người</th><th>Thao tác</th></tr></thead><tbody id="qtm-kt-body"></tbody></table></div>
@@ -4499,6 +4500,7 @@ function quyKtRunningMap(){
 }
 function renderQuyKt(){
   const setT=(id,v)=>{const e=document.getElementById(id); if(e) e.textContent=v;};
+  { const rc=document.getElementById('qtm-kt-recalc'); if(rc) rc.style.display=currentUser?.role==='giamdoc'?'':'none'; }
   setT('qtm-kt-balance', fmt(quyKtBalance()));
   setT('qtm-kt-cash', fmt(cashActual()));
   setT('qtm-kt-nop', fmt(quySumKind('nop')));
@@ -4520,6 +4522,15 @@ function renderQuyKt(){
     <td style="font-size:12px;">${esc(t.nguoi)||'—'}</td>
     <td><div style="display:flex;gap:3px;">${currentUser?.role==='giamdoc'?`<button class="btn btn-ghost btn-sm" onclick="editQuyTx('${t.id}')" title="Sửa số dư">✏</button>`:''}<button class="btn btn-danger btn-sm" onclick="deleteQuyTx('${t.id}')" title="Xoá">🗑</button></div></td>
   </tr>`).join(''):`<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted);">Chưa có giao dịch</td></tr>`;
+}
+// Giám đốc: tính lại 1 lần số dư CHỐT của mọi dòng nộp/ứng = số dư luỹ kế theo NGÀY (sửa các dòng cũ đang lệch).
+function quyKtRecalcSoDu(){
+  if(currentUser?.role!=='giamdoc'){ showToast('Chỉ Giám đốc dùng được',2500,'error'); return; }
+  if(!confirm('Tính lại số dư của tất cả dòng Nộp/Ứng theo đúng số dư luỹ kế của NGÀY phiếu?\n(Số dư tổng không đổi; các dòng ghi tay trước đây sẽ bị ghi đè — có thể sửa lại bằng ✏.)')) return;
+  const m=quyKtRunningMap(); let n=0;
+  QUY_TX.forEach(t=>{ if(['nop','ung'].includes(t.kind) && m[t.id]!=null){ t.soDuSau=m[t.id]; n++; } });
+  renderQuyTienMat(); syncNow();
+  showToast(`✅ Đã tính lại số dư cho ${n} dòng`,2600,'success');
 }
 function renderQuyTq(){
   const setT=(id,v)=>{const e=document.getElementById(id); if(e) e.textContent=v;};
@@ -4629,10 +4640,10 @@ function saveQuyTx(){
   // Chụp số dư TỔNG của quỹ (đúng con số ô "Số dư Quỹ TM Kế toán") NGAY sau giao dịch → cố định, không tính lại.
   if(editId){ const t=QUY_TX.find(x=>x.id===editId); if(t){ t.ngay=ngay; t.sotien=sotien; t.lydo=lydo;
     const sdRow=document.getElementById('qtx-sodu-row');
-    if(sdRow && sdRow.style.display!=='none'){ const sdv=document.getElementById('qtx-sodu').value; t.soDuSau=(sdv===''?quyKtBalance():(parseFloat(sdv)||0)); }
-    else t.soDuSau=quyKtBalance();
+    if(sdRow && sdRow.style.display!=='none'){ const sdv=document.getElementById('qtx-sodu').value; t.soDuSau=(sdv===''?(quyKtRunningMap()[t.id]):(parseFloat(sdv)||0)); }   // để trống = chụp lại số dư luỹ kế theo NGÀY phiếu
+    else t.soDuSau=quyKtRunningMap()[t.id];
   } }
-  else { const t={id:'CF'+Date.now(), ngay, kind:mode, sotien, lydo, nguoi:currentUser?.fullname||currentUser?.role||''}; QUY_TX.push(t); t.soDuSau=quyKtBalance(); }
+  else { const t={id:'CF'+Date.now(), ngay, kind:mode, sotien, lydo, nguoi:currentUser?.fullname||currentUser?.role||''}; QUY_TX.push(t); t.soDuSau=quyKtRunningMap()[t.id]; }   // chụp số dư theo ngày phiếu (không phải tổng lúc bấm) → hết nhảy
   closeModal('modal-quy-tx');
   renderQuyTienMat(); syncNow();
   showToast('✅ Đã lưu giao dịch quỹ',2200,'success');
@@ -4704,7 +4715,7 @@ function approveQuyUng(id){
   const soDuyet=parseFloat(String(v).replace(/[^\d.-]/g,''))||0;
   if(soDuyet<=0){ showToast('Số tiền không hợp lệ',2200,'error'); return; }
   d.status='duyet'; d.soDuyet=soDuyet;
-  { const t={id:'CF'+Date.now(), ngay:d.ngay, kind:'ung', sotien:soDuyet, lydo:'Ứng theo YC ngày '+d.ngay, ref:d.id, nguoi:currentUser?.fullname||''}; QUY_TX.push(t); t.soDuSau=quyKtBalance(); }
+  { const t={id:'CF'+Date.now(), ngay:d.ngay, kind:'ung', sotien:soDuyet, lydo:'Ứng theo YC ngày '+d.ngay, ref:d.id, nguoi:currentUser?.fullname||''}; QUY_TX.push(t); t.soDuSau=quyKtRunningMap()[t.id]; }
   renderQuyTienMat(); syncNow();
   showToast('✅ Đã duyệt ứng '+fmt(soDuyet),2600,'success');
 }
