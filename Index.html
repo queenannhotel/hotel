@@ -855,7 +855,7 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
     <div class="nav-item" onclick="showPage('quan-ly-tk',this)" data-perm="giamdoc"><span class="icon">👥</span> Quản Lý Tài Khoản</div>
     <div class="nav-item" onclick="showPage('cai-dat',this)" data-perm="giamdoc"><span class="icon">⚙️</span> Cài đặt</div>
     <div class="nav-section">Queen Ann</div>
-    <a class="nav-item" href="Phong.html" style="text-decoration:none;"><span class="icon">🏨</span> Tình trạng phòng ↗</a>
+    <a class="nav-item" id="nav-phong" href="Phong.html" style="text-decoration:none;"><span class="icon">🏨</span> Tình trạng phòng ↗</a>
   </nav>
   <div class="sidebar-user">
     <div class="su-avatar" id="su-avatar">KT</div>
@@ -3530,6 +3530,10 @@ function applyPermissions(){
     }
   });
 
+  // Link sang web Tình trạng phòng: Giám đốc/Quản lý/Kỹ thuật luôn thấy; người khác cần được cấp tab 'tinh-trang-phong'
+  const navPhong=document.getElementById('nav-phong');
+  if(navPhong) navPhong.classList.toggle('hidden-nav', !(['giamdoc','quanly','kythuat'].includes(role) || allowedTabs.includes('tinh-trang-phong')));
+
   // Ẩn/hiện Kho sub-tabs theo quyền
   document.querySelectorAll('.kho-tab').forEach(el=>{
     const onclick = el.getAttribute('onclick')||'';
@@ -3701,6 +3705,12 @@ const AU_TAB_GROUPS = [
     group: '🛏 Buồng Phòng',
     tabs: [
       {id:'buong-phong',  label:'Buồng Phòng (tất cả)'},
+    ]
+  },
+  {
+    group: '🏨 Tình Trạng Phòng',
+    tabs: [
+      {id:'tinh-trang-phong', label:'Web Tình trạng phòng'},   // cho phép mở Phong.html (Giám đốc/Quản lý/Kỹ thuật luôn được)
     ]
   },
 ];

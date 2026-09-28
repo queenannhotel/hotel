@@ -976,6 +976,34 @@ const ROLE_META = {
 let currentUser=null;
 // Giám đốc / Quản lý: sửa & xoá lịch sử, quản lý danh sách thiết bị (Tab 4), thêm thiết bị mới.
 function isManager(){ return ['giamdoc','quanly'].includes(currentUser?.role); }
+// Ai được mở web này: Giám đốc/Quản lý/Kỹ thuật luôn được; người khác cần Giám đốc cấp tab 'tinh-trang-phong'
+// (web Kế toán → Quản lý Tài khoản → Sửa user → nhóm "Tình Trạng Phòng").
+const ACCESS_TAB='tinh-trang-phong';
+const ALWAYS_ROLES=['giamdoc','quanly','kythuat'];
+async function checkAccess(){
+  if(ALWAYS_ROLES.includes(currentUser.role)) return 'ok';
+  let tabs=Array.isArray(currentUser.tabs)?currentUser.tabs:[];
+  try{
+    const {data,error}=await sb.from('user_perms').select('tabs').eq('email',currentUser.email).maybeSingle();
+    if(error) throw error;
+    if(data && Array.isArray(data.tabs) && data.tabs.length) tabs=data.tabs;
+  }catch(e){ console.warn('user_perms',e); return 'err'; }
+  return tabs.includes(ACCESS_TAB)?'ok':'deny';
+}
+function showNoAccess(kind){
+  document.getElementById('login-screen').style.display='flex';
+  document.getElementById('app').style.display='none';
+  document.querySelector('#login-screen .login-box').innerHTML=`
+    <div class="login-logo">👑 Queen Ann Hotel</div>
+    <div class="login-sub">Theo Dõi Tình Trạng Phòng</div>
+    <div style="text-align:center;font-size:14px;color:var(--navy);line-height:1.6;margin-bottom:20px;">
+      ${kind==='err'
+        ? '⚠️ Không kiểm tra được quyền truy cập (mất kết nối?).<br>Vui lòng thử lại.'
+        : '⛔ Tài khoản <b>'+esc(currentUser.email)+'</b> chưa được cấp quyền dùng web Tình trạng phòng.<br><span style="font-size:12px;color:var(--text-muted);">Nhờ Giám đốc cấp tại web Kế toán → Quản lý Tài khoản.</span>'}
+    </div>
+    ${kind==='err'?'<button class="login-btn" onclick="location.reload()">↻ Thử lại</button>':'<button class="login-btn" onclick="location.href=\'Index.html\'">💼 Về web Kế toán</button>'}
+    <button class="login-btn" style="background:#fff;border:1.5px solid var(--border);margin-top:10px;" onclick="doLogout()">⏻ Đăng xuất</button>`;
+}
 function canEditReq(r){ if(!r) return false; if(isManager()) return true; return r.status!=='xong' && r.nguoi===currentUser?.fullname; }
 function canWriteColl(name){ return name==='phDevices' ? isManager() : !!currentUser; }
 
@@ -1663,7 +1691,7 @@ function startRealtime(){
 function userFromSession(session){
   const u=session&&session.user; if(!u) return null;
   const m=u.app_metadata||{};
-  return {id:u.id, email:u.email, role:m.role||'truong-bp', fullname:m.fullname||u.email, bophan:m.bophan||''};
+  return {id:u.id, email:u.email, role:m.role||'truong-bp', fullname:m.fullname||u.email, bophan:m.bophan||'', tabs:m.tabs||null};
 }
 async function doLogin(){
   const email=document.getElementById('login-user').value.trim();
@@ -1680,10 +1708,12 @@ async function doLogin(){
   }catch(e){ errEl.textContent='❌ Lỗi đăng nhập: '+(e.message||e); }
 }
 let _entered=false;
-function enterApp(session){
+async function enterApp(session){
   if(_entered) return;
   currentUser=userFromSession(session); if(!currentUser) return;
   _entered=true;
+  const access=await checkAccess();
+  if(access!=='ok'){ showNoAccess(access); return; }
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='flex';
   const meta=ROLE_META[currentUser.role]||{label:currentUser.role, color:'#1A2744', bg:'#EEF1F7'};

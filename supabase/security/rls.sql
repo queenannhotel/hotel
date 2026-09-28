@@ -26,10 +26,10 @@ create or replace function public.qah_can_write(coll text) returns boolean
         when 'hr'        then array['nsLuong','bhxh','tncn','dx','kho','khoDeleted','yc','ycDeleted','transferReq']
         when 'truong-bp' then array['dx','kho','khoDeleted','yc','ycDeleted','transferReq','wsData','roomStatus','amData','mbData','hvLinen','hvRewash','hvCols','sx','hkStaff','mbHistory','hvNono','mbItemMap']
         when 'quanly'    then array['phReq','phDevices']
+        when 'kythuat'   then array['phReq']
         else array[]::text[] end )
-    -- Web Tình trạng phòng (Phong.html): mọi vai trò đăng nhập được tạo/nhận/hoàn thành yêu cầu (phReq).
-    -- Danh sách thiết bị (phDevices) chỉ Giám đốc / Quản lý (xem dòng 'quanly' ở trên).
-    or (coll = 'phReq' and public.qah_role() is not null)
+    -- Web Tình trạng phòng (Phong.html): vai trò khác chỉ ghi được phReq khi Giám đốc cấp tab 'tinh-trang-phong'
+    -- (xem dòng when 'phReq' bên dưới). Danh sách thiết bị (phDevices) chỉ Giám đốc / Quản lý.
     -- Cấp tab tuỳ biến (user_perms.tabs) → cho ghi nhóm gắn với tab đó (khớp COLLECTION_TAB trong app)
     -- user_perms.tabs lưu JSONB (mảng) → dùng to_jsonb + jsonb_array_elements_text (an toàn với jsonb/json/text[]).
     or exists (
@@ -46,6 +46,7 @@ create or replace function public.qah_can_write(coll text) returns boolean
                 when 'mbItemMap' then 'buong-phong' when 'hvNono' then 'buong-phong' when 'amData' then 'buong-phong'
                 when 'mbData' then 'buong-phong' when 'hvLinen' then 'buong-phong' when 'hvRewash' then 'buong-phong'
                 when 'hvCols' then 'buong-phong' when 'sx' then 'buong-phong'
+                when 'phReq' then 'tinh-trang-phong'
                 else null end)
               in (select jsonb_array_elements_text(to_jsonb(up.tabs)))
       );
