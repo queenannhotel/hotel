@@ -854,6 +854,8 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
     <div class="nav-item" onclick="showPage('bao-cao',this)" data-perm="ketoan,giamdoc"><span class="icon">📈</span> Báo Cáo Tài Chính</div>
     <div class="nav-item" onclick="showPage('quan-ly-tk',this)" data-perm="giamdoc"><span class="icon">👥</span> Quản Lý Tài Khoản</div>
     <div class="nav-item" onclick="showPage('cai-dat',this)" data-perm="giamdoc"><span class="icon">⚙️</span> Cài đặt</div>
+    <div class="nav-section">Queen Ann</div>
+    <a class="nav-item" href="Phong.html" style="text-decoration:none;"><span class="icon">🏨</span> Tình trạng phòng ↗</a>
   </nav>
   <div class="sidebar-user">
     <div class="su-avatar" id="su-avatar">KT</div>
@@ -3371,6 +3373,7 @@ const ROLE_META = {
   ketoan:    {label:'Kế toán trưởng', color:'#2E7D5B', bg:'#EAF5F0'},
   'truong-bp':{label:'Trưởng bộ phận',color:'#3A5FA0', bg:'#EEF3FB'},
   hr:        {label:'Nhân sự (HR)',   color:'#5B4A9B', bg:'#F0EEF8'},
+  quanly:    {label:'Quản lý',        color:'#9B3078', bg:'#FFF0F8'},   // vai trò của web Tình trạng phòng (Phong.html)
 };
 const ROLE_PERM_DESC = {
   giamdoc: 'Toàn bộ hệ thống. Phân quyền tab cho từng tài khoản.',

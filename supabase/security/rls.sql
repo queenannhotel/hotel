@@ -6,7 +6,7 @@
 --
 -- ⚠️ QUAN TRỌNG: TEST theo TỪNG vai trò sau khi chạy (xem phần cuối file).
 --    Vai trò lấy từ JWT app_metadata.role (đặt tại Authentication -> Users -> user -> App metadata:
---    {"role":"giamdoc"} | "ketoan" | "hr" | "truong-bp"). Thiếu role => bị chặn ghi (đúng ý).
+--    {"role":"giamdoc"} | "ketoan" | "hr" | "truong-bp" | "quanly"). Thiếu role => bị chặn ghi (đúng ý).
 -- =====================================================================
 
 -- ---------- Helpers: đọc vai trò & email từ JWT ----------
@@ -25,7 +25,11 @@ create or replace function public.qah_can_write(coll text) returns boolean
         when 'ketoan'    then array['thu','chi','ncc','catalog','dvtList','dx','kho','khoDeleted','yc','ycDeleted','transferReq','quyTx','quyUng','hkStaff','mbHistory','hvNono','mbItemMap']
         when 'hr'        then array['nsLuong','bhxh','tncn','dx','kho','khoDeleted','yc','ycDeleted','transferReq']
         when 'truong-bp' then array['dx','kho','khoDeleted','yc','ycDeleted','transferReq','wsData','roomStatus','amData','mbData','hvLinen','hvRewash','hvCols','sx','hkStaff','mbHistory','hvNono','mbItemMap']
+        when 'quanly'    then array['phReq','phDevices']
         else array[]::text[] end )
+    -- Web Tình trạng phòng (Phong.html): mọi vai trò đăng nhập được tạo/nhận/hoàn thành yêu cầu (phReq).
+    -- Danh sách thiết bị (phDevices) chỉ Giám đốc / Quản lý (xem dòng 'quanly' ở trên).
+    or (coll = 'phReq' and public.qah_role() is not null)
     -- Cấp tab tuỳ biến (user_perms.tabs) → cho ghi nhóm gắn với tab đó (khớp COLLECTION_TAB trong app)
     -- user_perms.tabs lưu JSONB (mảng) → dùng to_jsonb + jsonb_array_elements_text (an toàn với jsonb/json/text[]).
     or exists (
