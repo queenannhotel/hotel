@@ -3373,7 +3373,8 @@ const ROLE_META = {
   ketoan:    {label:'Kế toán trưởng', color:'#2E7D5B', bg:'#EAF5F0'},
   'truong-bp':{label:'Trưởng bộ phận',color:'#3A5FA0', bg:'#EEF3FB'},
   hr:        {label:'Nhân sự (HR)',   color:'#5B4A9B', bg:'#F0EEF8'},
-  quanly:    {label:'Quản lý',        color:'#9B3078', bg:'#FFF0F8'},   // vai trò của web Tình trạng phòng (Phong.html)
+  quanly:    {label:'Quản lý',        color:'#9B3078', bg:'#FFF0F8'},
+  kythuat:   {label:'Kỹ thuật',       color:'#1D6F42', bg:'#E8F5EC'},   // chỉ dùng web Tình trạng phòng (Phong.html)   // vai trò của web Tình trạng phòng (Phong.html)
 };
 const ROLE_PERM_DESC = {
   giamdoc: 'Toàn bộ hệ thống. Phân quyền tab cho từng tài khoản.',
@@ -3440,6 +3441,8 @@ async function doLogin(){
 async function enterApp(session){
   currentUser=currentUserFromSession(session);
   if(!currentUser) return;
+  // Vai trò Kỹ thuật chỉ dùng web Tình trạng phòng → chuyển thẳng sang đó, không mở web Kế toán
+  if(currentUser.role==='kythuat'){ location.replace('Phong.html'); return; }
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='flex';
   applyPermissions();               // áp quyền mặc định theo vai trò ngay

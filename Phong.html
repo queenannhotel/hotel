@@ -591,7 +591,7 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
     <div class="nav-section">Hệ Thống</div>
     <div class="nav-item" onclick="showPage('thiet-bi',this)"><span class="icon">⚙️</span> Hệ thống - Thiết bị</div>
     <div class="nav-section">Queen Ann</div>
-    <a class="nav-item" href="Index.html" style="text-decoration:none;"><span class="icon">💼</span> Web Kế toán ↗</a>
+    <a class="nav-item" id="nav-ketoan" href="Index.html" style="text-decoration:none;"><span class="icon">💼</span> Web Kế toán ↗</a>
   </nav>
   <div class="sidebar-user">
     <div class="su-avatar" id="su-avatar">—</div>
@@ -968,6 +968,7 @@ function closeModal(id){ document.getElementById(id).classList.remove('open'); }
 const ROLE_META = {
   giamdoc:    {label:'Giám đốc',       color:'#B7860A', bg:'#FFF8E7'},
   quanly:     {label:'Quản lý',        color:'#9B3078', bg:'#FFF0F8'},
+  kythuat:    {label:'Kỹ thuật',       color:'#1D6F42', bg:'#E8F5EC'},
   ketoan:     {label:'Kế toán trưởng', color:'#2E7D5B', bg:'#EAF5F0'},
   'truong-bp':{label:'Trưởng bộ phận', color:'#3A5FA0', bg:'#EEF3FB'},
   hr:         {label:'Nhân sự (HR)',   color:'#5B4A9B', bg:'#F0EEF8'},
@@ -1689,6 +1690,8 @@ function enterApp(session){
   document.getElementById('su-name').textContent=currentUser.fullname;
   document.getElementById('su-role').textContent=meta.label;
   document.getElementById('su-avatar').textContent=String(currentUser.fullname).split(/[\s@]+/).filter(Boolean).map(w=>w[0]).slice(-2).join('').toUpperCase();
+  // Kỹ thuật chỉ dùng web phòng → ẩn link sang web Kế toán (cả nhóm "Queen Ann" trên sidebar)
+  if(currentUser.role==='kythuat'){ const k=document.getElementById('nav-ketoan'); if(k){ k.style.display='none'; const sec=k.previousElementSibling; if(sec) sec.style.display='none'; } }
   const rb=document.getElementById('topbar-role'); rb.textContent=meta.label; rb.style.background=meta.bg; rb.style.color=meta.color;
   lsLoad();
   // Mở lại đúng tab lần trước
