@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.20l';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.20m';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -8764,6 +8764,13 @@ function khoSyncTopScroll(){
 // Gộp các dòng kho TRÙNG (cùng bộ phận + cùng tên) thành 1 dòng: cộng dồn tồn đầu + lịch sử.
 // Dữ liệu cũ có thể tạo nhiều dòng cùng tên (nhập từ Chi trước khi có dedup, hoặc ĐVT lệch
 // như "Ổ" vs "cái"). Hàm này dồn lại 1 tên = 1 dòng để kho hiển thị gọn và cộng dồn số liệu.
+// Chữ ký 1 bút toán lichSu — dùng để khử trùng khi gộp dòng kho (transfer-out/in khác loai → không gộp nhầm cặp).
+function _khoLichSuSig(h){
+  if(!h) return 'x';
+  if(h.refTr) return 'R|'+h.refTr+'|'+h.loai;
+  if(h.ref_chi) return 'C|'+h.ref_chi+'|'+h.loai;
+  return 'S|'+[h.ngay,h.loai,h.sl,h.tu||'',h.den||'',h.lydo||'',h.nguoi||'',h.vitri||''].join('|');
+}
 function khoMergeDuplicates(){
   const groups=new Map();
   KHO_DATA.forEach(it=>{
@@ -8798,7 +8805,9 @@ function khoMergeDuplicates(){
       ghichu:rows.map(it=>(it.ghichu||'').trim()).find(g=>g)||'',
       lichSu:[]
     };
-    rows.forEach(it=>{ if(Array.isArray(it.lichSu)) m.lichSu.push(...it.lichSu); });
+    // Nối lichSu NHƯNG khử trùng: 2 dòng kho trùng key (do đồng bộ tách ra) hay chồng bút toán → chỉ giữ 1 bản/bút toán.
+    const seenLs=new Set();
+    rows.forEach(it=>{ if(Array.isArray(it.lichSu)) it.lichSu.forEach(h=>{ const k=_khoLichSuSig(h); if(seenLs.has(k)) return; seenLs.add(k); m.lichSu.push(h); }); });
     result.push(m);
     merged+=rows.length-1;
   });
@@ -9720,11 +9729,12 @@ function trBalance(dept,ten,dvt){ return khoBalance(trDeptKho(dept),ten,dvt); }
 function khoDedupeTransfers(){
   if(!(currentUser?.role==='giamdoc'||currentUser?.role==='ketoan')){ showToast('Chỉ Giám đốc/Kế toán dùng được',2500,'error'); return; }
   if(!confirm('Dọn các bút toán CHUYỂN KHO bị trùng (mỗi lần chuyển chỉ giữ 1)?\nKhông đụng tới Nhập/Xuất/Huỷ thường.')) return;
-  let removed=0;
+  try{ khoMergeDuplicates(); }catch(e){}   // gộp dòng kho trùng trước (đã tự khử trùng lichSu)
+  // Khử trùng transfer TOÀN CỤC (1 seen chung) → bắt cả trùng nằm rải ở nhiều dòng khác nhau.
+  const seen=new Set(); let removed=0;
   (KHO_DATA||[]).forEach(it=>{
     if(!Array.isArray(it.lichSu)||!it.lichSu.length) return;
-    const seen=new Set(); const keep=[];
-    // Giữ theo thứ tự hiện có; entry transfer trùng khoá → bỏ (giữ cái GẶP ĐẦU tiên).
+    const keep=[];
     it.lichSu.forEach(h=>{
       if(!h || (h.loai!=='transfer-in' && h.loai!=='transfer-out')){ keep.push(h); return; }
       const key = h.refTr ? ('R|'+h.refTr+'|'+h.loai)
@@ -10641,7 +10651,14 @@ const COLLECTIONS = {
 
 // lastSnapshot phản ánh trạng thái ĐÃ ở trên cloud: {collection:{id:json}}
 let lastSnapshot = {};
-function _snapshotOf(name){ const s={}; COLLECTIONS[name].read().forEach(r=>{ s[r.id]=JSON.stringify(r.obj); }); return s; }
+// Bỏ ký tự Postgres jsonb KHÔNG nhận: NUL (\u0000) và surrogate lẻ (\udXXX) — thường lọt vào khi import Excel/copy dữ liệu.
+// Cặp emoji hợp lệ được JSON.stringify xuất thành ký tự thật (không escape) nên KHÔNG bị đụng.
+function _cleanJson(s){
+  if(typeof s!=='string') return s;
+  if(s.indexOf('\\u0000')<0 && !/\\ud[89a-f]/i.test(s)) return s;   // nhanh: không có gì để dọn
+  return s.replace(/\\u0000/gi,'').replace(/\\ud[89a-f][0-9a-f]{2}/gi,'');
+}
+function _snapshotOf(name){ const s={}; COLLECTIONS[name].read().forEach(r=>{ s[r.id]=_cleanJson(JSON.stringify(r.obj)); }); return s; }
 
 // ----- KÉO VỀ (2 pha): dữ liệu nhẹ trước cho app hiện nhanh; ảnh kho (nặng) kéo ở nền sau -----
 // 2 collection kho nhúng ảnh base64 → kéo riêng ở pha sau để không chặn app lúc mở.
