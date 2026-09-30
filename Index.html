@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.20k';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.20l';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -8741,7 +8741,8 @@ function switchKhoTab(tab,el){
       ${(currentUser?.role==='giamdoc'||currentUser?.role==='ketoan')?`<button class="btn btn-ghost btn-sm" onclick="khoCompressOldImages()" title="Nén mọi ảnh cũ đã lưu để nhẹ bộ nhớ">🗜 Nén ảnh cũ</button>
       <button class="btn btn-ghost btn-sm" onclick="openKhoRecover()" title="Khôi phục món kho đã xoá còn lưu trên máy chủ">🛟 Khôi phục từ cloud</button>
       <button class="btn btn-ghost btn-sm" onclick="openKhoTrash()" title="Thùng rác kho — khôi phục mặt hàng vừa xoá">🗑 Thùng rác kho</button>
-      <button class="btn btn-ghost btn-sm" onclick="khoStorageReport()" title="Xem dung lượng bộ nhớ máy đang dùng, ảnh chiếm bao nhiêu, còn ghi được không">🔍 Kiểm tra bộ nhớ</button>`:''}
+      <button class="btn btn-ghost btn-sm" onclick="khoStorageReport()" title="Xem dung lượng bộ nhớ máy đang dùng, ảnh chiếm bao nhiêu, còn ghi được không">🔍 Kiểm tra bộ nhớ</button>
+      <button class="btn btn-ghost btn-sm" onclick="khoDedupeTransfers()" title="Dọn bút toán chuyển kho bị trùng (do bấm Chuyển lại nhiều lần)">🧹 Dọn phiếu chuyển trùng</button>`:''}
       <button class="btn btn-gold btn-sm" onclick="openKhoAddItem()">+ Thêm hàng</button>`;
   }
   renderKhoTab();
@@ -9715,20 +9716,50 @@ function khoBalance(khoCode,ten,dvt){
   return KHO_DATA.filter(it=>it.bophan===khoCode && khoNorm(it.ten)===khoNorm(ten) && (!dvt||khoDvt(it.dvt)===khoDvt(dvt))).reduce((s,it)=>s+calcKyStats(it).con,0);
 }
 function trBalance(dept,ten,dvt){ return khoBalance(trDeptKho(dept),ten,dvt); }
+// Dọn bút toán CHUYỂN KHO bị trùng (do bấm "Chuyển lại" nhiều lần / chạy trên nhiều máy). Chỉ đụng transfer-in/out.
+function khoDedupeTransfers(){
+  if(!(currentUser?.role==='giamdoc'||currentUser?.role==='ketoan')){ showToast('Chỉ Giám đốc/Kế toán dùng được',2500,'error'); return; }
+  if(!confirm('Dọn các bút toán CHUYỂN KHO bị trùng (mỗi lần chuyển chỉ giữ 1)?\nKhông đụng tới Nhập/Xuất/Huỷ thường.')) return;
+  let removed=0;
+  (KHO_DATA||[]).forEach(it=>{
+    if(!Array.isArray(it.lichSu)||!it.lichSu.length) return;
+    const seen=new Set(); const keep=[];
+    // Giữ theo thứ tự hiện có; entry transfer trùng khoá → bỏ (giữ cái GẶP ĐẦU tiên).
+    it.lichSu.forEach(h=>{
+      if(!h || (h.loai!=='transfer-in' && h.loai!=='transfer-out')){ keep.push(h); return; }
+      const key = h.refTr ? ('R|'+h.refTr+'|'+h.loai)
+                          : ('S|'+[h.ngay,h.loai,h.sl,h.tu,h.den,h.lydo].join('|'));   // bút toán cũ chưa có refTr → dedupe theo chữ ký
+      if(seen.has(key)){ removed++; return; }
+      seen.add(key); keep.push(h);
+    });
+    it.lichSu=keep;
+  });
+  try{ renderKhoTab(); }catch(e){}
+  syncNow();
+  showToast(removed? `🧹 Đã gộp ${removed} bút toán chuyển kho trùng` : 'Không có bút toán chuyển kho trùng',3000, removed?'success':'info');
+}
+// Xoá mọi bút toán transfer có cùng refTr (khắp KHO_DATA) → để chuyển lại là THAY THẾ, không cộng dồn (chống nhân đôi).
+function khoRemoveTransferRef(refTr){
+  if(!refTr) return 0; let n=0;
+  (KHO_DATA||[]).forEach(it=>{ if(!Array.isArray(it.lichSu)) return; const before=it.lichSu.length;
+    it.lichSu=it.lichSu.filter(h=>!(h && h.refTr===refTr)); n+=before-it.lichSu.length; });
+  return n;
+}
 // Chuyển 1 mặt hàng giữa 2 kho: trừ kho nguồn (transfer-out), cộng kho đích (transfer-in). Khớp theo tên+ĐVT.
-function khoTransferItem(ten,dvt,sl,srcKho,destKho,note,nguoi,ngayIn){
+// refTr: khoá định danh theo (phiếu+món) → chống nhân đôi khi chuyển lại / chạy trên nhiều máy.
+function khoTransferItem(ten,dvt,sl,srcKho,destKho,note,nguoi,ngayIn,refTr){
   sl=parseFloat(sl)||0; if(!ten||sl<=0||!srcKho||!destKho||srcKho===destKho) return false;   // trả false = KHÔNG chuyển được (kho không nhảy số)
   const ngay=ngayIn||new Date().toLocaleDateString('vi-VN');   // ghi vào kho theo ngày phiếu (khi chuyển lại phiếu cũ)
   const match=x=>khoNorm(x.ten)===khoNorm(ten) && khoDvt(x.dvt)===khoDvt(dvt);
   // Kho nguồn: chọn dòng có số dư cao nhất; chưa có thì tạo (tồn 0 → số dư âm để dễ thấy cần bù)
   let src=KHO_DATA.filter(x=>x.bophan===srcKho && match(x)).sort((a,b)=>calcKyStats(b).con-calcKyStats(a).con)[0];
   if(!src){ src={id:'KH'+Date.now()+Math.floor(Math.random()*1000),ma:'KTO-'+Date.now().toString().slice(-4)+Math.floor(Math.random()*90+10),ten,dvt:dvt||'Cái',bophan:srcKho,vitri:khoVitriDefault(srcKho),ton_dau:0,img:'📦',ghichu:'',lichSu:[]}; KHO_DATA.push(src); }
-  src.lichSu.push({ngay,loai:'transfer-out',sl,tu:srcKho,den:destKho,lydo:note,nguoi,vitri:src.vitri});
+  src.lichSu.push({ngay,loai:'transfer-out',sl,tu:srcKho,den:destKho,lydo:note,nguoi,vitri:src.vitri,refTr});
   // Kho đích: hàng về vị trí mặc định của kho đích
   const destVi=khoVitriDefault(destKho);
   let dest=KHO_DATA.find(x=>x.bophan===destKho && match(x) && khoVi(x.vitri)===khoVi(destVi));
-  if(dest){ dest.lichSu.push({ngay,loai:'transfer-in',sl,tu:srcKho,den:destKho,lydo:note,nguoi,vitri:destVi}); }
-  else{ KHO_DATA.push({id:'KH'+Date.now()+Math.floor(Math.random()*1000),ma:src.ma,ten,dvt:dvt||'Cái',bophan:destKho,vitri:destVi,ton_dau:0,img:src.img||'📦',ghichu:'',lichSu:[{ngay,loai:'transfer-in',sl,tu:srcKho,den:destKho,lydo:note,nguoi,vitri:destVi}]}); }
+  if(dest){ dest.lichSu.push({ngay,loai:'transfer-in',sl,tu:srcKho,den:destKho,lydo:note,nguoi,vitri:destVi,refTr}); }
+  else{ KHO_DATA.push({id:'KH'+Date.now()+Math.floor(Math.random()*1000),ma:src.ma,ten,dvt:dvt||'Cái',bophan:destKho,vitri:destVi,ton_dau:0,img:src.img||'📦',ghichu:'',lichSu:[{ngay,loai:'transfer-in',sl,tu:srcKho,den:destKho,lydo:note,nguoi,vitri:destVi,refTr}]}); }
   return true;
 }
 let editingTrId=null;
@@ -9934,7 +9965,9 @@ function confirmTrFulfill(){
     const srcKho=srcSels[i]?.value||'kt';
     const destKho=destSels[i]?.value||defDest;
     const note=`Transfer YC ${d.code||d.id}: ${KHO_BP_LABELS[srcKho]} → ${KHO_BP_LABELS[destKho]}`;
-    const ok=khoTransferItem(it.ten,it.dvt,it.sl,srcKho,destKho,note,nguoi,ngayPhieu);
+    const refTr=`${d.id}#${i}`;
+    khoRemoveTransferRef(refTr);   // xoá bút toán cũ của đúng món này (nếu có) → chuyển lại là THAY THẾ, không nhân đôi
+    const ok=khoTransferItem(it.ten,it.dvt,it.sl,srcKho,destKho,note,nguoi,ngayPhieu,refTr);
     if(ok) moved++;
     fulfill[i]={src:srcKho,dest:destKho,sl:it.sl,moved:!!ok};
   });
