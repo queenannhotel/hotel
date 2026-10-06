@@ -1621,11 +1621,11 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
 
       <!-- 6 sub-tabs -->
       <div class="bp-tabs">
-        <div class="bp-tab active"   onclick="switchBpTab('worksheet',this)">📋 Worksheet</div>
-        <div class="bp-tab"          onclick="switchBpTab('minibar',this)">🥤 Minibar</div>
-        <div class="bp-tab"          onclick="switchBpTab('amenity',this)">🧴 Amenity</div>
-        <div class="bp-tab"          onclick="switchBpTab('hang-vai',this)">👕 Hàng Vải</div>
-        <div class="bp-tab"          onclick="switchBpTab('setup-xe',this)">🛒 Setup Xe</div>
+        <div class="bp-tab active"   id="bp-subtab-worksheet" onclick="switchBpTab('worksheet',this)">📋 Worksheet</div>
+        <div class="bp-tab"          id="bp-subtab-minibar" onclick="switchBpTab('minibar',this)">🥤 Minibar</div>
+        <div class="bp-tab"          id="bp-subtab-amenity" onclick="switchBpTab('amenity',this)">🧴 Amenity</div>
+        <div class="bp-tab"          id="bp-subtab-hang-vai" onclick="switchBpTab('hang-vai',this)">👕 Hàng Vải</div>
+        <div class="bp-tab"          id="bp-subtab-setup-xe" onclick="switchBpTab('setup-xe',this)">🛒 Setup Xe</div>
       </div>
 
       <!-- ===== WORKSHEET ===== -->
@@ -3401,6 +3401,17 @@ const DEFAULT_TABS = {
 
 let currentUser = null;
 
+// Buồng phòng phân quyền theo TỪNG tab con. Quyền cũ 'buong-phong' (tài khoản cấp trước đây / mặc định Trưởng BP)
+// được hiểu là có TẤT CẢ tab con — không ai bị mất quyền khi nâng cấp.
+const BP_SUBTABS=['bp-worksheet','bp-minibar','bp-amenity','bp-hang-vai','bp-setup-xe','khach-yeu-cau'];
+function expandTabs(tabs){
+  const t=[...(tabs||[])];
+  if(t.includes('buong-phong')) BP_SUBTABS.forEach(x=>{ if(!t.includes(x)) t.push(x); });
+  return t;
+}
+function myTabs(){ return expandTabs((currentUser&&currentUser.tabs)||DEFAULT_TABS[currentUser?.role]||[]); }
+function bpSubAllowed(sub){ return currentUser?.role==='giamdoc' || myTabs().includes('bp-'+sub); }
+
 // Dựng currentUser từ phiên Supabase (vai trò/bộ phận/quyền lấy từ app_metadata — JWT)
 function currentUserFromSession(session){
   const u=session&&session.user; if(!u) return null;
@@ -3505,7 +3516,7 @@ function applyPermissions(){
   rb.textContent=meta.label; rb.style.background=meta.bg; rb.style.color=meta.color;
 
   // Tabs mà user này được phép thấy
-  const allowedTabs = currentUser.tabs || DEFAULT_TABS[role] || [];
+  const allowedTabs = expandTabs(currentUser.tabs || DEFAULT_TABS[role] || []);
 
   // Nav items — ẩn/hiện theo allowedTabs
   document.querySelectorAll('#main-nav .nav-item').forEach(el=>{
@@ -3520,6 +3531,10 @@ function applyPermissions(){
     } else if(pageId==='chuyen-khoan'){
       // Chuyển Khoản kế thừa quyền của Công Nợ (ai xem được Công Nợ thì thấy luôn) — khỏi cấp lại tab.
       const ok = role==='giamdoc' || allowedTabs.includes('chuyen-khoan') || allowedTabs.includes('cong-no');
+      el.classList.toggle('hidden-nav', !ok);
+    } else if(pageId==='buong-phong'){
+      // Buồng Phòng hiện nếu được ít nhất 1 tab con (Worksheet/Minibar/Amenity/Hàng vải/Setup xe)
+      const ok = role==='giamdoc' || allowedTabs.some(t=>t.startsWith('bp-'));
       el.classList.toggle('hidden-nav', !ok);
     } else if(pageId==='khach-yeu-cau'){
       // Khách Yêu Cầu kế thừa quyền của Buồng phòng (tách ra sidebar nhưng cùng nhóm quyền).
@@ -3620,7 +3635,7 @@ async function renderUsersTable(){
     tb.innerHTML=_permList.map(u=>{
       const meta=ROLE_META[u.role]||{};
       const hasCustom=Array.isArray(u.tabs)&&u.tabs.length>0;
-      const allowedTabs=hasCustom?u.tabs:(DEFAULT_TABS[u.role]||[]);
+      const allowedTabs=expandTabs(hasCustom?u.tabs:(DEFAULT_TABS[u.role]||[]));
       const tabBadges=AU_ALL_TABS.filter(t=>allowedTabs.includes(t.id)).map(t=>`<span class="badge ${t.id.startsWith('kho')?'badge-blue':'badge-navy'}" style="font-size:10px;margin:1px;">${t.label}</span>`).join('');
       return `<tr>
         <td><strong>${esc(u.email)}</strong></td>
@@ -3705,7 +3720,12 @@ const AU_TAB_GROUPS = [
   {
     group: '🛏 Buồng Phòng',
     tabs: [
-      {id:'buong-phong',  label:'Buồng Phòng (tất cả)'},
+      {id:'bp-worksheet', label:'Worksheet'},
+      {id:'bp-minibar',   label:'Minibar'},
+      {id:'bp-amenity',   label:'Amenity'},
+      {id:'bp-hang-vai',  label:'Hàng Vải'},
+      {id:'bp-setup-xe',  label:'Setup Xe'},
+      {id:'khach-yeu-cau',label:'Khách Yêu Cầu'},
     ]
   },
   {
@@ -3777,9 +3797,9 @@ function editUser(email){
   ['au-row-1','au-row-2','au-bp-wrap','au-role-desc-box','au-tc-filter-wrap'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.display='none';});
   document.getElementById('au-tab-perm-wrap').style.display='block';
   const hasCustom=Array.isArray(u.tabs)&&u.tabs.length>0;
-  const accessTabs=hasCustom?u.tabs:(DEFAULT_TABS[u.role]||[]);
+  const accessTabs=expandTabs(hasCustom?u.tabs:(DEFAULT_TABS[u.role]||[]));
   // Mặc định noti = đúng các tab được truy cập (nếu user chưa từng cấu hình noti_tabs)
-  const notiTabs=Array.isArray(u.noti_tabs)?u.noti_tabs:accessTabs;
+  const notiTabs=Array.isArray(u.noti_tabs)?expandTabs(u.noti_tabs):accessTabs;
   renderAuTabCheckboxes(accessTabs, notiTabs);
   // Bộ phận phụ trách (nhiều) — chỉ với Trưởng BP
   const bpWrap=document.getElementById('au-bophans-wrap');
@@ -3793,6 +3813,8 @@ async function saveUser(){
   // noti chỉ giữ tab vừa được truy cập vừa bật 🔔
   const notiRaw=[...document.querySelectorAll('#au-tab-checkboxes .au-noti-chk:checked')].map(cb=>cb.value);
   const noti_tabs=notiRaw.filter(id=>tabs.includes(id));
+  // Thông báo Khách Yêu Cầu được gửi với tab 'buong-phong' → bật 🔔 Khách Yêu Cầu thì lưu kèm 'buong-phong'
+  if(noti_tabs.includes('khach-yeu-cau')) noti_tabs.push('buong-phong');
   const upd={tabs, noti_tabs, updated_at:new Date().toISOString()};
   // Bộ phận phụ trách (nhiều) — chỉ khi khối đang hiện (user Trưởng BP)
   let bophans=null;
@@ -9687,7 +9709,10 @@ function showPage(id,el){
     initBpPhongDropdowns();
     const wsNgay=document.getElementById('ws-ngay');
     if(wsNgay&&!wsNgay.value) wsNgay.value=new Date().toISOString().slice(0,10);
-    renderWorksheet();
+    const subs=['worksheet','minibar','amenity','hang-vai','setup-xe'];
+    subs.forEach(t=>{ const b=document.getElementById('bp-subtab-'+t); if(b) b.style.display=bpSubAllowed(t)?'':'none'; });
+    const tab=bpSubAllowed(currentBpTab)?currentBpTab:(subs.find(bpSubAllowed)||'worksheet');
+    switchBpTab(tab, document.getElementById('bp-subtab-'+tab));
     try{ renderBpLockBtn(); }catch(e){}
   }
   // Mobile/iPad: chọn tab xong tự đóng menu + nền tối (trước đây bị kẹt màn tối).
@@ -10763,14 +10788,23 @@ const COLLECTION_TAB = {
   amData:'buong-phong', mbData:'buong-phong', hvLinen:'buong-phong', hvRewash:'buong-phong',
   hvCols:'buong-phong', sx:'buong-phong',
 };   // 'cats' KHÔNG map → giữ chỉ Giám đốc. 'bpLock' KHÔNG map → tránh TBP HK ghi qua fallback theo tab (chỉ Giám đốc).
+// Buồng phòng: collection → tab con được cấp (khớp hàm qah_can_write trong rls.sql)
+const COLLECTION_SUBTAB = {
+  wsData:'bp-worksheet', roomStatus:'bp-worksheet', hkStaff:'bp-worksheet',
+  mbData:'bp-minibar', mbHistory:'bp-minibar', mbItemMap:'bp-minibar',
+  amData:'bp-amenity',
+  hvLinen:'bp-hang-vai', hvRewash:'bp-hang-vai', hvCols:'bp-hang-vai', hvNono:'bp-hang-vai',
+  sx:'bp-setup-xe',
+  yc:'khach-yeu-cau', ycDeleted:'khach-yeu-cau',
+};
 function canWriteCollection(name){
   const role=currentUser&&currentUser.role;
   if(role==='giamdoc') return true;
   const allow=WRITE_MATRIX[name];
   if(!allow || allow.includes(role)) return true; // collection không khai báo, hoặc role đã được phép
   // Ngoài ra: user được CẤP TAB tương ứng cũng được ghi (đồng bộ theo tab)
-  const tab=COLLECTION_TAB[name];
-  if(tab){ const t=(currentUser&&currentUser.tabs)||DEFAULT_TABS[role]||[]; if(t.includes(tab)) return true; }
+  const tab=COLLECTION_TAB[name], sub=COLLECTION_SUBTAB[name];
+  if(tab||sub){ const t=myTabs(); if((tab&&t.includes(tab)) || (sub&&t.includes(sub))) return true; }
   return false;
 }
 

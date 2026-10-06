@@ -49,6 +49,20 @@ create or replace function public.qah_can_write(coll text) returns boolean
                 when 'phReq' then 'tinh-trang-phong'
                 else null end)
               in (select jsonb_array_elements_text(to_jsonb(up.tabs)))
+      )
+    -- Buồng phòng phân quyền theo TỪNG tab con (khớp COLLECTION_SUBTAB trong app)
+    or exists (
+        select 1 from public.user_perms up
+        where up.email = public.qah_email() and jsonb_typeof(to_jsonb(up.tabs)) = 'array'
+          and (case coll
+                when 'wsData' then 'bp-worksheet' when 'roomStatus' then 'bp-worksheet' when 'hkStaff' then 'bp-worksheet'
+                when 'mbData' then 'bp-minibar' when 'mbHistory' then 'bp-minibar' when 'mbItemMap' then 'bp-minibar'
+                when 'amData' then 'bp-amenity'
+                when 'hvLinen' then 'bp-hang-vai' when 'hvRewash' then 'bp-hang-vai' when 'hvCols' then 'bp-hang-vai' when 'hvNono' then 'bp-hang-vai'
+                when 'sx' then 'bp-setup-xe'
+                when 'yc' then 'khach-yeu-cau' when 'ycDeleted' then 'khach-yeu-cau'
+                else null end)
+              in (select jsonb_array_elements_text(to_jsonb(up.tabs)))
       );
 $$;
 
