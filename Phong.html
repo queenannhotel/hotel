@@ -981,13 +981,20 @@ function isManager(){ return ['giamdoc','quanly'].includes(currentUser?.role); }
 const ACCESS_TAB='tinh-trang-phong';
 const ALWAYS_ROLES=['giamdoc','quanly','kythuat'];
 async function checkAccess(){
-  if(ALWAYS_ROLES.includes(currentUser.role)) return 'ok';
+  const always=ALWAYS_ROLES.includes(currentUser.role);
   let tabs=Array.isArray(currentUser.tabs)?currentUser.tabs:[];
   try{
     const {data,error}=await sb.from('user_perms').select('tabs').eq('email',currentUser.email).maybeSingle();
     if(error) throw error;
     if(data && Array.isArray(data.tabs) && data.tabs.length) tabs=data.tabs;
-  }catch(e){ console.warn('user_perms',e); return 'err'; }
+    // Chưa có dòng nhận diện (vd Kỹ thuật chưa từng mở web Kế toán) → tự đăng ký để hiện trong
+    // web Kế toán → Quản lý Tài khoản (giống web Kế toán làm khi đăng nhập lần đầu).
+    if(!data){
+      const {error:insErr}=await sb.from('user_perms').insert({email:currentUser.email,fullname:currentUser.fullname,role:currentUser.role,bophan:currentUser.bophan,tabs:null,tc_filter:'',active:true});
+      if(insErr) console.warn('user_perms insert',insErr);
+    }
+  }catch(e){ console.warn('user_perms',e); if(!always) return 'err'; }
+  if(always) return 'ok';
   return tabs.includes(ACCESS_TAB)?'ok':'deny';
 }
 function showNoAccess(kind){
