@@ -2659,6 +2659,26 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
 </div>
 
 <!-- MODAL CẬP NHẬT DATE MINIBAR -->
+<!-- ===== MODAL XEM TRƯỚC IMPORT MINIBAR TỪ SMILE (chưa lưu gì cho tới khi bấm Lưu) ===== -->
+<div class="modal-overlay" id="modal-mb-preview">
+  <div class="modal modal-lg" style="width:960px;">
+    <div class="modal-header"><span class="modal-title">👀 Xem trước Import Minibar từ Smile</span><button class="close-btn" onclick="mbCancelImport()">✕</button></div>
+    <div id="mb-prev-summary" style="font-size:13px;margin-bottom:10px;"></div>
+    <div id="mb-prev-warn"></div>
+    <div class="table-wrap" style="max-height:52vh;overflow:auto;border:1px solid var(--border);border-radius:8px;">
+      <table style="font-size:12px;">
+        <thead><tr><th style="position:sticky;top:0;">Trạng thái</th><th style="position:sticky;top:0;">Ngày</th><th style="position:sticky;top:0;">Phòng</th><th style="position:sticky;top:0;">Bill ID</th><th style="position:sticky;top:0;">Folio</th><th style="position:sticky;top:0;">NV</th><th style="position:sticky;top:0;">Món (tên trong file → tên báo cáo) × SL</th></tr></thead>
+        <tbody id="mb-prev-tbody"></tbody>
+      </table>
+    </div>
+    <div style="font-size:11.5px;color:var(--text-muted);margin-top:8px;">Chưa có gì được lưu. Bấm <b>Huỷ</b> để bỏ qua — dữ liệu hiện tại không thay đổi.</div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;">
+      <button class="btn btn-ghost" onclick="mbCancelImport()">✕ Huỷ</button>
+      <button class="btn btn-primary" id="mb-prev-save" onclick="mbConfirmImport()">✓ Lưu vào hệ thống</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modal-mb-update">
   <div class="modal">
     <div class="modal-header"><span class="modal-title">📅 Cập Nhật Date Minibar</span><button class="close-btn" onclick="closeModal('modal-mb-update')">✕</button></div>
@@ -6440,8 +6460,8 @@ function mbExcelToISO(v){
   return '';
 }
 function importMbSmile(){ document.getElementById('mb-smile-input').click(); }
-// Phân tích các dòng (mảng ô) từ file Smile → gom theo phòng/bill → nạp vào MB_HISTORY (chống trùng). Trả số phiếu thêm.
-function mbImportRows(rows){
+// Phân tích các dòng (mảng ô) từ file Smile → gom theo phòng/bill. CHỈ ĐỌC, không ghi gì vào dữ liệu.
+function mbParseRows(rows){
   const recs=[]; let cur=null, room='', billId='', folio='';
   (rows||[]).forEach(cols=>{
     const a=String(cols[0]||'').trim(); let m;
@@ -6454,13 +6474,63 @@ function mbImportRows(rows){
       const iso=mbExcelToISO(cols[0]); const sl=parseFloat(cols[4])||0; const clerk=String(cols[6]||'').trim();
       if(!cur){ cur={id:'MB'+Date.now()+Math.floor(Math.random()*1e4)+recs.length,ngay:iso,room,billId,folio,clerk,note:'',items:[]}; recs.push(cur); }
       if(iso&&!cur.ngay) cur.ngay=iso; if(clerk&&!cur.clerk) cur.clerk=clerk;
-      cur.items.push({ten:mbMapName(name),sl,note:''});
+      cur.items.push({ten:mbMapName(name),sl,note:'',_raw:name});
     }
   });
-  const key=r=>`${r.room}|${r.billId}|${r.folio}|${r.ngay}`;
-  const existing=new Set((MB_HISTORY||[]).map(key));
-  let added=0; recs.forEach(r=>{ if(!existing.has(key(r))){ MB_HISTORY.push(r); existing.add(key(r)); added++; } });
-  return {added, total:recs.length};
+  return recs;
+}
+// Khoá chống trùng: phòng + Bill ID + Folio + ngày
+const mbRecKey=r=>`${r.room}|${r.billId}|${r.folio}|${r.ngay}`;
+// ----- Xem trước trước khi lưu -----
+let _mbPreview=null;   // {recs:[{rec,dup}], file}
+function _mbPrevDate(iso){ const m=String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})/); return m?`${m[3]}/${m[2]}/${m[1]}`:(iso||'—'); }
+function mbShowPreview(recs, fileName){
+  const existing=new Set((MB_HISTORY||[]).map(mbRecKey));
+  const seen=new Set();
+  const list=recs.map(r=>{ const k=mbRecKey(r); const dup=existing.has(k)||seen.has(k); seen.add(k); return {rec:r, dup}; });
+  _mbPreview={recs:list, file:fileName};
+  const nNew=list.filter(x=>!x.dup).length, nDup=list.length-nNew;
+  const qty=list.filter(x=>!x.dup).reduce((s,x)=>s+x.rec.items.reduce((a,it)=>a+(parseFloat(it.sl)||0),0),0);
+  const dates=list.map(x=>x.rec.ngay).filter(Boolean).sort();
+  document.getElementById('mb-prev-summary').innerHTML=
+    `📄 <b>${esc(fileName||'')}</b> — đọc được <b>${list.length}</b> phiếu`
+    +(dates.length?` · từ <b>${_mbPrevDate(dates[0])}</b> đến <b>${_mbPrevDate(dates[dates.length-1])}</b>`:'')
+    +`<br>✅ <b style="color:var(--green);">${nNew} phiếu mới</b> sẽ được lưu (tổng ${qty} món)`
+    +` · ⏭ <b style="color:var(--text-muted);">${nDup} phiếu trùng</b> sẽ bỏ qua`;
+  // Tên món trong file không khớp 9 món của Báo cáo Minibar → sẽ không được cộng vào báo cáo
+  const unmatched={};
+  list.filter(x=>!x.dup).forEach(x=>x.rec.items.forEach(it=>{ if(!mbCanonOf(it.ten)){ const n=it._raw||it.ten; unmatched[n]=(unmatched[n]||0)+(parseFloat(it.sl)||0); } }));
+  const um=Object.keys(unmatched);
+  document.getElementById('mb-prev-warn').innerHTML=um.length
+    ? `<div style="background:var(--yellow-bg);border:1px solid #f0d58a;color:#7a5a00;border-radius:8px;padding:9px 12px;font-size:12.5px;margin-bottom:10px;">⚠️ <b>${um.length} tên món không khớp</b> với 9 món của Báo cáo Minibar (sẽ vẫn lưu vào Lịch sử nhưng <b>không</b> cộng vào báo cáo): ${um.map(n=>`<span class="badge badge-yellow" style="margin:2px;">${esc(n)} ×${unmatched[n]}</span>`).join('')}</div>`
+    : '';
+  const rows=list.slice().sort((a,b)=>(a.dup-b.dup)||String(a.rec.ngay).localeCompare(String(b.rec.ngay))||String(a.rec.room).localeCompare(String(b.rec.room),undefined,{numeric:true}));
+  document.getElementById('mb-prev-tbody').innerHTML=rows.map(({rec:r,dup})=>`<tr style="${dup?'opacity:.45;':''}">
+      <td>${dup?'<span class="badge badge-navy">Trùng — bỏ qua</span>':'<span class="badge badge-green">Mới</span>'}</td>
+      <td style="white-space:nowrap;">${_mbPrevDate(r.ngay)}</td>
+      <td style="font-weight:700;">${esc(r.room)}</td>
+      <td>${esc(r.billId||'—')}</td>
+      <td>${esc(r.folio||'—')}</td>
+      <td>${esc(r.clerk||'—')}</td>
+      <td>${r.items.map(it=>{ const c=mbCanonOf(it.ten); const raw=it._raw||it.ten;
+          return `<div>${esc(raw)}${c&&c!==raw?` → <b>${esc(c)}</b>`:''}${c?'':' <span style="color:var(--yellow);font-weight:600;">(không khớp)</span>'} × <b>${esc(it.sl)}</b></div>`; }).join('')}</td>
+    </tr>`).join('');
+  const btn=document.getElementById('mb-prev-save');
+  btn.disabled=!nNew; btn.style.opacity=nNew?'':'.5';
+  btn.textContent=nNew?`✓ Lưu ${nNew} phiếu vào hệ thống`:'Không có phiếu mới';
+  openModal('modal-mb-preview');
+}
+function mbCancelImport(){ _mbPreview=null; closeModal('modal-mb-preview'); showToast('Đã huỷ — không lưu gì.',2000,'info'); }
+function mbConfirmImport(){
+  if(!_mbPreview) return;
+  // Kiểm trùng lại lúc lưu (phòng khi máy khác vừa nhập cùng file)
+  const existing=new Set((MB_HISTORY||[]).map(mbRecKey));
+  let added=0;
+  _mbPreview.recs.forEach(({rec})=>{ const k=mbRecKey(rec); if(existing.has(k)) return; rec.items.forEach(it=>delete it._raw); MB_HISTORY.push(rec); existing.add(k); added++; });
+  const skipped=_mbPreview.recs.length-added;
+  _mbPreview=null; closeModal('modal-mb-preview');
+  showToast(`✅ Đã lưu ${added} phiếu minibar (bỏ ${skipped} trùng).`,2800,'success');
+  renderMbHistory(); try{syncNow();}catch(e){}
 }
 function handleMbSmileImport(input){
   const file=input.files[0]; if(!file) return;
@@ -6470,10 +6540,9 @@ function handleMbSmileImport(input){
       const wb=XLSX.read(e.target.result,{type:'array'});
       const ws=wb.Sheets[wb.SheetNames[0]];
       const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
-      const {added,total}=mbImportRows(rows);
-      if(!total){ showToast('Không đọc được dòng minibar nào từ file.',3000,'error'); input.value=''; return; }
-      showToast(`✅ Import ${added} phiếu minibar (bỏ ${total-added} trùng).`,2800,'success');
-      renderMbHistory(); try{syncNow();}catch(e){}
+      const recs=mbParseRows(rows);
+      if(!recs.length){ showToast('Không đọc được dòng minibar nào từ file.',3000,'error'); input.value=''; return; }
+      mbShowPreview(recs, file.name);   // chưa lưu — chờ bấm "Lưu vào hệ thống"
     }catch(err){ showToast('Lỗi đọc file: '+err.message,3500,'error'); }
     input.value='';
   };
