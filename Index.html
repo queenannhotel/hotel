@@ -6455,7 +6455,8 @@ function mbDeleteRecord(id){ const r=(MB_HISTORY||[]).find(x=>String(x.id)===Str
 // Excel serial (ngày) → ISO YYYY-MM-DD (lấy phần ngày, dùng UTC để khỏi lệch)
 function mbExcelToISO(v){
   if(typeof v==='number'||/^\d+(\.\d+)?$/.test(String(v).trim())){ const n=Math.floor(parseFloat(v)); const d=new Date(Math.round((n-25569)*86400000)); return isNaN(d.getTime())?'':d.toISOString().slice(0,10); }
-  const p=String(v||'').trim().split(/[\/\-.]/);
+  // Dạng chữ 'd/m/yyyy' (có thể kèm giờ 'd/m/yyyy hh:mm:') → chỉ lấy phần ngày
+  const p=String(v||'').trim().split(/\s+/)[0].split(/[\/\-.]/);
   if(p.length>=3){ let dd=p[0],mm=p[1],yy=p[2]; if(yy.length===2) yy='20'+yy; return `${yy}-${String(mm).padStart(2,'0')}-${String(dd).padStart(2,'0')}`; }
   return '';
 }
@@ -6477,59 +6478,112 @@ function mbParseRows(rows){
       cur.items.push({ten:mbMapName(name),sl,note:'',_raw:name});
     }
   });
-  return recs;
+  return mbNetBills(recs);
+}
+// Gộp các khối cùng phòng + Bill ID + Folio trong file (Smile tách 1 bill thành nhiều khối khi post thêm
+// hoặc post ĐỐI TRỪ số âm để sửa sai) → cộng/trừ số lượng theo từng món. Món có tổng 0 bị bỏ;
+// bill có tổng tất cả món = 0 (vd +2 rồi −2) bị bỏ hẳn. Ngày lấy theo khối sớm nhất.
+function mbNetBills(recs){
+  const groups=new Map(); let merged=0;
+  recs.forEach(r=>{
+    const k=`${r.room}|${r.billId}|${r.folio}`;
+    const g=groups.get(k);
+    if(!g){ groups.set(k,{...r, items:r.items.map(it=>({...it}))}); return; }
+    merged++;
+    if(r.ngay && (!g.ngay || r.ngay<g.ngay)) g.ngay=r.ngay;
+    if(!g.clerk && r.clerk) g.clerk=r.clerk;
+    r.items.forEach(it=>{
+      const ex=g.items.find(x=>x.ten===it.ten);
+      if(ex) ex.sl=(parseFloat(ex.sl)||0)+(parseFloat(it.sl)||0);
+      else g.items.push({...it});
+    });
+  });
+  const out=[], zeroRecs=[];
+  groups.forEach(g=>{
+    g.items=g.items.filter(it=>Math.abs(parseFloat(it.sl)||0)>1e-9);
+    if(g.items.length) out.push(g); else zeroRecs.push(g);
+  });
+  out._merged=merged; out._zeroed=zeroRecs.length; out._zeroRecs=zeroRecs;
+  return out;
 }
 // Khoá chống trùng: phòng + Bill ID + Folio + ngày
 const mbRecKey=r=>`${r.room}|${r.billId}|${r.folio}|${r.ngay}`;
 // ----- Xem trước trước khi lưu -----
 let _mbPreview=null;   // {recs:[{rec,dup}], file}
 function _mbPrevDate(iso){ const m=String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})/); return m?`${m[3]}/${m[2]}/${m[1]}`:(iso||'—'); }
+// So khớp với Lịch sử: cùng phòng + Bill ID + Folio (+ ngày) → giống hệt: bỏ qua; khác món/SL: cập nhật.
+// Bill có tổng = 0 mà Lịch sử còn phiếu cũ (nhập bằng bản cũ chưa đối trừ) → xoá phiếu cũ.
+const _mbBillKey=r=>`${r.room}|${r.billId}|${r.folio}`;
+function _mbFindExisting(r){
+  const hist=MB_HISTORY||[];
+  return hist.find(h=>mbRecKey(h)===mbRecKey(r)) || (r.billId ? hist.find(h=>_mbBillKey(h)===_mbBillKey(r)) : null);
+}
+const _mbItemsSig=items=>JSON.stringify((items||[]).map(it=>[String(it.ten),parseFloat(it.sl)||0]).sort());
 function mbShowPreview(recs, fileName){
-  const existing=new Set((MB_HISTORY||[]).map(mbRecKey));
-  const seen=new Set();
-  const list=recs.map(r=>{ const k=mbRecKey(r); const dup=existing.has(k)||seen.has(k); seen.add(k); return {rec:r, dup}; });
+  const list=recs.map(r=>{
+    const old=_mbFindExisting(r);
+    const st=!old?'new':(_mbItemsSig(old.items)===_mbItemsSig(r.items)?'same':'update');
+    return {rec:r, st, oldId:old&&old.id, oldItems:old&&old.items};
+  });
+  (recs._zeroRecs||[]).forEach(r=>{ const old=_mbFindExisting(r); if(old) list.push({rec:{...r, items:[]}, st:'remove', oldId:old.id, oldItems:old.items}); });
   _mbPreview={recs:list, file:fileName};
-  const nNew=list.filter(x=>!x.dup).length, nDup=list.length-nNew;
-  const qty=list.filter(x=>!x.dup).reduce((s,x)=>s+x.rec.items.reduce((a,it)=>a+(parseFloat(it.sl)||0),0),0);
+  const cnt=k=>list.filter(x=>x.st===k).length;
+  const nNew=cnt('new'), nUpd=cnt('update'), nRem=cnt('remove'), nDup=cnt('same'), nAct=nNew+nUpd+nRem;
+  const qty=list.filter(x=>x.st==='new').reduce((s,x)=>s+x.rec.items.reduce((a,it)=>a+(parseFloat(it.sl)||0),0),0);
   const dates=list.map(x=>x.rec.ngay).filter(Boolean).sort();
   document.getElementById('mb-prev-summary').innerHTML=
-    `📄 <b>${esc(fileName||'')}</b> — đọc được <b>${list.length}</b> phiếu`
+    `📄 <b>${esc(fileName||'')}</b> — đọc được <b>${recs.length}</b> phiếu`
     +(dates.length?` · từ <b>${_mbPrevDate(dates[0])}</b> đến <b>${_mbPrevDate(dates[dates.length-1])}</b>`:'')
     +`<br>✅ <b style="color:var(--green);">${nNew} phiếu mới</b> sẽ được lưu (tổng ${qty} món)`
-    +` · ⏭ <b style="color:var(--text-muted);">${nDup} phiếu trùng</b> sẽ bỏ qua`;
+    +(nUpd?` · ✏️ <b style="color:#3A5FA0;">${nUpd} phiếu cập nhật</b> (đã có nhưng khác món/SL)`:'')
+    +(nRem?` · 🗑 <b style="color:var(--red);">${nRem} phiếu cũ sẽ xoá</b> (đã đối trừ về 0)`:'')
+    +` · ⏭ <b style="color:var(--text-muted);">${nDup} phiếu trùng</b> sẽ bỏ qua`
+    +((recs._merged||recs._zeroed)?`<br>🔁 Đã gộp <b>${recs._merged||0}</b> khối cùng Bill (post thêm / đối trừ)`+(recs._zeroed?` · <b>${recs._zeroed}</b> bill có tổng = 0 không lưu`:''):'');
   // Tên món trong file không khớp 9 món của Báo cáo Minibar → sẽ không được cộng vào báo cáo
   const unmatched={};
-  list.filter(x=>!x.dup).forEach(x=>x.rec.items.forEach(it=>{ if(!mbCanonOf(it.ten)){ const n=it._raw||it.ten; unmatched[n]=(unmatched[n]||0)+(parseFloat(it.sl)||0); } }));
+  list.filter(x=>x.st==='new'||x.st==='update').forEach(x=>x.rec.items.forEach(it=>{ if(!mbCanonOf(it.ten)){ const n=it._raw||it.ten; unmatched[n]=(unmatched[n]||0)+(parseFloat(it.sl)||0); } }));
   const um=Object.keys(unmatched);
   document.getElementById('mb-prev-warn').innerHTML=um.length
     ? `<div style="background:var(--yellow-bg);border:1px solid #f0d58a;color:#7a5a00;border-radius:8px;padding:9px 12px;font-size:12.5px;margin-bottom:10px;">⚠️ <b>${um.length} tên món không khớp</b> với 9 món của Báo cáo Minibar (sẽ vẫn lưu vào Lịch sử nhưng <b>không</b> cộng vào báo cáo): ${um.map(n=>`<span class="badge badge-yellow" style="margin:2px;">${esc(n)} ×${unmatched[n]}</span>`).join('')}</div>`
     : '';
-  const rows=list.slice().sort((a,b)=>(a.dup-b.dup)||String(a.rec.ngay).localeCompare(String(b.rec.ngay))||String(a.rec.room).localeCompare(String(b.rec.room),undefined,{numeric:true}));
-  document.getElementById('mb-prev-tbody').innerHTML=rows.map(({rec:r,dup})=>`<tr style="${dup?'opacity:.45;':''}">
-      <td>${dup?'<span class="badge badge-navy">Trùng — bỏ qua</span>':'<span class="badge badge-green">Mới</span>'}</td>
+  const ORDER={new:0,update:1,remove:2,same:3};
+  const BADGE={new:'<span class="badge badge-green">Mới</span>', update:'<span class="badge badge-blue">Cập nhật</span>', remove:'<span class="badge badge-red">Xoá phiếu cũ</span>', same:'<span class="badge badge-navy">Trùng — bỏ qua</span>'};
+  const itemHtml=items=>items.map(it=>{ const c=mbCanonOf(it.ten); const raw=it._raw||it.ten; const neg=(parseFloat(it.sl)||0)<0;
+      return `<div>${esc(raw)}${c&&c!==raw?` → <b>${esc(c)}</b>`:''}${c?'':' <span style="color:var(--yellow);font-weight:600;">(không khớp)</span>'} × <b style="${neg?'color:var(--red);':''}">${esc(it.sl)}</b>${neg?' <span style="color:var(--red);font-size:11px;">(trừ)</span>':''}</div>`; }).join('');
+  const rows=list.slice().sort((a,b)=>(ORDER[a.st]-ORDER[b.st])||String(a.rec.ngay).localeCompare(String(b.rec.ngay))||String(a.rec.room).localeCompare(String(b.rec.room),undefined,{numeric:true}));
+  document.getElementById('mb-prev-tbody').innerHTML=rows.map(({rec:r,st,oldItems})=>`<tr style="${st==='same'?'opacity:.45;':''}">
+      <td>${BADGE[st]}</td>
       <td style="white-space:nowrap;">${_mbPrevDate(r.ngay)}</td>
       <td style="font-weight:700;">${esc(r.room)}</td>
       <td>${esc(r.billId||'—')}</td>
       <td>${esc(r.folio||'—')}</td>
       <td>${esc(r.clerk||'—')}</td>
-      <td>${r.items.map(it=>{ const c=mbCanonOf(it.ten); const raw=it._raw||it.ten;
-          return `<div>${esc(raw)}${c&&c!==raw?` → <b>${esc(c)}</b>`:''}${c?'':' <span style="color:var(--yellow);font-weight:600;">(không khớp)</span>'} × <b>${esc(it.sl)}</b></div>`; }).join('')}</td>
+      <td>${st==='remove'?'<span style="color:var(--text-muted);">Tổng = 0 sau đối trừ</span>':itemHtml(r.items)}
+        ${(st==='update'||st==='remove')&&oldItems?`<div style="font-size:11px;color:var(--text-muted);margin-top:3px;">Đang lưu: ${oldItems.map(it=>esc(it.ten)+' ×'+esc(it.sl)).join(', ')||'—'}</div>`:''}</td>
     </tr>`).join('');
   const btn=document.getElementById('mb-prev-save');
-  btn.disabled=!nNew; btn.style.opacity=nNew?'':'.5';
-  btn.textContent=nNew?`✓ Lưu ${nNew} phiếu vào hệ thống`:'Không có phiếu mới';
+  btn.disabled=!nAct; btn.style.opacity=nAct?'':'.5';
+  btn.textContent=nAct?`✓ Lưu ${nAct} phiếu vào hệ thống`:'Không có gì để lưu';
   openModal('modal-mb-preview');
 }
 function mbCancelImport(){ _mbPreview=null; closeModal('modal-mb-preview'); showToast('Đã huỷ — không lưu gì.',2000,'info'); }
 function mbConfirmImport(){
   if(!_mbPreview) return;
-  // Kiểm trùng lại lúc lưu (phòng khi máy khác vừa nhập cùng file)
-  const existing=new Set((MB_HISTORY||[]).map(mbRecKey));
-  let added=0;
-  _mbPreview.recs.forEach(({rec})=>{ const k=mbRecKey(rec); if(existing.has(k)) return; rec.items.forEach(it=>delete it._raw); MB_HISTORY.push(rec); existing.add(k); added++; });
-  const skipped=_mbPreview.recs.length-added;
+  let added=0, updated=0, removed=0;
+  _mbPreview.recs.forEach(({rec,st,oldId})=>{
+    rec.items.forEach(it=>delete it._raw);
+    if(st==='new'){
+      if(_mbFindExisting(rec)) return;   // máy khác vừa nhập cùng file → bỏ
+      MB_HISTORY.push(rec); added++;
+    }else if(st==='update'){
+      const h=MB_HISTORY.find(x=>String(x.id)===String(oldId)); if(!h) return;
+      h.items=rec.items; h.ngay=rec.ngay||h.ngay; if(rec.clerk) h.clerk=rec.clerk; updated++;
+    }else if(st==='remove'){
+      const n=MB_HISTORY.length; MB_HISTORY=MB_HISTORY.filter(x=>String(x.id)!==String(oldId)); if(MB_HISTORY.length<n) removed++;
+    }
+  });
   _mbPreview=null; closeModal('modal-mb-preview');
-  showToast(`✅ Đã lưu ${added} phiếu minibar (bỏ ${skipped} trùng).`,2800,'success');
+  showToast(`✅ Đã lưu: ${added} mới`+(updated?`, ${updated} cập nhật`:'')+(removed?`, xoá ${removed} phiếu đối trừ về 0`:'')+'.',3000,'success');
   renderMbHistory(); try{syncNow();}catch(e){}
 }
 function handleMbSmileImport(input){
