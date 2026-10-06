@@ -614,6 +614,8 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
     <div class="topbar-right">
       <span class="badge-date" id="topbar-date">📅</span>
       <span class="role-badge badge-navy" id="topbar-role">—</span>
+      <span id="staff-chip" onclick="openStaffPicker()" title="Nhân viên đang thao tác — bấm để đổi người"
+        style="display:none;align-items:center;gap:6px;padding:6px 12px;border-radius:20px;border:1.5px solid var(--gold);background:var(--gold-pale);cursor:pointer;font-size:12px;font-weight:600;color:var(--navy);">👤 <span id="staff-chip-name">—</span> <span style="color:var(--text-muted);font-weight:500;">· Đổi</span></span>
       <span id="sync-status" onclick="cloudPull(true)" title="Trạng thái đồng bộ đám mây — bấm để tải lại dữ liệu mới nhất"
         style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:20px;border:1.5px solid var(--border);background:#fff;cursor:pointer;font-size:12px;font-weight:600;font-family:'Inter',sans-serif;">
         <span id="sync-dot" style="width:8px;height:8px;border-radius:50%;background:#9ca3af;flex-shrink:0;"></span>
@@ -735,6 +737,24 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
           </div>
         </div>
       </div>
+      <div class="card" style="margin-top:18px;">
+        <div class="card-header">
+          <div class="card-title">👥 Nhân viên dùng chung tài khoản</div>
+          <button class="btn btn-gold mgr-only" onclick="openStaffModal()">＋ Thêm tài khoản</button>
+        </div>
+        <div class="card-body">
+          <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">
+            Tài khoản có danh sách nhân viên (vd Bellman) sẽ phải <b>chọn tên người đang dùng</b> mỗi lần mở web.
+            Tên đó được ghi vào yêu cầu (người tạo / người nhận / người hoàn thành) để biết ai thao tác.
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Email tài khoản</th><th>Nhân viên</th><th></th></tr></thead>
+              <tbody id="st-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     </div>
 
   </div>
@@ -846,6 +866,38 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
   </div>
 </div>
 
+<!-- =================== MODAL: CHỌN NHÂN VIÊN ĐANG DÙNG (tài khoản dùng chung) =================== -->
+<div class="modal-overlay" id="staff-pick-modal">
+  <div class="modal" style="width:420px;">
+    <div class="modal-header">
+      <div class="modal-title">👤 Bạn là ai?</div>
+      <button class="close-btn" id="staff-pick-close" onclick="closeModal('staff-pick-modal')">✕</button>
+    </div>
+    <div style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">Tài khoản <b id="staff-pick-acc" style="color:var(--navy);"></b> dùng chung — chọn tên của bạn để ghi nhận người thao tác.</div>
+    <div class="form-row full"><div class="form-group"><label>Nhân viên</label><select id="staff-pick-sel" style="font-size:15px;padding:11px 12px;"></select></div></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;">
+      <button class="btn btn-ghost" onclick="doLogout()">⏻ Đăng xuất</button>
+      <button class="btn btn-primary" onclick="confirmStaffPick()">✓ Xác nhận</button>
+    </div>
+  </div>
+</div>
+
+<!-- =================== MODAL: DANH SÁCH NHÂN VIÊN CỦA 1 TÀI KHOẢN (TAB 4) =================== -->
+<div class="modal-overlay" id="staff-modal">
+  <div class="modal" style="width:480px;">
+    <div class="modal-header">
+      <div class="modal-title" id="staff-modal-title">👥 Nhân viên dùng chung tài khoản</div>
+      <button class="close-btn" onclick="closeModal('staff-modal')">✕</button>
+    </div>
+    <div class="form-row full"><div class="form-group"><label>Email tài khoản</label><input id="sm-email" type="email" placeholder="vd bellmanqa@gmail.com"></div></div>
+    <div class="form-row full"><div class="form-group"><label>Tên nhân viên (mỗi dòng 1 người)</label><textarea id="sm-names" style="min-height:150px;" placeholder="Nguyễn Văn A&#10;Trần Văn B"></textarea></div></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;">
+      <button class="btn btn-ghost" onclick="closeModal('staff-modal')">Huỷ</button>
+      <button class="btn btn-primary" onclick="saveStaff()">💾 Lưu</button>
+    </div>
+  </div>
+</div>
+
 <!-- =================== MODAL: THIẾT BỊ (TAB 4) =================== -->
 <div class="modal-overlay" id="dev-modal">
   <div class="modal">
@@ -922,6 +974,7 @@ const DEFAULT_DEVICES=[
 ];
 
 let DEVICES=[];   // {id, ten, order, macDinh, loi:[], ketLuan:[]}
+let STAFF=[];     // {id: email viết thường, email, names:[]} — nhân viên dùng chung 1 tài khoản (vd Bellman)
 let REQS=[];      // {id, phong, priority, loai, thietBi, loaiLoi, tinhTrang, bpYC, ngay, ghichu, nguoi, createdAt,
                   //  status:'moi'|'nhan'|'xong', bpNhan, nguoiNhan, ngayNhan, ngayHT, ketLuan, thaoTac, tinhTrangSau, nguoiHT}
 
@@ -1006,13 +1059,91 @@ function showNoAccess(kind){
     <div style="text-align:center;font-size:14px;color:var(--navy);line-height:1.6;margin-bottom:20px;">
       ${kind==='err'
         ? '⚠️ Không kiểm tra được quyền truy cập (mất kết nối?).<br>Vui lòng thử lại.'
-        : '⛔ Tài khoản <b>'+esc(currentUser.email)+'</b> chưa được cấp quyền dùng web Tình trạng phòng.<br><span style="font-size:12px;color:var(--text-muted);">Nhờ Giám đốc cấp tại web Kế toán → Quản lý Tài khoản.</span>'}
+        : '⛔ Tài khoản <b>'+esc(currentUser.email)+'</b> chưa được cấp quyền dùng web Tình trạng phòng.<br><span style="font-size:12px;color:var(--text-muted);">Nhờ Giám đốc vào web Kế toán → Quản lý Tài khoản → Sửa tab → tick ô <b>"Web Tình trạng phòng"</b> (nhóm 🏨 Tình Trạng Phòng — khác với ô Buồng Phòng).</span>'}
     </div>
     ${kind==='err'?'<button class="login-btn" onclick="location.reload()">↻ Thử lại</button>':'<button class="login-btn" onclick="location.href=\'Index.html\'">💼 Về web Kế toán</button>'}
     <button class="login-btn" style="background:#fff;border:1.5px solid var(--border);margin-top:10px;" onclick="doLogout()">⏻ Đăng xuất</button>`;
 }
-function canEditReq(r){ if(!r) return false; if(isManager()) return true; return r.status!=='xong' && r.nguoi===currentUser?.fullname; }
-function canWriteColl(name){ return name==='phDevices' ? isManager() : !!currentUser; }
+function canEditReq(r){
+  if(!r) return false; if(isManager()) return true;
+  const mine = r.nguoiEmail ? r.nguoiEmail===currentUser?.email : r.nguoi===currentUser?.fullname;
+  return r.status!=='xong' && mine;
+}
+function canWriteColl(name){ return (name==='phDevices'||name==='phStaff') ? isManager() : !!currentUser; }
+
+// ----- Nhân viên dùng chung tài khoản -----
+function staffNames(email){ const e=String(email||'').toLowerCase(); const r=STAFF.find(x=>x.id===e); return (r&&Array.isArray(r.names))?r.names:[]; }
+const _staffKey=()=>'qah_ph_staff_'+String(currentUser?.email||'').toLowerCase();
+function pickedStaff(){
+  let v=''; try{ v=sessionStorage.getItem(_staffKey())||''; }catch(e){}
+  return staffNames(currentUser?.email).includes(v)?v:'';
+}
+// Tên ghi vào yêu cầu: "Tên NV (tên tài khoản)" nếu tài khoản dùng chung, ngược lại tên tài khoản
+function actorName(){ const st=pickedStaff(); const base=currentUser?.fullname||''; return st?`${st} (${base})`:base; }
+function updateStaffChip(){
+  const st=pickedStaff(), chip=document.getElementById('staff-chip');
+  if(chip){ chip.style.display=staffNames(currentUser?.email).length?'flex':'none'; document.getElementById('staff-chip-name').textContent=st||'Chưa chọn'; }
+  document.getElementById('su-name').textContent=st?st:currentUser.fullname;
+}
+// Mỗi lần mở web: tài khoản có danh sách nhân viên mà chưa chọn tên → bắt buộc chọn
+function ensureStaffPicked(){
+  updateStaffChip();
+  if(staffNames(currentUser?.email).length && !pickedStaff()) openStaffPicker(true);
+}
+function openStaffPicker(required){
+  const names=staffNames(currentUser?.email); if(!names.length) return;
+  document.getElementById('staff-pick-acc').textContent=currentUser.fullname;
+  const sel=document.getElementById('staff-pick-sel');
+  sel.innerHTML='<option value="">— Chọn tên —</option>'+names.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('');
+  sel.value=pickedStaff();
+  document.getElementById('staff-pick-close').style.display=required?'none':'';
+  document.getElementById('staff-pick-modal').dataset.required=required?'1':'';
+  openModal('staff-pick-modal');
+}
+function confirmStaffPick(){
+  const v=document.getElementById('staff-pick-sel').value;
+  if(!v){ showToast('Vui lòng chọn tên của bạn',2000,'error'); return; }
+  try{ sessionStorage.setItem(_staffKey(), v); }catch(e){}
+  closeModal('staff-pick-modal'); updateStaffChip();
+  showToast('👤 Xin chào '+v,1800,'success');
+}
+function renderStaffTable(){
+  const tb=document.getElementById('st-tbody'); if(!tb) return;
+  const mgr=isManager();
+  const list=STAFF.slice().sort((a,b)=>a.id.localeCompare(b.id));
+  if(!list.length){ tb.innerHTML=`<tr><td colspan="3" style="text-align:center;padding:18px;color:var(--text-muted);">Chưa có tài khoản dùng chung nào</td></tr>`; return; }
+  tb.innerHTML=list.map(r=>`<tr>
+    <td style="font-weight:600;">${esc(r.email||r.id)}</td>
+    <td>${(r.names||[]).map(n=>`<span class="chip">${esc(n)}</span>`).join('')||'—'}</td>
+    <td>${mgr?`<div class="req-actions"><button class="btn btn-ghost btn-sm" onclick="openStaffModal('${esc(r.id)}')" title="Sửa">✏</button><button class="btn btn-danger btn-sm" onclick="deleteStaff('${esc(r.id)}')" title="Xoá">🗑</button></div>`:''}</td>
+  </tr>`).join('');
+}
+let _editingStaffId=null;
+function openStaffModal(id){
+  if(!isManager()) return;
+  const r=id?STAFF.find(x=>x.id===id):null;
+  _editingStaffId=r?r.id:null;
+  document.getElementById('sm-email').value=r?(r.email||r.id):'';
+  document.getElementById('sm-email').readOnly=!!r;
+  document.getElementById('sm-names').value=r?(r.names||[]).join('\n'):'';
+  openModal('staff-modal');
+}
+function saveStaff(){
+  const email=document.getElementById('sm-email').value.trim().toLowerCase();
+  if(!email||!email.includes('@')){ showToast('Vui lòng nhập email tài khoản',2000,'error'); return; }
+  const names=_lines('sm-names');
+  if(!names.length){ showToast('Nhập ít nhất 1 tên nhân viên',2000,'error'); return; }
+  if(!_editingStaffId && STAFF.some(x=>x.id===email)){ showToast('Tài khoản này đã có — bấm ✏ để sửa',2500,'error'); return; }
+  const r=STAFF.find(x=>x.id===email);
+  if(r) r.names=names; else STAFF.push({id:email, email, names});
+  closeModal('staff-modal'); lsSave(); renderAll(); ensureStaffPicked();
+  showToast('✅ Đã lưu nhân viên cho '+email,2000,'success');
+}
+function deleteStaff(id){
+  if(!isManager()) return;
+  if(!confirm('Xoá danh sách nhân viên của '+id+'? (tài khoản này sẽ không phải chọn tên nữa)')) return;
+  STAFF=STAFF.filter(x=>x.id!==id); lsSave(); renderAll(); updateStaffChip();
+}
 
 // ==================== THIẾT BỊ ====================
 function devList(){ return (DEVICES.length?DEVICES:DEFAULT_DEVICES).slice().sort((a,b)=>(a.order||999)-(b.order||999)||String(a.ten).localeCompare(String(b.ten),'vi')); }
@@ -1340,7 +1471,7 @@ function saveReq(){
   try{ localStorage.setItem('qah_ph_lastbp', data.bpYC); }catch(e){}
   if(_editingReqId){
     const r=REQS.find(x=>x.id===_editingReqId); if(!r) return;
-    Object.assign(r, data, {editedBy:currentUser?.fullname||'', editedAt:Date.now()});
+    Object.assign(r, data, {editedBy:actorName(), editedAt:Date.now()});
     if(r.status!=='moi') r.bpNhan=document.getElementById('rq-bpnhan').value;
     if(r.status==='xong'){
       r.ngayHT=document.getElementById('rq-ngayht').value||r.ngayHT;
@@ -1350,7 +1481,7 @@ function saveReq(){
     }
     showToast('✅ Đã cập nhật yêu cầu',2000,'success');
   }else{
-    REQS.push({id:newId('PR'), ...data, status:'moi', nguoi:currentUser?.fullname||'', createdAt:Date.now()});
+    REQS.push({id:newId('PR'), ...data, status:'moi', nguoi:actorName(), nguoiEmail:currentUser?.email||'', createdAt:Date.now()});
     showToast('✅ Đã tạo yêu cầu cho phòng '+phong,2000,'success');
   }
   closeModal('req-modal');
@@ -1379,7 +1510,7 @@ function openNhan(id){
 }
 function confirmNhan(){
   const r=REQS.find(x=>x.id===_nhanId); if(!r) return;
-  r.status='nhan'; r.bpNhan=document.getElementById('nh-bp').value; r.nguoiNhan=currentUser?.fullname||''; r.ngayNhan=Date.now();
+  r.status='nhan'; r.bpNhan=document.getElementById('nh-bp').value; r.nguoiNhan=actorName(); r.ngayNhan=Date.now();
   try{ localStorage.setItem('qah_ph_lastnhan', r.bpNhan); }catch(e){}
   closeModal('nhan-modal'); closeModal('detail-modal');
   lsSave(); renderAll();
@@ -1413,7 +1544,7 @@ function confirmXong(){
     loaiLoi:document.getElementById('xg-loi').value||r.loaiLoi||UNCONFIRMED,
     thaoTac:document.getElementById('xg-thaotac').value.trim(),
     tinhTrangSau:document.getElementById('xg-ttsau').value,
-    nguoiHT:currentUser?.fullname||'', htAt:Date.now(),
+    nguoiHT:actorName(), htAt:Date.now(),
   });
   closeModal('xong-modal'); closeModal('detail-modal');
   lsSave(); renderAll();
@@ -1547,7 +1678,7 @@ function renderAll(){
   if(id==='so-do') renderSoDo();
   if(id==='lich-su') renderHistory();
   if(id==='yeu-cau') renderRequests();
-  if(id==='thiet-bi') renderDevices();
+  if(id==='thiet-bi'){ renderDevices(); renderStaffTable(); }
 }
 function toggleAnySidebar(){
   const sb=document.querySelector('.sidebar');
@@ -1576,7 +1707,7 @@ document.getElementById('app-version').textContent='v'+APP_VERSION;
 let _dirty=false;
 function lsSave(){
   _dirty=true;
-  try{ localStorage.setItem(LS_KEY, JSON.stringify({phDevices:DEVICES, phReq:REQS})); }catch(e){ console.warn('LS', e); }
+  try{ localStorage.setItem(LS_KEY, JSON.stringify({phDevices:DEVICES, phReq:REQS, phStaff:STAFF})); }catch(e){ console.warn('LS', e); }
   scheduleFlush();
 }
 function lsLoad(){
@@ -1584,6 +1715,7 @@ function lsLoad(){
     const d=JSON.parse(localStorage.getItem(LS_KEY)||'null'); if(!d) return;
     if(Array.isArray(d.phDevices)) DEVICES=d.phDevices;
     if(Array.isArray(d.phReq)) REQS=d.phReq;
+    if(Array.isArray(d.phStaff)) STAFF=d.phStaff;
   }catch(e){}
 }
 
@@ -1597,6 +1729,7 @@ const _dump=arr=>(arr||[]).filter(x=>x&&x.id!=null).map(x=>({id:String(x.id), ob
 const COLLS={
   phDevices:{ read:()=>_dump(DEVICES), write:r=>{ DEVICES=r.map(x=>x.obj); } },
   phReq:    { read:()=>_dump(REQS),    write:r=>{ REQS=r.map(x=>x.obj); } },
+  phStaff:  { read:()=>_dump(STAFF),   write:r=>{ STAFF=r.map(x=>x.obj); } },
 };
 let lastSnapshot={};
 function setSyncStatus(state){
@@ -1628,8 +1761,9 @@ async function cloudPull(manual){
     });
     cloudReady=true;
     if(ensureDevicesSeeded()) _dirty=true;   // lần đầu: Giám đốc/Quản lý khởi tạo danh sách thiết bị mặc định
-    try{ localStorage.setItem(LS_KEY, JSON.stringify({phDevices:DEVICES, phReq:REQS})); }catch(e){}
+    try{ localStorage.setItem(LS_KEY, JSON.stringify({phDevices:DEVICES, phReq:REQS, phStaff:STAFF})); }catch(e){}
     renderAll();
+    ensureStaffPicked();
     setSyncStatus('ok');
     if(manual) showToast('🔄 Đã tải dữ liệu mới nhất',1800,'success');
     if(_dirty) flushToCloud();
@@ -1689,8 +1823,8 @@ function startRealtime(){
         c.write(rows);
         lastSnapshot[name]=lastSnapshot[name]||{}; lastSnapshot[name][id]=JSON.stringify(obj);
       }
-      try{ localStorage.setItem(LS_KEY, JSON.stringify({phDevices:DEVICES, phReq:REQS})); }catch(e){}
-      clearTimeout(_rtRenderT); _rtRenderT=setTimeout(renderAll, 250);
+      try{ localStorage.setItem(LS_KEY, JSON.stringify({phDevices:DEVICES, phReq:REQS, phStaff:STAFF})); }catch(e){}
+      clearTimeout(_rtRenderT); _rtRenderT=setTimeout(()=>{ renderAll(); if(name==='phStaff') ensureStaffPicked(); }, 250);
     })
     .subscribe(st=>{ if(st==='CHANNEL_ERROR'||st==='TIMED_OUT') setSyncStatus('err'); });
 }
@@ -1735,15 +1869,16 @@ async function enterApp(session){
   let pg='so-do'; try{ pg=localStorage.getItem('qah_ph_page')||'so-do'; }catch(e){}
   if(!PAGE_TITLES[pg]) pg='so-do';
   showPage(pg, document.querySelector(`.nav-item[onclick*="'${pg}'"]`));
+  ensureStaffPicked();   // dùng danh sách đã lưu trên máy; kéo cloud xong kiểm tra lại
   cloudPull().then(()=>{
     startRealtime();
     setInterval(()=>{ if(sb&&cloudReady&&_dirty) flushToCloud(); }, 4000);
     window.addEventListener('online', ()=>cloudPull());
   });
 }
-async function doLogout(){ try{ if(sb) await sb.auth.signOut(); }catch(e){} location.reload(); }
+async function doLogout(){ try{ sessionStorage.removeItem(_staffKey()); }catch(e){} try{ if(sb) await sb.auth.signOut(); }catch(e){} location.reload(); }
 window.addEventListener('beforeunload',()=>{ try{ if(sb&&cloudReady&&_dirty) flushToCloud(); }catch(e){} });
-document.addEventListener('keydown',e=>{ if(e.key==='Escape') document.querySelectorAll('.modal-overlay.open').forEach(m=>m.classList.remove('open')); });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') document.querySelectorAll('.modal-overlay.open').forEach(m=>{ if(!m.dataset.required) m.classList.remove('open'); }); });
 
 if(sb){
   sb.auth.getSession().then(({data})=>{ if(data&&data.session) enterApp(data.session); }).catch(e=>console.warn('getSession',e));
