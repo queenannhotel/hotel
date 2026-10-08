@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.20m';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.20n';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -5821,7 +5821,7 @@ function wsDateKey(){
   return new Date().toISOString().slice(0,10);
 }
 function wsNewRoomData(){
-  return {taskStatus:'',tIn:'',tOut:'',ga:{K:{do:0,sach:0},Q:{do:0,sach:0},T:{do:0,sach:0}},boc:{K:{do:0,sach:0},Q:{do:0,sach:0},T:{do:0,sach:0}},khan:{tay:{do:0,sach:0},tam:{do:0,sach:0},tham:{do:0,sach:0}},kimono:0,ao_goi:0,suoi:0,tra:0,cafe:0,duong:0,ban_chai:0,luoc:0,chup_toc:0,tam_bong:0,dao_cao:0,giay_vs:0};
+  return {taskStatus:'',tIn:'',tOut:'',ga:{K:{do:0,sach:0},Q:{do:0,sach:0},T:{do:0,sach:0}},boc:{K:{do:0,sach:0},Q:{do:0,sach:0},T:{do:0,sach:0}},khan:{tay:{do:0,sach:0},tam:{do:0,sach:0},tham:{do:0,sach:0}},kimono:0,ao_goi:0,suoi:0,tra:0,cafe:0,duong:0,ban_chai:0,luoc:0,chup_toc:0,tam_bong:0,dao_cao:0,giay_vs:0,giay_dai:0,dau_goi:0,sua_tam:0,bao_rac_trang:0,tui_laundry:0,note_pad:0,pencil:0,guest_com:0};
 }
 function getWsDataForDate(dateKey){
   if(!WS_DATA_BY_DATE[dateKey]){
@@ -6020,6 +6020,7 @@ function renderWorksheet(){
       <th rowspan="3" class="group-header" style="background:#3a3060;color:#d4b8ff;min-width:42px;">Áo gối</th>
       <th colspan="4" class="group-header" style="border-bottom:none;">Amenity</th>
       <th colspan="6" class="group-header" style="border-bottom:none;">Vệ sinh</th>
+      <th colspan="8" class="group-header" style="border-bottom:none;">Khác</th>
     </tr>
     <tr>
       <th colspan="3" class="group-header" style="background:#4a1f1f;color:#ffb3b3;">DƠ</th>
@@ -6030,6 +6031,7 @@ function renderWorksheet(){
       <th colspan="3" class="group-header" style="background:#1a3a2a;color:#a3f0c4;">SẠCH</th>
       <th colspan="4" class="group-header" style="background:#243459;">Amenity</th>
       <th colspan="6" class="group-header" style="background:#243459;">Vệ sinh</th>
+      <th colspan="8" class="group-header" style="background:#243459;">Khác</th>
     </tr>
     <tr>
       ${dC(['K','Q','T'])}${cC(['K','Q','T'])}
@@ -6037,6 +6039,7 @@ function renderWorksheet(){
       ${dC(['Tay','Tắm','Thảm'])}${cC(['Tay','Tắm','Thảm'])}
       <th class="group-header">Suối</th><th class="group-header">Trà</th><th class="group-header">Cà phê</th><th class="group-header">Đường</th>
       <th class="group-header">Bchải</th><th class="group-header">Lược</th><th class="group-header">Chtóc</th><th class="group-header">Tbông</th><th class="group-header">Dao CR</th><th class="group-header">Giấy VS</th>
+      <th class="group-header">Giấy dài</th><th class="group-header">Dầu gội</th><th class="group-header">Sữa tắm</th><th class="group-header">Bao rác T</th><th class="group-header">Túi LDR</th><th class="group-header">Notepad</th><th class="group-header">Pencil</th><th class="group-header">GuestCom</th>
     </tr>`;
   const OPT05=[0,1,2,3,4,5].map(n=>`<option value="${n}">${n}</option>`).join('');
   const OPT08=[0,1,2,3,4,5,6,7,8].map(n=>`<option value="${n}">${n}</option>`).join('');
@@ -6070,6 +6073,7 @@ function renderWorksheet(){
       <td style="background:#f0eeff;">${sel(WS_DATA[r].ao_goi||0,'#f0eeff',`wsSetSingle('${r}','ao_goi',this.value)`,OPT08)}</td>
       ${inpSc(r,'suoi')}${inpSc(r,'tra')}${inpSc(r,'cafe')}${inpSc(r,'duong')}
       ${inpSc(r,'ban_chai')}${inpSc(r,'luoc')}${inpSc(r,'chup_toc')}${inpSc(r,'tam_bong')}${inpSc(r,'dao_cao')}${inpSc(r,'giay_vs')}
+      ${inpSc(r,'giay_dai')}${inpSc(r,'dau_goi')}${inpSc(r,'sua_tam')}${inpSc(r,'bao_rac_trang')}${inpSc(r,'tui_laundry')}${inpSc(r,'note_pad')}${inpSc(r,'pencil')}${inpSc(r,'guest_com')}
     </tr>`;
   });
   const sm=(key,sub,fld)=>rooms.reduce((s,r)=>s+(WS_DATA[r][key][sub]?.[fld]||0),0);
@@ -6090,6 +6094,10 @@ function renderWorksheet(){
     <td style="text-align:center;">${smS('ban_chai')}</td><td style="text-align:center;">${smS('luoc')}</td>
     <td style="text-align:center;">${smS('chup_toc')}</td><td style="text-align:center;">${smS('tam_bong')}</td>
     <td style="text-align:center;">${smS('dao_cao')}</td><td style="text-align:center;">${smS('giay_vs')}</td>
+    <td style="text-align:center;">${smS('giay_dai')}</td><td style="text-align:center;">${smS('dau_goi')}</td>
+    <td style="text-align:center;">${smS('sua_tam')}</td><td style="text-align:center;">${smS('bao_rac_trang')}</td>
+    <td style="text-align:center;">${smS('tui_laundry')}</td><td style="text-align:center;">${smS('note_pad')}</td>
+    <td style="text-align:center;">${smS('pencil')}</td><td style="text-align:center;">${smS('guest_com')}</td>
   </tr>`;
   document.getElementById('ws-tbody').innerHTML=rows.join('')+totalRow;
   const banner=document.getElementById('ws-lock-banner');
@@ -6699,8 +6707,8 @@ function snapshotWsToDate(dateKey){
   HV_DIRTY_BY_DATE[dayLabel]=calcHvDirtyForDay(dayLabel);
 }
 
-const AM_ITEMS=['Suối','Trà','Cà phê','Đường','Bàn chải','Lược','Chụp tóc','Tăm bông','Dao cạo râu','Giấy vệ sinh'];
-const AM_WS_KEYS={Suối:'suoi',Trà:'tra','Cà phê':'cafe',Đường:'duong','Bàn chải':'ban_chai',Lược:'luoc','Chụp tóc':'chup_toc','Tăm bông':'tam_bong','Dao cạo râu':'dao_cao','Giấy vệ sinh':'giay_vs'};
+const AM_ITEMS=['Suối','Trà','Cà phê','Đường','Bàn chải','Lược','Chụp tóc','Tăm bông','Dao cạo râu','Giấy vệ sinh','Giấy dài','Dầu gội','Sữa tắm','Bao rác trắng','Túi laundry','Note pad','Pencil','GuestCom'];
+const AM_WS_KEYS={Suối:'suoi',Trà:'tra','Cà phê':'cafe',Đường:'duong','Bàn chải':'ban_chai',Lược:'luoc','Chụp tóc':'chup_toc','Tăm bông':'tam_bong','Dao cạo râu':'dao_cao','Giấy vệ sinh':'giay_vs','Giấy dài':'giay_dai','Dầu gội':'dau_goi','Sữa tắm':'sua_tam','Bao rác trắng':'bao_rac_trang','Túi laundry':'tui_laundry','Note pad':'note_pad','Pencil':'pencil','GuestCom':'guest_com'};
 function renderAmenity(){
   const thang=document.getElementById('am-thang')?.value||curMonth();
   const [y,m]=thang.split('-').map(Number);
@@ -7187,6 +7195,8 @@ function renderSetupXe(){
     'Áo gối':(ws)=>ws.ao_goi.sach||0,
     'Suối free':(ws)=>ws.suoi||0,'Trà':(ws)=>ws.tra||0,'Cafe':(ws)=>ws.cafe||0,'Đường gói':(ws)=>ws.duong||0,
     'Bàn chải':(ws)=>ws.ban_chai||0,'Lược':(ws)=>ws.luoc||0,'Chùm tóc':(ws)=>ws.chup_toc||0,'Tăm bông':(ws)=>ws.tam_bong||0,
+    'Giấy dài':(ws)=>ws.giay_dai||0,'Dầu gội':(ws)=>ws.dau_goi||0,'Sữa tắm':(ws)=>ws.sua_tam||0,'Bao rác trắng':(ws)=>ws.bao_rac_trang||0,
+    'Túi laundry':(ws)=>ws.tui_laundry||0,'Note pad':(ws)=>ws.note_pad||0,'Pencil':(ws)=>ws.pencil||0,'GuestCom':(ws)=>ws.guest_com||0,
   };
   document.getElementById('sx-tbody').innerHTML=SX_DATA.map((sx,idx)=>{
     let tt=0;
