@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.20n';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.20o';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -1195,6 +1195,7 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
             <button class="btn btn-gold btn-sm" onclick="openQuyTx('nop')">⬆ Nộp tiền</button>
             <button class="btn btn-ghost btn-sm" onclick="openQuyUng()">📝 Yêu cầu ứng tiền</button>
             <button id="qtm-kt-recalc" class="btn btn-ghost btn-sm" onclick="quyKtRecalcSoDu()" title="Tính lại số dư từng dòng theo đúng ngày phiếu (chỉ Giám đốc)" style="display:none;">🔄 Tính lại số dư</button>
+            <button class="btn btn-ghost btn-sm" onclick="openQuyKtAudit()" title="Liệt kê mọi dòng Thu/Chi tiền mặt + Nộp/Ứng theo ngày kèm số dư luỹ kế — để dò chỗ số dư sai và xem số dư tại từng thời điểm">📋 Đối chiếu số dư</button>
           </div>
         </div>
         <div class="table-wrap wide"><table><thead><tr><th>Ngày</th><th>Loại</th><th>Số tiền</th><th>Số dư</th><th>Lý do</th><th>Người</th><th>Thao tác</th></tr></thead><tbody id="qtm-kt-body"></tbody></table></div>
@@ -1255,6 +1256,23 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
           <button class="btn btn-ghost" onclick="closeModal('modal-quy-tx')">Huỷ</button>
           <button class="btn btn-gold" onclick="saveQuyTx()">✅ Lưu</button>
         </div>
+      </div>
+    </div>
+
+    <!-- MODAL đối chiếu số dư tiền mặt Kế toán (chỉ xem) -->
+    <div class="modal-overlay" id="modal-qtm-audit">
+      <div class="modal modal-lg">
+        <div class="modal-header"><span class="modal-title">📋 Đối chiếu số dư Quỹ TM Kế toán</span><button class="close-btn" onclick="closeModal('modal-qtm-audit')">✕</button></div>
+        <div style="font-size:12px;color:var(--text-muted);margin:-4px 0 10px;">Mọi dòng tiền mặt của ví Kế toán theo thứ tự ngày, kèm <b>số dư luỹ kế</b>. Dùng để dò chỗ số dư lệch và đọc số dư tại từng thời điểm. <b>Bảng chỉ để xem — không sửa dữ liệu.</b></div>
+        <div id="qtm-audit-summary" style="font-size:12px;line-height:1.7;background:var(--gold-pale);border:1px solid rgba(201,168,76,.35);border-radius:8px;padding:8px 12px;margin-bottom:10px;"></div>
+        <div class="filter-row" style="margin-bottom:8px;">
+          <span style="font-size:12px;color:var(--text-muted);">Từ</span>
+          <input type="date" id="qtm-audit-from" onchange="renderQuyKtAudit()" style="width:140px;font-size:12px;padding:6px 10px;">
+          <span style="font-size:12px;color:var(--text-muted);">→</span>
+          <input type="date" id="qtm-audit-to" onchange="renderQuyKtAudit()" style="width:140px;font-size:12px;padding:6px 10px;">
+          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('qtm-audit-from').value='';document.getElementById('qtm-audit-to').value='';renderQuyKtAudit();">Xoá lọc</button>
+        </div>
+        <div class="table-wrap wide" style="max-height:60vh;overflow:auto;"><table><thead><tr><th>Ngày</th><th>Loại</th><th>Số tiền</th><th>Trạng thái</th><th>Nội dung</th><th>Số dư luỹ kế</th></tr></thead><tbody id="qtm-audit-body"></tbody></table></div>
       </div>
     </div>
 
@@ -4549,6 +4567,56 @@ function quyKtRunningMap(){
     .forEach(t=>{ if(t.kind==='nop') nop+=(parseFloat(t.sotien)||0); else ung+=(parseFloat(t.sotien)||0);
       bal[t.id]=cashActual(vnToIso(t.ngay)) - nop + ung; });
   return bal;
+}
+// ĐỐI CHIẾU (chỉ xem): mọi dòng tiền mặt ảnh hưởng ví Kế toán, sort theo ngày, kèm số dư luỹ kế.
+// Dòng cuối (toàn bộ, không lọc ngày) phải === quyKtBalance(). Thứ tự cùng ngày: Ứng→Nộp→Thu→Chi.
+const _AUDIT_RANK={ung:0,nop:1,thu:2,chi:3};
+function quyKtAuditRows(){
+  const ev=[];
+  THU_DATA.forEach(r=>{ thuLines(r).forEach(l=>{
+    if(l.pttt==='TM' && (!l.currency||l.currency==='VND'))
+      ev.push({iso:vnToIso(r.ngay), ngay:r.ngay, kind:'thu', loai:'Thu TM', amt:+(parseFloat(l.sotien)||0), st:'', mota:r.mota||r.danhmuc||''});
+  }); });
+  CHI_DATA.filter(r=>r.pttt==='TM').forEach(r=>{
+    ev.push({iso:vnToIso(r.ngay), ngay:r.ngay, kind:'chi', loai:'Chi TM', amt:-(parseFloat(chiAmt(r))||0), st:r.tinh_trang||'', mota:r.mota||''});
+  });
+  QUY_TX.filter(t=>['nop','ung'].includes(t.kind)).forEach(t=>{
+    const isNop=t.kind==='nop';
+    ev.push({iso:vnToIso(t.ngay), ngay:t.ngay, kind:isNop?'nop':'ung', loai:isNop?'Nộp Thủ quỹ':'Ứng từ Thủ quỹ', amt:isNop?-(parseFloat(t.sotien)||0):+(parseFloat(t.sotien)||0), st:'', mota:t.lydo||''});
+  });
+  ev.sort((a,b)=> a.iso.localeCompare(b.iso) || ((_AUDIT_RANK[a.kind]??9)-(_AUDIT_RANK[b.kind]??9)));
+  let run=0; ev.forEach(e=>{ run+=e.amt; e.bal=run; });
+  return ev;
+}
+function openQuyKtAudit(){ renderQuyKtAudit(); openModal('modal-qtm-audit'); }
+function renderQuyKtAudit(){
+  const rows=quyKtAuditRows();
+  // Tóm tắt trên toàn bộ (không phụ thuộc lọc ngày)
+  const sumKind=k=>rows.filter(r=>r.kind===k).reduce((s,r)=>s+r.amt,0);
+  const thu=sumKind('thu'), nop=-sumKind('nop'), ung=sumKind('ung');
+  const chiRows=rows.filter(r=>r.kind==='chi');
+  const chiDone=-chiRows.filter(r=>r.st==='hoan-thanh').reduce((s,r)=>s+r.amt,0);
+  const chiPend=-chiRows.filter(r=>r.st!=='hoan-thanh').reduce((s,r)=>s+r.amt,0);
+  const cuoi=rows.length?rows[rows.length-1].bal:0;
+  const sm=document.getElementById('qtm-audit-summary');
+  if(sm) sm.innerHTML=`Tổng Thu TM: <b style="color:var(--green);">${fmt(thu)}</b> · Tổng Chi TM: <b style="color:var(--red);">${fmt(chiDone+chiPend)}</b> (hoàn thành ${fmt(chiDone)}${chiPend?` · <span style="color:var(--yellow);">đang xử lý ${fmt(chiPend)}</span>`:''}) · Đã nộp: <b>${fmt(nop)}</b> · Đã ứng: <b>${fmt(ung)}</b><br>Số dư cuối (phải khớp ô lớn): <b style="color:var(--yellow);font-size:14px;">${fmt(cuoi)}</b>`;
+  const from=document.getElementById('qtm-audit-from')?.value||'', to=document.getElementById('qtm-audit-to')?.value||'';
+  const view=rows.filter(r=>(!from||r.iso>=from)&&(!to||r.iso<=to));
+  const stTxt={'hoan-thanh':'Hoàn thành','dang-len-don':'Đang lên đơn','dang-giao':'Đang giao'};
+  const body=document.getElementById('qtm-audit-body');
+  if(!body) return;
+  body.innerHTML=view.length?view.map(r=>{
+    const pend=r.kind==='chi'&&r.st!=='hoan-thanh';
+    const col=r.amt>=0?'var(--green)':'var(--red)';
+    return `<tr${pend?' style="background:rgba(201,168,76,.12);"':''}>
+      <td style="font-size:12px;white-space:nowrap;">${r.ngay}</td>
+      <td style="font-size:12px;">${r.loai}</td>
+      <td style="font-weight:700;color:${col};white-space:nowrap;">${r.amt>=0?'+':'−'}${fmt(Math.abs(r.amt))}</td>
+      <td style="font-size:11px;">${r.kind==='chi'?(stTxt[r.st]||r.st||'')+(pend?' <span style="color:var(--yellow);">(chưa chi thật)</span>':''):'—'}</td>
+      <td style="font-size:12px;">${esc(r.mota)||'—'}</td>
+      <td style="font-weight:700;white-space:nowrap;">${fmt(r.bal)}</td>
+    </tr>`;
+  }).join(''):`<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted);">Không có dòng nào trong khoảng ngày đã chọn</td></tr>`;
 }
 function renderQuyKt(){
   const setT=(id,v)=>{const e=document.getElementById(id); if(e) e.textContent=v;};
