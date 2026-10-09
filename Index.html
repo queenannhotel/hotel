@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.20p';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.20q';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -4569,13 +4569,14 @@ function quyKtRunningMap(){
   return bal;
 }
 // ĐỐI CHIẾU (chỉ xem): mọi dòng tiền mặt ảnh hưởng ví Kế toán, sort theo ngày, kèm số dư luỹ kế.
-// Dòng cuối (toàn bộ, không lọc ngày) phải === quyKtBalance(). Thứ tự cùng ngày: Ứng(đầu ca)→Thu→Chi→Nộp(cuối ca).
-const _AUDIT_RANK={ung:0,thu:1,chi:2,nop:3};
+// Dòng cuối (toàn bộ, không lọc ngày) phải === quyKtBalance().
+// Thứ tự cùng ngày: Thu DT phòng(hôm trước)→Ứng(đầu ca)→Thu→Chi→Nộp(cuối ca).
+const _AUDIT_RANK={'thu-phong':0,ung:1,thu:2,chi:3,nop:4};
 function quyKtAuditRows(){
   const ev=[];
-  THU_DATA.forEach(r=>{ thuLines(r).forEach(l=>{
+  THU_DATA.forEach(r=>{ const isRoom=r.danhmuc==='Doanh thu phòng'; thuLines(r).forEach(l=>{
     if(l.pttt==='TM' && (!l.currency||l.currency==='VND'))
-      ev.push({iso:vnToIso(r.ngay), ngay:r.ngay, kind:'thu', loai:'Thu TM', amt:+(parseFloat(l.sotien)||0), st:'', mota:r.mota||r.danhmuc||''});
+      ev.push({iso:vnToIso(r.ngay), ngay:r.ngay, kind:isRoom?'thu-phong':'thu', loai:isRoom?'Thu DT phòng':'Thu TM', amt:+(parseFloat(l.sotien)||0), st:'', mota:r.mota||r.danhmuc||''});
   }); });
   CHI_DATA.filter(r=>r.pttt==='TM').forEach(r=>{
     ev.push({iso:vnToIso(r.ngay), ngay:r.ngay, kind:'chi', loai:'Chi TM', amt:-(parseFloat(chiAmt(r))||0), st:r.tinh_trang||'', mota:r.mota||''});
@@ -4593,7 +4594,7 @@ function renderQuyKtAudit(){
   const rows=quyKtAuditRows();
   // Tóm tắt trên toàn bộ (không phụ thuộc lọc ngày)
   const sumKind=k=>rows.filter(r=>r.kind===k).reduce((s,r)=>s+r.amt,0);
-  const thu=sumKind('thu'), nop=-sumKind('nop'), ung=sumKind('ung');
+  const thu=rows.filter(r=>r.kind==='thu'||r.kind==='thu-phong').reduce((s,r)=>s+r.amt,0), nop=-sumKind('nop'), ung=sumKind('ung');
   const chiRows=rows.filter(r=>r.kind==='chi');
   const chiDone=-chiRows.filter(r=>r.st==='hoan-thanh').reduce((s,r)=>s+r.amt,0);
   const chiPend=-chiRows.filter(r=>r.st!=='hoan-thanh').reduce((s,r)=>s+r.amt,0);
