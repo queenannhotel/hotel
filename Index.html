@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.20q';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.20r';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -4570,8 +4570,9 @@ function quyKtRunningMap(){
 }
 // ĐỐI CHIẾU (chỉ xem): mọi dòng tiền mặt ảnh hưởng ví Kế toán, sort theo ngày, kèm số dư luỹ kế.
 // Dòng cuối (toàn bộ, không lọc ngày) phải === quyKtBalance().
-// Thứ tự cùng ngày: Thu DT phòng(hôm trước)→Ứng(đầu ca)→Thu→Chi→Nộp(cuối ca).
-const _AUDIT_RANK={'thu-phong':0,ung:1,thu:2,chi:3,nop:4};
+// Thứ tự cùng ngày: Ứng(đầu ca)→Chi→Thu(trừ DT phòng)→Nộp→Doanh thu phòng.
+// (DT phòng nằm sau Nộp = khoản thu đầu ca ngày hôm sau, tức doanh thu phòng của hôm trước.)
+const _AUDIT_RANK={ung:0,chi:1,thu:2,nop:3,'thu-phong':4};
 function quyKtAuditRows(){
   const ev=[];
   THU_DATA.forEach(r=>{ const isRoom=r.danhmuc==='Doanh thu phòng'; thuLines(r).forEach(l=>{
