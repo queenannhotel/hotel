@@ -1,5 +1,5 @@
-// Queen Ann Hotel — Service Worker v54
-const CACHE='queen-ann-v54';
+// Queen Ann Hotel — Service Worker v55
+const CACHE='queen-ann-v55';
 
 self.addEventListener('install', e=>{
   self.skipWaiting();

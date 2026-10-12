@@ -934,9 +934,10 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
 // Trạng thái thiết bị ở Sơ đồ phòng (Tab 1) được TÍNH từ yêu cầu mới nhất của phòng + thiết bị đó,
 // nên mọi tab luôn khớp nhau.
 const LS_KEY='queen_ann_phong_v1';
-const APP_VERSION='2026.09.28a';
+const APP_VERSION='2026.09.28b';
 const SUPABASE_URL      = 'https://hlwixtocadqyodecezer.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_EhmK2BPqqcXP3tN9rxV7cQ_NXQ1pvsj';
+const VAPID_PUBLIC_KEY  = 'BH14kTCMnOAwrOp0KoG9mb1lLfW9KbCOgBBfGWBpm5vZeTTo3st_hD-u5MJdaue-sK0IChKNVQ3Xc8MIiZuxSPM';
 
 // ----- Sơ đồ phòng: mỗi dòng = 1 tầng -----
 const FLOORS=(()=>{
@@ -1482,6 +1483,7 @@ function saveReq(){
     showToast('✅ Đã cập nhật yêu cầu',2000,'success');
   }else{
     REQS.push({id:newId('PR'), ...data, status:'moi', nguoi:actorName(), nguoiEmail:currentUser?.email||'', createdAt:Date.now()});
+    sendPush('🔧 Yêu Cầu Sửa Chữa Mới', `P.${phong} · ${thietBi}${data.loaiLoi&&data.loaiLoi!==UNCONFIRMED?' — '+data.loaiLoi:''}`, 'sua-chua', '/hotel/Phong.html', 'tinh-trang-phong');
     showToast('✅ Đã tạo yêu cầu cho phòng '+phong,2000,'success');
   }
   closeModal('req-modal');
@@ -1875,10 +1877,57 @@ async function enterApp(session){
     setInterval(()=>{ if(sb&&cloudReady&&_dirty) flushToCloud(); }, 4000);
     window.addEventListener('online', ()=>cloudPull());
   });
+  subscribeToPush();   // đăng ký nhận push cho thiết bị này (vd Kỹ thuật)
 }
 async function doLogout(){ try{ sessionStorage.removeItem(_staffKey()); }catch(e){} try{ if(sb) await sb.auth.signOut(); }catch(e){} location.reload(); }
 window.addEventListener('beforeunload',()=>{ try{ if(sb&&cloudReady&&_dirty) flushToCloud(); }catch(e){} });
 document.addEventListener('keydown',e=>{ if(e.key==='Escape') document.querySelectorAll('.modal-overlay.open').forEach(m=>{ if(!m.dataset.required) m.classList.remove('open'); }); });
+
+// ===== PWA SERVICE WORKER + WEB PUSH (dùng chung sw.js & Edge Function send-push với web Kế toán) =====
+let swReg=null, _swReloaded=false;
+async function registerSW(){
+  if(!('serviceWorker' in navigator)) return;
+  try{
+    swReg=await navigator.serviceWorker.register('/hotel/sw.js', {updateViaCache:'none'});
+    try{ swReg.update(); }catch(_){}
+    navigator.serviceWorker.addEventListener('controllerchange', ()=>{ if(_swReloaded) return; _swReloaded=true; try{ location.reload(); }catch(_){} });
+  }catch(e){ console.warn('[SW] Register failed:', e); }
+}
+async function requestNotifPermission(){
+  if(!('Notification' in window)) return false;
+  if(Notification.permission==='granted') return true;
+  return (await Notification.requestPermission())==='granted';
+}
+function urlBase64ToUint8Array(base64String){
+  const padding='='.repeat((4 - base64String.length % 4) % 4);
+  const base64=(base64String+padding).replace(/-/g,'+').replace(/_/g,'/');
+  const raw=atob(base64); const arr=new Uint8Array(raw.length);
+  for(let i=0;i<raw.length;i++) arr[i]=raw.charCodeAt(i);
+  return arr;
+}
+async function currentPushEndpoint(){
+  try{ const reg=await navigator.serviceWorker.ready; const s=await reg.pushManager.getSubscription(); return s?s.endpoint:null; }catch(e){ return null; }
+}
+async function subscribeToPush(){
+  try{
+    if(!sb || !('serviceWorker' in navigator) || !('PushManager' in window) || !VAPID_PUBLIC_KEY) return;
+    const granted=await requestNotifPermission(); if(!granted) return;
+    const reg=await navigator.serviceWorker.ready;
+    let sub=await reg.pushManager.getSubscription();
+    if(!sub) sub=await reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:urlBase64ToUint8Array(VAPID_PUBLIC_KEY)});
+    await sb.from('push_subscriptions').upsert(
+      {endpoint:sub.endpoint, email:currentUser?.email||'', subscription:sub.toJSON(), updated_at:new Date().toISOString()},
+      {onConflict:'endpoint'});
+  }catch(e){ console.warn('subscribeToPush',e); }
+}
+async function sendPush(title, body, tag='queen-ann', url='/hotel/Phong.html', tab='', ownerEmail=''){
+  try{
+    if(!sb) return;
+    const excludeEndpoint=await currentPushEndpoint();
+    await sb.functions.invoke('send-push',{body:{title, body, tag, url, tab, ownerEmail, excludeEndpoint}});
+  }catch(e){ console.warn('sendPush',e); }
+}
+registerSW();
 
 if(sb){
   sb.auth.getSession().then(({data})=>{ if(data&&data.session) enterApp(data.session); }).catch(e=>console.warn('getSession',e));
