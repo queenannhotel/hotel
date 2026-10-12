@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.20r';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.20s';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -822,6 +822,15 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
   </div>
 </div>
 
+<!-- =================== CHỌN TÊN (email dùng chung) =================== -->
+<div id="profile-screen" style="display:none;">
+  <div class="login-box">
+    <div class="login-logo">👑 Queen Ann Hotel</div>
+    <div class="login-sub">Chọn tên người dùng · Bộ phận Buồng phòng</div>
+    <div id="profile-list" style="display:flex;flex-direction:column;gap:10px;margin-top:14px;"></div>
+  </div>
+</div>
+
 <!-- =================== APP =================== -->
 <div id="app">
 <aside class="sidebar">
@@ -863,6 +872,7 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
       <div class="su-name" id="su-name">Kế toán trưởng</div>
       <div class="su-role" id="su-role">Kế toán</div>
     </div>
+    <button class="logout-btn" id="btn-switch-user" onclick="switchSharedProfile()" title="Đổi người dùng" style="display:none;">👤 Đổi</button>
     <button class="logout-btn" onclick="doLogout()" title="Đăng xuất">⏻ Ra</button>
   </div>
   <div id="app-version" style="text-align:center;font-size:10px;color:rgba(255,255,255,.35);padding:4px 0 6px;">v—</div>
@@ -3407,6 +3417,11 @@ function populateThuDropdowns(){
 // ==================== END HOTFIX ====================
 
 // ==================== ACCOUNTS & AUTH ====================
+// Email DÙNG CHUNG cho nhiều người (vd Buồng phòng): khi đăng nhập chọn tên → gắn vào cột "Người".
+// Quyền hạn chung cho cả email (theo app_metadata Supabase). Thêm/bớt tên = sửa danh sách ở đây.
+const SHARED_LOGIN_PROFILES = { 'hkqasg8688@gmail.com': ['Khang','Lan Anh','Thư','Bảo','Vy'] };
+function sharedProfilesFor(email){ return SHARED_LOGIN_PROFILES[(email||'').trim().toLowerCase()] || null; }
+
 const ROLE_META = {
   giamdoc:   {label:'Giám đốc',       color:'#B7860A', bg:'#FFF8E7'},
   ketoan:    {label:'Kế toán trưởng', color:'#2E7D5B', bg:'#EAF5F0'},
@@ -3466,6 +3481,43 @@ function currentUserFromSession(session){
   };
 }
 
+// ===== Email dùng chung: chọn TÊN người dùng khi đăng nhập =====
+// Hiện màn chọn tên; resolve với tên được bấm.
+function pickSharedProfile(list){
+  return new Promise(resolve=>{
+    const box=document.getElementById('profile-list');
+    box.innerHTML='';
+    list.forEach(name=>{
+      const b=document.createElement('button');
+      b.className='login-btn'; b.textContent='👤 '+name;
+      b.onclick=()=>{ document.getElementById('profile-screen').style.display='none'; resolve(name); };
+      box.appendChild(b);
+    });
+    const ls=document.getElementById('login-screen'); if(ls) ls.style.display='none';
+    const app=document.getElementById('app'); if(app) app.style.display='none';
+    document.getElementById('profile-screen').style.display='flex';
+  });
+}
+// Nếu email dùng chung → đảm bảo currentUser.fullname là tên đã chọn (lấy từ localStorage hoặc hỏi).
+async function applySharedProfile(u){
+  const list=sharedProfilesFor(u&&u.email); if(!list||!list.length) return;
+  const key='qah_profile_'+u.email;
+  let name=null; try{ name=localStorage.getItem(key); }catch(_){}
+  if(!name || !list.includes(name)){
+    name=await pickSharedProfile(list);
+    try{ localStorage.setItem(key,name); }catch(_){}
+  }
+  u.fullname=name;
+}
+// Nút "Đổi người": chọn lại tên rồi tải lại trang (phiên vẫn còn → enterApp đọc tên mới).
+function switchSharedProfile(){
+  const list=sharedProfilesFor(currentUser&&currentUser.email); if(!list) return;
+  pickSharedProfile(list).then(name=>{
+    try{ localStorage.setItem('qah_profile_'+currentUser.email,name); }catch(_){}
+    location.reload();
+  });
+}
+
 // Danh sách bộ phận của 1 user (hỗ trợ nhiều bộ phận). Tương thích user chỉ có `bophan`.
 function userBophans(u){
   if(u && Array.isArray(u.bophans) && u.bophans.length) return u.bophans;
@@ -3491,10 +3543,13 @@ async function doLogin(){
 async function enterApp(session){
   currentUser=currentUserFromSession(session);
   if(!currentUser) return;
+  // Email dùng chung (vd Buồng phòng): chọn tên người dùng trước khi vào app
+  await applySharedProfile(currentUser);
   // Vai trò Kỹ thuật chỉ dùng web Tình trạng phòng → chuyển thẳng sang đó, không mở web Kế toán
   if(currentUser.role==='kythuat'){ location.replace('Phong.html'); return; }
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='flex';
+  { const sw=document.getElementById('btn-switch-user'); if(sw) sw.style.display=sharedProfilesFor(currentUser.email)?'':'none'; }
   applyPermissions();               // áp quyền mặc định theo vai trò ngay
   await loadUserPerms();            // lấy quyền tab tuỳ chỉnh của Giám đốc (nếu có)
   applyPermissions();               // áp lại theo tab tuỳ chỉnh
