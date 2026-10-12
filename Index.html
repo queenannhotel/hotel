@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.20s';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.20t';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -4873,7 +4873,8 @@ function saveQuyUng(){
   const chiIds=qungCheckedIds(), khacAmount=parseFloat(document.getElementById('qung-khac').value)||0, tongDuChi=qungCalcTong();
   const khoanChiText=document.getElementById('qung-text').value.trim(), ngay=iso.split('-').reverse().join('/'), editId=document.getElementById('qung-edit').value;
   if(editId){ const d=QUY_UNG.find(x=>x.id===editId); if(d&&canEditQuyUng(d)) Object.assign(d,{ngay,soCanUng,chiIds,khacAmount,tongDuChi,khoanChiText}); }
-  else QUY_UNG.push({id:'AR'+Date.now(), ngay, soCanUng, chiIds, khoanChiText, khacAmount, tongDuChi, status:'cho', soDuyet:0, nguoi:currentUser?.fullname||currentUser?.role||''});
+  else { QUY_UNG.push({id:'AR'+Date.now(), ngay, soCanUng, chiIds, khoanChiText, khacAmount, tongDuChi, status:'cho', soDuyet:0, nguoi:currentUser?.fullname||currentUser?.role||''});
+    sendPush('💵 Yêu Cầu Ứng Tiền Mới', `${currentUser?.fullname||'Kế toán'} cần ứng ${fmt(soCanUng)}${khoanChiText?' — '+khoanChiText:''}`, 'ung-tien', '/hotel/Index.html', 'quy-tien-mat'); }
   closeModal('modal-quy-ung');
   renderQuyTienMat(); syncNow();
   showToast('✅ Đã lưu yêu cầu ứng tiền',2200,'success');
@@ -10202,6 +10203,7 @@ function saveTr(){
     const today=new Date().toLocaleDateString('vi-VN');
     const code=String(TR_DATA.filter(d=>d.ngay===today).length+1).padStart(2,'0');
     TR_DATA.unshift({id:'TR'+Date.now(), code, bophan, nguoi:currentUser?.fullname||'', email:currentUser?.email||'', ngay:today, status:'cho-duyet', items, ghichu:''});
+    sendPush('🔄 Yêu Cầu Transfer Mới', `${BP_LABELS[bophan]||bophan} yêu cầu chuyển ${items.length} mặt hàng`, 'transfer', '/hotel/Index.html', 'yeu-cau-transfer');
   }
   closeModal('modal-tr');
   renderTrTab(); syncNow();
