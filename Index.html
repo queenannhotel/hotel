@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.20u';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.20v';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -8308,6 +8308,7 @@ function switchYcTab(tab, el){
   document.getElementById('yc-panel-ds').style.display=tab==='ds'?'block':'none';
   document.getElementById('yc-panel-tk').style.display=tab==='tk'?'block':'none';
   document.getElementById('yc-panel-xoa').style.display=tab==='xoa'?'block':'none';
+  if(tab==='ds') renderYeuCau();   // render lại Danh sách — nếu không, chuyển tab về sẽ thấy bản render cũ (rỗng) dù YC_DATA đã có dữ liệu sau khi đồng bộ
   if(tab==='tk') renderYeuCauStats();
   if(tab==='xoa') renderYcDeleted();
 }
@@ -11108,7 +11109,10 @@ function _notifySyncErr(force){
 let _renderQ=new Set(), _renderTimer=null;
 // Chỉ dựng lại DOM của tab ĐANG mở khi có thay đổi nền (realtime/pull) — bảng ẩn để dành, render lại khi chuyển tab.
 function _pageActive(pageId){ const a=document.querySelector('.page.active'); return !!a && a.id==='page-'+pageId; }
-function _shouldRenderColl(name){ const tab=COLLECTION_TAB[name]; return !tab || _pageActive(tab); }
+// Trang render của yc/ycDeleted là 'khach-yeu-cau' (đã tách riêng khỏi 'buong-phong');
+// COLLECTION_TAB giữ 'buong-phong' cho phân quyền GHI (khớp RLS) nên không dùng được để quyết định render.
+function _renderPageOf(name){ return (name==='yc'||name==='ycDeleted') ? 'khach-yeu-cau' : COLLECTION_TAB[name]; }
+function _shouldRenderColl(name){ const tab=_renderPageOf(name); return !tab || _pageActive(tab); }
 // Debounce ô tìm kiếm: chờ ngừng gõ ~200ms mới dựng lại bảng (khỏi rebuild theo từng phím → gõ mượt).
 const _searchDebT={};
 function debSearch(key,fn){ clearTimeout(_searchDebT[key]); _searchDebT[key]=setTimeout(fn,200); }
