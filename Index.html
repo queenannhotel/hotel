@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.20t';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.20u';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -8213,6 +8213,7 @@ function saveYeuCau(){
   services.forEach(svc=>{ if(svc.loai==='thay-do'||svc.loai==='them-do') pushYcToHvAndAmenity({...newYc, loai:svc.loai, loaiLabel:svc.loaiLabel, items:svc.items}); });
   notifyYeuCauMoi(phong, newYc.loaiLabel, newYc.gio);
   closeModal('modal-bp-yc');renderYeuCau();renderYeuCauStats();
+  syncNow();   // LƯU + ĐẨY CLOUD ngay — nếu không, yêu cầu mới chỉ nằm trong bộ nhớ máy tạo, máy khác không thấy (dù đã bắn thông báo)
 }
 function renderYeuCau(){
   try{ syncMobNotif(); }catch(e){}   // cập nhật badge Khách Yêu Cầu (không phụ thuộc bộ lọc)
