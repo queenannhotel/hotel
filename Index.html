@@ -8220,6 +8220,10 @@ function renderYeuCau(){
   const fL=document.getElementById('yc-f-loai')?.value||'';
   const fS=document.getElementById('yc-f-status')?.value||'';
   const rows=YC_DATA.filter(yc=>(!fL||ycServices(yc).some(s=>s.loaiLabel===fL))&&(!fS||yc.status===fS));
+  // Thứ tự: Chờ xử lý → Đang xử lý → Hoàn thành; trong mỗi nhóm: ngày + giờ mới nhất ở trên
+  const ST_ORDER={'cho-xu-ly':0,'dang-xu-ly':1,'hoan-thanh':2};
+  const ycSortKey=yc=>`${bpViDateToISO(yc.ngay)||''} ${String(yc.gio||'').padStart(5,'0')}`;
+  rows.sort((a,b)=>((ST_ORDER[a.status]??1)-(ST_ORDER[b.status]??1)) || ycSortKey(b).localeCompare(ycSortKey(a)) || String(b.id).localeCompare(String(a.id)));
   const sMap={
     'cho-xu-ly':  {cls:'badge-yellow',lbl:'Chờ xử lý',  color:'#B7860A',bg:'#FFF8E7'},
     'dang-xu-ly': {cls:'badge-blue',  lbl:'Đang xử lý', color:'#3A5FA0',bg:'#EEF3FB'},
