@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.20w';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.20x';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -1867,7 +1867,7 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
             <select id="yc-f-loai" onchange="renderYeuCau()" style="font-size:12px;padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;">
               <option value="">Tất cả loại</option>
               <option>Dọn phòng</option><option>KO dọn phòng (NNS)</option><option>DND</option><option>Thay đồ</option><option>Thêm đồ</option>
-              <option>Laundry</option><option>Ủi đồ</option>
+              <option>Mượn đồ</option><option>Laundry</option><option>Ủi đồ</option>
             </select>
             <select id="yc-f-status" onchange="renderYeuCau()" style="font-size:12px;padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;">
               <option value="">Tất cả trạng thái</option>
@@ -1892,7 +1892,7 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
             <select id="yc-tk-loai" onchange="renderYeuCauStats()" style="font-size:12px;padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;">
               <option value="">Tất cả loại</option>
               <option>Dọn phòng</option><option>KO dọn phòng (NNS)</option><option>DND</option><option>Thay đồ</option><option>Thêm đồ</option>
-              <option>Laundry</option><option>Ủi đồ</option>
+              <option>Mượn đồ</option><option>Laundry</option><option>Ủi đồ</option>
             </select>
           </div>
           <!-- KPI loại yêu cầu -->
@@ -7385,8 +7385,9 @@ function exportSetupXe(){const rows=[['Tên','SL Setup','SL Thực tế','Tồn/
 
 const YC_THAY_DO=['Ga','Bọc mền','Áo gối','Khăn tắm','Khăn tay','Thảm chân','Kimono'];
 const YC_THEM_DO=['Gối','Mền/chăn','Khăn tắm','Khăn tay','Thảm chân','Suối free','Trà','Cà phê','Đường','Bàn chải','Lược','Chụp tóc','Tăm bông','Dao cạo râu','Giấy vệ sinh'];
-const YC_LOAI_LABEL={'don-phong':'Dọn phòng','ko-don-phong':'KO dọn phòng (NNS)','dnd':'DND','thay-do':'Thay đồ','them-do':'Thêm đồ','laundry':'Laundry','ui-do':'Ủi đồ'};
-const YC_LOAI_OPTS=[['don-phong','Dọn phòng'],['ko-don-phong','KO dọn phòng (NNS)'],['dnd','DND'],['thay-do','Thay đồ'],['them-do','Thêm đồ'],['laundry','Laundry'],['ui-do','Ủi đồ']];
+const YC_MUON_DO=['Bàn ủi','Ổ cắm điện','Ổ chuyển đổi','Tô','Ly nước','Đĩa','Muỗng','Đũa','Nĩa','Cân'];
+const YC_LOAI_LABEL={'don-phong':'Dọn phòng','ko-don-phong':'KO dọn phòng (NNS)','dnd':'DND','thay-do':'Thay đồ','them-do':'Thêm đồ','muon-do':'Mượn đồ','laundry':'Laundry','ui-do':'Ủi đồ'};
+const YC_LOAI_OPTS=[['don-phong','Dọn phòng'],['ko-don-phong','KO dọn phòng (NNS)'],['dnd','DND'],['thay-do','Thay đồ'],['them-do','Thêm đồ'],['muon-do','Mượn đồ'],['laundry','Laundry'],['ui-do','Ủi đồ']];
 // Thêm 1 khối "loại + danh sách đồ" vào phiếu yêu cầu.
 function ycAddBlock(loai){
   const box=document.getElementById('yc-blocks'); if(!box) return;
@@ -7420,9 +7421,9 @@ function ycBlockLoaiChange(sel){
   const loai=sel.value;
   const wrap=block.querySelector('.ycb-items-wrap');
   const list=block.querySelector('.ycb-items-list');
-  if(loai==='thay-do'||loai==='them-do'){
+  if(loai==='thay-do'||loai==='them-do'||loai==='muon-do'){
     wrap.style.display='block';
-    block.querySelector('.ycb-items-label').textContent=loai==='thay-do'?'Danh sách thay đồ':'Danh sách thêm đồ';
+    block.querySelector('.ycb-items-label').textContent=loai==='thay-do'?'Danh sách thay đồ':loai==='them-do'?'Danh sách thêm đồ':'Danh sách mượn đồ';
     list.innerHTML='';
     ycAddItemToBlock(block.querySelector('.ycb-items-wrap button'));
   } else { wrap.style.display='none'; list.innerHTML=''; }
@@ -7430,7 +7431,7 @@ function ycBlockLoaiChange(sel){
 function ycAddItemToBlock(btn){
   const block=btn.closest('[data-yc-block]'); if(!block) return;
   const loai=block.querySelector('.ycb-loai').value;
-  const src=loai==='thay-do'?YC_THAY_DO:YC_THEM_DO;
+  const src=loai==='thay-do'?YC_THAY_DO:(loai==='muon-do'?YC_MUON_DO:YC_THEM_DO);
   const list=block.querySelector('.ycb-items-list');
   const div=document.createElement('div');
   div.dataset.ycItem='1';
@@ -8216,7 +8217,7 @@ function saveYeuCau(){
   document.querySelectorAll('#yc-blocks > [data-yc-block]').forEach(block=>{
     const loai=block.querySelector('.ycb-loai').value;
     const items=[];
-    if(loai==='thay-do'||loai==='them-do'){
+    if(loai==='thay-do'||loai==='them-do'||loai==='muon-do'){
       block.querySelectorAll('.ycb-items-list > [data-yc-item]').forEach(row=>{
         const sel=row.querySelector('.yc-item-sel');
         const sizeSel=row.querySelector('.yc-item-size');
@@ -8263,7 +8264,7 @@ function renderYeuCau(){
     'dang-xu-ly': {cls:'badge-blue',  lbl:'Đang xử lý', color:'#3A5FA0',bg:'#EEF3FB'},
     'hoan-thanh': {cls:'badge-green', lbl:'Hoàn thành',  color:'var(--green)',bg:'var(--green-bg)'},
   };
-  const loaiBadge={'don-phong':'badge-navy','ko-don-phong':'badge-red','dnd':'badge-red','thay-do':'badge-blue','them-do':'badge-green','laundry':'badge-yellow','ui-do':'badge-navy'};
+  const loaiBadge={'don-phong':'badge-navy','ko-don-phong':'badge-red','dnd':'badge-red','thay-do':'badge-blue','them-do':'badge-green','muon-do':'badge-purple','laundry':'badge-yellow','ui-do':'badge-navy'};
   document.getElementById('yc-list').innerHTML=rows.length?rows.map(yc=>{
     if(yc.kind==='dnd-nns'){   // Thông tin DND/NNS: không có trạng thái; Sửa/Xoá chỉ cho Quản lý/Giám đốc/HK
       const canEd=canEditDndNns();
@@ -8473,8 +8474,8 @@ function renderYeuCauStats(){
   const dichVuCount={};
   ycNgay.forEach(yc=>ycServices(yc).forEach(s=>{ const lb=s.loaiLabel||s.loai; dichVuCount[lb]=(dichVuCount[lb]||0)+1; }));
 
-  const loaiColors={'Dọn phòng':'#3A5FA0','KO dọn phòng (NNS)':'#C0392B','DND':'#8E44AD','Thay đồ':'#B7860A','Thêm đồ':'#2E7D5B','Laundry':'#7B5EA7','Ủi đồ':'#C0392B'};
-  const loaiBg={'Dọn phòng':'#EEF3FB','KO dọn phòng (NNS)':'#FDF0EE','DND':'#F4ECFA','Thay đồ':'#FFF8E7','Thêm đồ':'#EAF5F0','Laundry':'#F5F0FF','Ủi đồ':'#FDF0EE'};
+  const loaiColors={'Dọn phòng':'#3A5FA0','KO dọn phòng (NNS)':'#C0392B','DND':'#8E44AD','Thay đồ':'#B7860A','Thêm đồ':'#2E7D5B','Mượn đồ':'#5B4A9B','Laundry':'#7B5EA7','Ủi đồ':'#C0392B'};
+  const loaiBg={'Dọn phòng':'#EEF3FB','KO dọn phòng (NNS)':'#FDF0EE','DND':'#F4ECFA','Thay đồ':'#FFF8E7','Thêm đồ':'#EAF5F0','Mượn đồ':'#F0EEF8','Laundry':'#F5F0FF','Ủi đồ':'#FDF0EE'};
 
   // KPI cards
   const kpiHtml=`
