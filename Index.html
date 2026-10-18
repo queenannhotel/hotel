@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.20v';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.20w';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -1876,6 +1876,7 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
               <option value="hoan-thanh">Hoàn thành</option>
             </select>
             <button class="btn btn-gold btn-sm" onclick="openBpYcModal()">+ Tạo yêu cầu</button>
+            <button class="btn btn-ghost btn-sm" onclick="openDndNns()" style="border-color:#6b7280;color:#4b5563;">🚫 Tạo DND / NNS</button>
           </div>
           <div id="yc-list"></div>
         </div>
@@ -2667,6 +2668,39 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
     <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
       <button class="btn btn-ghost" onclick="closeModal('modal-bp-yc')">Huỷ</button>
       <button class="btn btn-gold" onclick="saveYeuCau()">✅ Lưu yêu cầu</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL DND / NNS (thông tin hằng ngày — không trạng thái) -->
+<div class="modal-overlay" id="modal-yc-dndnns">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title" id="dnn-title">🚫 Tạo DND / NNS</span><button class="close-btn" onclick="closeModal('modal-yc-dndnns')">✕</button></div>
+    <div class="form-row">
+      <div class="form-group"><label>Ngày <span style="color:var(--red)">*</span></label><input type="date" id="dnn-ngay"></div>
+      <div class="form-group"><label>Giờ</label><input type="time" id="dnn-gio"></div>
+    </div>
+    <div class="form-group" style="margin-bottom:10px;"><label>Loại <span style="color:var(--red)">*</span></label>
+      <select id="dnn-loai" style="width:100%;">
+        <option value="dnd">DND</option>
+        <option value="ko-don-phong">NNS (KO dọn phòng)</option>
+      </select>
+    </div>
+    <!-- Chế độ SỬA: phòng cố định -->
+    <div class="form-group" id="dnn-room-label-wrap" style="display:none;margin-bottom:10px;">
+      <label>Phòng</label><div id="dnn-room-label" style="font-weight:700;color:var(--navy);font-size:15px;"></div>
+    </div>
+    <!-- Chế độ TẠO: lưới chọn nhiều phòng -->
+    <div id="dnn-room-wrap">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;flex-wrap:wrap;">
+        <span style="font-size:11.5px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;">Chọn phòng <span style="color:var(--red)">*</span> · đã chọn <b id="dnn-sel-count" style="color:var(--navy);">0</b></span>
+        <span><button class="btn btn-ghost btn-sm" type="button" onclick="dnnSelectAll(true)">Chọn hết</button> <button class="btn btn-ghost btn-sm" type="button" onclick="dnnSelectAll(false)">Bỏ hết</button></span>
+      </div>
+      <div id="dnn-room-picker" style="max-height:40vh;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:8px;"></div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
+      <button class="btn btn-ghost" onclick="closeModal('modal-yc-dndnns')">Huỷ</button>
+      <button class="btn btn-gold" id="dnn-save-btn" onclick="saveDndNns()">✅ Tạo</button>
     </div>
   </div>
 </div>
@@ -8231,6 +8265,24 @@ function renderYeuCau(){
   };
   const loaiBadge={'don-phong':'badge-navy','ko-don-phong':'badge-red','dnd':'badge-red','thay-do':'badge-blue','them-do':'badge-green','laundry':'badge-yellow','ui-do':'badge-navy'};
   document.getElementById('yc-list').innerHTML=rows.length?rows.map(yc=>{
+    if(yc.kind==='dnd-nns'){   // Thông tin DND/NNS: không có trạng thái; Sửa/Xoá chỉ cho Quản lý/Giám đốc/HK
+      const canEd=canEditDndNns();
+      const lbl=esc(yc.loaiLabel||YC_LOAI_LABEL[yc.loai]||yc.loai||'');
+      return `<div style="background:#fff;border:1.5px solid var(--border);border-radius:12px;padding:12px 16px;margin-bottom:10px;border-left:4px solid #6b7280;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+          <div style="flex:1;min-width:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <span style="font-weight:700;font-size:16px;color:var(--navy);">P.${esc(yc.phong)}</span>
+            <span class="badge ${loaiBadge[yc.loai]||'badge-red'}" style="font-size:11px;">${lbl}</span>
+            <span class="badge badge-navy" style="font-size:10px;">📌 Thông tin</span>
+            <span style="font-size:11px;color:var(--text-muted);">🕐 ${esc(yc.gio||'')} · ${esc(yc.ngay||'')}${yc.nguoi?' · '+esc(yc.nguoi):''}</span>
+          </div>
+          ${canEd?`<div style="display:flex;gap:5px;flex-shrink:0;">
+            <button class="btn btn-ghost btn-sm" onclick="openDndNns('${yc.id}')" title="Sửa" style="font-size:11px;">✏</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteDndNns('${yc.id}')" title="Xoá" style="font-size:11px;">🗑</button>
+          </div>`:''}
+        </div>
+      </div>`;
+    }
     const s=sMap[yc.status]||{cls:'badge-navy',lbl:yc.status,color:'#333',bg:'#eee'};
     const svcs=ycServices(yc);
     const badges=svcs.map(sv=>`<span class="badge ${loaiBadge[sv.loai]||'badge-navy'}" style="font-size:11px;">${esc(sv.loaiLabel)}</span>`).join(' ');
@@ -8315,6 +8367,76 @@ function switchYcTab(tab, el){
   if(tab==='ds') renderYeuCau();   // render lại Danh sách — nếu không, chuyển tab về sẽ thấy bản render cũ (rỗng) dù YC_DATA đã có dữ liệu sau khi đồng bộ
   if(tab==='tk') renderYeuCauStats();
   if(tab==='xoa') renderYcDeleted();
+}
+
+// ===== DND / NNS: thông tin hằng ngày cho các bộ phận (không có trạng thái xử lý) =====
+// Chỉ Quản lý / Giám đốc / HK (hk@queenannhotelvn.com) được Sửa/Xoá.
+let DNN_EDIT_ID=null;
+function canEditDndNns(){
+  const u=currentUser; if(!u) return false;
+  return u.role==='giamdoc' || u.role==='quanly' || String(u.email||'').toLowerCase()==='hk@queenannhotelvn.com';
+}
+function renderDnnRoomPicker(sel){
+  const box=document.getElementById('dnn-room-picker'); if(!box) return;
+  const floors={}; ALL_ROOMS.forEach(r=>{ const f=mbFloorOf(r); (floors[f]=floors[f]||[]).push(r); });
+  box.innerHTML=Object.keys(floors).map(f=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">
+    <button class="btn btn-ghost btn-sm" type="button" onclick="dnnToggleFloor('${f}')" style="min-width:64px;font-size:11px;">Tầng ${f}</button>
+    <div style="flex:1;">${floors[f].map(r=>`<span class="mb-room-chip${sel&&sel.has(r)?' sel':''}" data-room="${r}" onclick="dnnToggleRoom(this)">${r}</span>`).join('')}</div>
+  </div>`).join('');
+  dnnUpdateCount();
+}
+function dnnToggleRoom(el){ el.classList.toggle('sel'); dnnUpdateCount(); }
+function dnnToggleFloor(f){
+  const chips=[...document.querySelectorAll('#dnn-room-picker .mb-room-chip')].filter(c=>mbFloorOf(c.dataset.room)===f);
+  const allSel=chips.length&&chips.every(c=>c.classList.contains('sel'));
+  chips.forEach(c=>c.classList.toggle('sel',!allSel)); dnnUpdateCount();
+}
+function dnnSelectAll(s){ document.querySelectorAll('#dnn-room-picker .mb-room-chip').forEach(c=>c.classList.toggle('sel',!!s)); dnnUpdateCount(); }
+function dnnSelectedRooms(){ return [...document.querySelectorAll('#dnn-room-picker .mb-room-chip.sel')].map(c=>c.dataset.room); }
+function dnnUpdateCount(){ const el=document.getElementById('dnn-sel-count'); if(el) el.textContent=dnnSelectedRooms().length; }
+function openDndNns(editId){
+  const rec=editId?YC_DATA.find(x=>x.id===editId):null;
+  if(editId&&!rec) return;
+  if(editId && !canEditDndNns()){ showToast('⛔ Chỉ Quản lý/Giám đốc/HK được sửa',2500,'error'); return; }
+  DNN_EDIT_ID=editId||null;
+  document.getElementById('dnn-title').textContent=editId?'🚫 Sửa DND / NNS':'🚫 Tạo DND / NNS';
+  document.getElementById('dnn-save-btn').textContent=editId?'✅ Lưu':'✅ Tạo';
+  document.getElementById('dnn-ngay').value=rec?(vnToIso(rec.ngay)||new Date().toISOString().slice(0,10)):new Date().toISOString().slice(0,10);
+  document.getElementById('dnn-gio').value=rec?(rec.gio||''):new Date().toTimeString().slice(0,5);
+  document.getElementById('dnn-loai').value=rec?(rec.loai||'dnd'):'dnd';
+  const roomWrap=document.getElementById('dnn-room-wrap'), labelWrap=document.getElementById('dnn-room-label-wrap');
+  if(editId){ roomWrap.style.display='none'; labelWrap.style.display=''; document.getElementById('dnn-room-label').textContent='P.'+(rec.phong||''); }
+  else { labelWrap.style.display='none'; roomWrap.style.display=''; renderDnnRoomPicker(new Set()); }
+  openModal('modal-yc-dndnns');
+}
+function saveDndNns(){
+  const iso=document.getElementById('dnn-ngay').value; if(!iso){ showToast('Chọn ngày!',2200,'error'); return; }
+  const gio=document.getElementById('dnn-gio').value||'';
+  const loai=document.getElementById('dnn-loai').value, loaiLabel=YC_LOAI_LABEL[loai]||loai;
+  const ngay=iso.split('-').reverse().join('/');
+  if(DNN_EDIT_ID){
+    if(!canEditDndNns()){ showToast('⛔ Không có quyền',2200,'error'); return; }
+    const rec=YC_DATA.find(x=>x.id===DNN_EDIT_ID); if(!rec){ closeModal('modal-yc-dndnns'); DNN_EDIT_ID=null; return; }
+    Object.assign(rec,{ngay,gio,loai,loaiLabel,services:[{loai,loaiLabel,items:[]}]});
+    showToast('✅ Đã cập nhật DND/NNS',2000,'success');
+  } else {
+    const rooms=dnnSelectedRooms(); if(!rooms.length){ showToast('Chọn ít nhất 1 phòng!',2500,'error'); return; }
+    const nguoi=currentUser?.fullname||currentUser?.role||'';
+    rooms.forEach((phong,i)=>{
+      YC_DATA.unshift({id:'YCI'+Date.now()+'_'+i, kind:'dnd-nns', phong, loai, loaiLabel, gio, ngay, status:'', nguoi, items:[], services:[{loai,loaiLabel,items:[]}], createdAt:Date.now()});
+    });
+    showToast(`✅ Đã tạo ${loaiLabel} cho ${rooms.length} phòng`,2500,'success');
+  }
+  DNN_EDIT_ID=null;
+  closeModal('modal-yc-dndnns'); renderYeuCau(); renderYeuCauStats(); syncNow();
+}
+function deleteDndNns(id){
+  if(!canEditDndNns()){ showToast('⛔ Chỉ Quản lý/Giám đốc/HK được xoá',2500,'error'); return; }
+  const rec=YC_DATA.find(x=>x.id===id); if(!rec) return;
+  if(!confirm(`Xoá ${rec.loaiLabel||'DND/NNS'} · P.${rec.phong} · ${rec.ngay}?`)) return;
+  const idx=YC_DATA.findIndex(x=>x.id===id); if(idx>=0) YC_DATA.splice(idx,1);
+  renderYeuCau(); renderYeuCauStats(); syncNow();
+  showToast('🗑 Đã xoá',1800,'info');
 }
 
 function renderYeuCauStats(){
