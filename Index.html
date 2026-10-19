@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.20x';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.20y';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -1662,6 +1662,7 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
           <div style="display:flex;border:1.5px solid var(--border);border-radius:8px;overflow:hidden;">
             <button id="ws-filter-a" class="btn btn-primary btn-sm" style="border-radius:0;border:none;" onclick="setWsFilter('A')">Tầng A</button>
             <button id="ws-filter-b" class="btn btn-ghost btn-sm"  style="border-radius:0;border:none;" onclick="setWsFilter('B')">Tầng B</button>
+            <button id="ws-filter-c" class="btn btn-ghost btn-sm"  style="border-radius:0;border:none;" onclick="setWsFilter('C')">Tầng C</button>
           </div>
           <div style="position:relative;">
             <button class="btn btn-ghost btn-sm" onclick="wsToggleFloorPanel(event)">🏢 Chọn tầng ▾</button>
@@ -6116,11 +6117,12 @@ function wsFloorObj(){
     // Lấy cấu hình của NGÀY GẦN NHẤT trước đó có _floors; không có thì mặc định A=<7, B=≥7
     let src=null, best='';
     Object.keys(WS_DATA_BY_DATE).forEach(k=>{ if(k<dk && WS_DATA_BY_DATE[k]&&WS_DATA_BY_DATE[k]._floors && k>best){ best=k; src=WS_DATA_BY_DATE[k]._floors; } });
-    if(src) day._floors={A:[...(src.A||[])],B:[...(src.B||[])]};
-    else { const all=wsAllFloors(); day._floors={A:all.filter(f=>f<7),B:all.filter(f=>f>=7)}; }
+    if(src) day._floors={A:[...(src.A||[])],B:[...(src.B||[])],C:[...(src.C||[])]};
+    else { const all=wsAllFloors(); day._floors={A:all.filter(f=>f<7),B:all.filter(f=>f>=7),C:[]}; }
   }
   if(!Array.isArray(day._floors.A)) day._floors.A=[];
   if(!Array.isArray(day._floors.B)) day._floors.B=[];
+  if(!Array.isArray(day._floors.C)) day._floors.C=[];
   return day._floors;
 }
 function getFilteredRooms(){
@@ -6137,9 +6139,10 @@ function wsToggleFloorPanel(ev){ if(ev) ev.stopPropagation(); const p=document.g
 function _wsFloorsLabel(arr){ if(!arr||!arr.length) return '—'; const s=[...arr].sort((a,b)=>a-b); let cont=true; for(let i=1;i<s.length;i++) if(s[i]!==s[i-1]+1) cont=false; return cont?`${s[0]}–${s[s.length-1]}`:s.join(','); }
 function renderWsFloorControls(){
   const fo=wsFloorObj();
-  const a=document.getElementById('ws-filter-a'), b=document.getElementById('ws-filter-b');
+  const a=document.getElementById('ws-filter-a'), b=document.getElementById('ws-filter-b'), c=document.getElementById('ws-filter-c');
   if(a) a.textContent=`Tầng A (${_wsFloorsLabel(fo.A)})`;
   if(b) b.textContent=`Tầng B (${_wsFloorsLabel(fo.B)})`;
+  if(c) c.textContent=`Tầng C (${_wsFloorsLabel(fo.C)})`;
   const panel=document.getElementById('ws-floor-panel'); if(!panel) return;
   const sel=new Set((fo[wsFilter]||[]).map(Number));
   panel.innerHTML=`<div style="font-size:12px;font-weight:700;color:var(--navy);margin-bottom:6px;">Tầng ${wsFilter} gồm:</div>`+
@@ -6147,8 +6150,7 @@ function renderWsFloorControls(){
 }
 function setWsFilter(f){
   wsFilter=f;
-  document.getElementById('ws-filter-a').className='btn '+(f==='A'?'btn-primary':'btn-ghost')+' btn-sm';
-  document.getElementById('ws-filter-b').className='btn '+(f==='B'?'btn-primary':'btn-ghost')+' btn-sm';
+  ['A','B','C'].forEach(g=>{ const el=document.getElementById('ws-filter-'+g.toLowerCase()); if(el) el.className='btn '+(f===g?'btn-primary':'btn-ghost')+' btn-sm'; });
   renderWorksheet();
 }
 function renderWorksheet(){
@@ -6283,12 +6285,12 @@ function wsArrDepFromCols(c2,c3){
 }
 // ===== Nhân viên phụ trách theo TẦNG (A/B) theo ngày — chọn từ danh sách HK riêng (HK_STAFF) =====
 let wsStaffManage=false;
-function wsStaffObj(){ const day=getWsDataForDate(wsDateKey()); if(!day._staff||typeof day._staff!=='object') day._staff={A:[],B:[]}; if(!Array.isArray(day._staff.A)) day._staff.A=[]; if(!Array.isArray(day._staff.B)) day._staff.B=[]; return day._staff; }
+function wsStaffObj(){ const day=getWsDataForDate(wsDateKey()); if(!day._staff||typeof day._staff!=='object') day._staff={A:[],B:[],C:[]}; if(!Array.isArray(day._staff.A)) day._staff.A=[]; if(!Array.isArray(day._staff.B)) day._staff.B=[]; if(!Array.isArray(day._staff.C)) day._staff.C=[]; return day._staff; }
 function wsStaffSelected(){ return wsStaffObj()[wsFilter]||[]; }
 function wsToggleStaff(name){ if(!wsGuardEdit())return; const arr=wsStaffObj()[wsFilter]; const i=arr.indexOf(name); if(i>=0) arr.splice(i,1); else arr.push(name); renderWsStaffBar(); try{syncNow();}catch(e){} }
 function wsAddStaffName(){ const n=(prompt('Tên nhân viên buồng phòng:')||'').trim(); if(!n) return; if(!HK_STAFF.some(x=>x.toLowerCase()===n.toLowerCase())) HK_STAFF.push(n); renderWsStaffBar(); try{syncNow();}catch(e){} }
 function wsRemoveStaffName(name){ if(!confirm('Xoá "'+name+'" khỏi danh sách nhân viên?')) return; HK_STAFF=HK_STAFF.filter(x=>x!==name);
-  const day=getWsDataForDate(wsDateKey()); if(day._staff){ ['A','B'].forEach(f=>{ if(Array.isArray(day._staff[f])) day._staff[f]=day._staff[f].filter(x=>x!==name); }); }
+  const day=getWsDataForDate(wsDateKey()); if(day._staff){ ['A','B','C'].forEach(f=>{ if(Array.isArray(day._staff[f])) day._staff[f]=day._staff[f].filter(x=>x!==name); }); }
   renderWsStaffBar(); try{syncNow();}catch(e){} }
 function wsToggleStaffManage(){ wsStaffManage=!wsStaffManage; renderWsStaffBar(); }
 function renderWsStaffBar(){
