@@ -64,17 +64,10 @@ Deno.serve(async (req) => {
       for (const p of (perms ?? [])) permByEmail[(p as any).email] = p;
     }
 
-    // Lọc theo tuỳ chọn nhận thông báo của từng user (user_perms.noti_tabs).
-    // Nếu có `tab` và user có noti_tabs là MẢNG -> chỉ gửi khi noti_tabs chứa tab.
-    // Nếu noti_tabs null / không có perm / không có email / không truyền tab -> vẫn gửi (tương thích ngược).
-    const wantsTab = (email: string): boolean => {
-      if (!tab) return true;
-      const perm = email ? permByEmail[email] : null;
-      if (!perm) return true;
-      const nt = perm.noti_tabs;
-      if (!Array.isArray(nt)) return true;   // chưa cấu hình -> gửi như cũ
-      return nt.includes(tab);
-    };
+    // Nhận thông báo CHÉO 2 web (Kế toán ↔ Tình trạng phòng): mọi tài khoản nhận MỌI thông báo
+    // của cả 2 web, bất kể đang mở web nào → KHÔNG lọc theo noti_tabs/tab nữa.
+    // (Client vẫn gửi `tab`, server bỏ qua khi lọc. Riêng Đề xuất giữ phạm vi qua ownerEmail bên dưới.)
+    const wantsTab = (_email: string): boolean => true;
 
     // Lọc theo người tạo (vd đề xuất mua hàng): chỉ gửi cho người tạo + Kế toán/Giám đốc.
     // ownerEmail rỗng -> không giới hạn (giữ hành vi cũ cho các loại push khác).
