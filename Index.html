@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.20z';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.21a';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -7397,6 +7397,11 @@ const YC_THEM_DO=['Gối','Mền/chăn','Khăn tắm','Khăn tay','Thảm chân'
 const YC_MUON_DO=['Bàn ủi','Ổ cắm điện','Ổ chuyển đổi','Tô','Ly nước','Đĩa','Muỗng','Đũa','Nĩa','Cân'];
 const YC_LOAI_LABEL={'don-phong':'Dọn phòng','ko-don-phong':'KO dọn phòng (NNS)','dnd':'DND','thay-do':'Thay đồ','them-do':'Thêm đồ','muon-do':'Mượn đồ','laundry':'Laundry','ui-do':'Ủi đồ'};
 const YC_LOAI_OPTS=[['don-phong','Dọn phòng'],['ko-don-phong','KO dọn phòng (NNS)'],['dnd','DND'],['thay-do','Thay đồ'],['them-do','Thêm đồ'],['muon-do','Mượn đồ'],['laundry','Laundry'],['ui-do','Ủi đồ']];
+// Món tuỳ biến (thêm trực tiếp trên app) — lưu đồng bộ trong YC_DATA dưới 1 bản ghi cfg-items (collection yc đã sync sẵn).
+function ycCfgRec(){ return YC_DATA.find(x=>x&&x.kind==='cfg-items'); }
+function ycCustomItems(loai){ const c=ycCfgRec(); return (c&&c.items&&Array.isArray(c.items[loai]))?c.items[loai]:[]; }
+function ycBaseItems(loai){ return loai==='thay-do'?YC_THAY_DO:loai==='muon-do'?YC_MUON_DO:YC_THEM_DO; }
+function ycItemsFor(loai){ const base=ycBaseItems(loai); const cus=ycCustomItems(loai).filter(x=>x&&!base.some(b=>b.toLowerCase()===String(x).toLowerCase())); return [...base,...cus]; }
 // Thêm 1 khối "loại + danh sách đồ" vào phiếu yêu cầu.
 function ycAddBlock(loai){
   const box=document.getElementById('yc-blocks'); if(!box) return;
@@ -7414,6 +7419,7 @@ function ycAddBlock(loai){
       <div class="ycb-items-label" style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Danh sách đồ</div>
       <div class="ycb-items-list"></div>
       <button class="btn btn-ghost btn-sm" onclick="ycAddItemToBlock(this)" style="margin-top:6px;">+ Thêm món</button>
+      <button class="btn btn-ghost btn-sm" onclick="ycAddItemType(this)" style="margin-top:6px;" title="Thêm 1 món mới vào danh sách — lưu lại & đồng bộ cho lần sau">➕ Thêm loại</button>
     </div>`;
   box.appendChild(div);
   const sel=div.querySelector('.ycb-loai');
@@ -7440,7 +7446,7 @@ function ycBlockLoaiChange(sel){
 function ycAddItemToBlock(btn){
   const block=btn.closest('[data-yc-block]'); if(!block) return;
   const loai=block.querySelector('.ycb-loai').value;
-  const src=loai==='thay-do'?YC_THAY_DO:(loai==='muon-do'?YC_MUON_DO:YC_THEM_DO);
+  const src=ycItemsFor(loai);
   const list=block.querySelector('.ycb-items-list');
   const div=document.createElement('div');
   div.dataset.ycItem='1';
@@ -7461,6 +7467,30 @@ function ycAddItemToBlock(btn){
   if(selEl) ycItemSelChange(selEl);
 }
 
+// Thêm 1 món mới vào danh sách của loại đang chọn (Thay/Thêm/Mượn đồ) — lưu đồng bộ, dùng lại lần sau.
+function ycAddItemType(btn){
+  const block=btn.closest('[data-yc-block]'); if(!block) return;
+  const loai=block.querySelector('.ycb-loai')?.value;
+  if(!['thay-do','them-do','muon-do'].includes(loai)){ showToast('Chọn loại Thay đồ / Thêm đồ / Mượn đồ trước',2600,'info'); return; }
+  const name=(prompt('Thêm món mới vào "'+(YC_LOAI_LABEL[loai]||loai)+'":')||'').trim();
+  if(!name) return;
+  if(ycItemsFor(loai).some(x=>x.toLowerCase()===name.toLowerCase())){ showToast('Đã có món "'+name+'" trong danh sách',2400,'info'); return; }
+  let c=ycCfgRec(); if(!c){ c={id:'YC_CFG_ITEMS', kind:'cfg-items', items:{}}; YC_DATA.push(c); }
+  if(!c.items||typeof c.items!=='object') c.items={};
+  if(!Array.isArray(c.items[loai])) c.items[loai]=[];
+  c.items[loai].push(name);
+  try{ syncNow(); }catch(e){}
+  ycRefreshItemSelects(loai);
+  showToast('✅ Đã thêm "'+name+'" vào '+(YC_LOAI_LABEL[loai]||loai),2600,'success');
+}
+// Cập nhật lại các dropdown món của các khối cùng loại đang mở (giữ lựa chọn hiện tại).
+function ycRefreshItemSelects(loai){
+  const opts=ycItemsFor(loai);
+  document.querySelectorAll('#yc-blocks [data-yc-block]').forEach(b=>{
+    if(b.querySelector('.ycb-loai')?.value!==loai) return;
+    b.querySelectorAll('.yc-item-sel').forEach(sel=>{ const cur=sel.value; sel.innerHTML=opts.map(i=>`<option>${esc(i)}</option>`).join(''); if(opts.includes(cur)) sel.value=cur; });
+  });
+}
 function ycItemSelChange(sel){
   const val=sel.value;
   const sizeWrap=sel.closest('[data-yc-item]').querySelector('.yc-size-wrap');
@@ -8305,11 +8335,11 @@ function renderYeuCau(){
   try{ syncMobNotif(); }catch(e){}   // cập nhật badge Khách Yêu Cầu (không phụ thuộc bộ lọc)
   const fL=document.getElementById('yc-f-loai')?.value||'';
   const fS=document.getElementById('yc-f-status')?.value||'';
-  const rows=YC_DATA.filter(yc=>(!fL||ycServices(yc).some(s=>s.loaiLabel===fL))&&(!fS||yc.status===fS));
-  // Thứ tự: Chờ xử lý → Đang xử lý → Hoàn thành; trong mỗi nhóm: ngày + giờ mới nhất ở trên
-  const ST_ORDER={'cho-xu-ly':0,'dang-xu-ly':1,'hoan-thanh':2};
+  const rows=YC_DATA.filter(yc=>yc&&yc.kind!=='cfg-items'&&(!fL||ycServices(yc).some(s=>s.loaiLabel===fL))&&(!fS||yc.status===fS));
+  // Yêu cầu CHƯA HOÀN THÀNH (chờ/đang xử lý) LUÔN trên cùng; còn lại (đã hoàn thành + DND/NNS) xếp theo ngày (mới nhất trước).
+  const ycUnfinished=yc=>yc.kind!=='dnd-nns' && (yc.status==='cho-xu-ly'||yc.status==='dang-xu-ly');
   const ycSortKey=yc=>`${bpViDateToISO(yc.ngay)||''} ${String(yc.gio||'').padStart(5,'0')}`;
-  rows.sort((a,b)=>((ST_ORDER[a.status]??1)-(ST_ORDER[b.status]??1)) || ycSortKey(b).localeCompare(ycSortKey(a)) || String(b.id).localeCompare(String(a.id)));
+  rows.sort((a,b)=>((ycUnfinished(a)?0:1)-(ycUnfinished(b)?0:1)) || ycSortKey(b).localeCompare(ycSortKey(a)) || String(b.id).localeCompare(String(a.id)));
   const sMap={
     'cho-xu-ly':  {cls:'badge-yellow',lbl:'Chờ xử lý',  color:'#B7860A',bg:'#FFF8E7'},
     'dang-xu-ly': {cls:'badge-blue',  lbl:'Đang xử lý', color:'#3A5FA0',bg:'#EEF3FB'},
@@ -8500,13 +8530,14 @@ function renderYeuCauStats(){
   // Đổ dropdown phòng distinct (giữ lựa chọn)
   const phongSel=document.getElementById('yc-tk-phong');
   if(phongSel){ const cur=phongSel.value;
-    const phongs=[...new Set(YC_DATA.map(y=>y.phong).filter(p=>p!=null&&p!==''))].sort((a,b)=>(''+a).localeCompare(''+b,'vi',{numeric:true}));
+    const phongs=[...new Set(YC_DATA.filter(y=>y&&y.kind!=='cfg-items').map(y=>y.phong).filter(p=>p!=null&&p!==''))].sort((a,b)=>(''+a).localeCompare(''+b,'vi',{numeric:true}));
     phongSel.innerHTML='<option value="">Tất cả phòng</option>'+phongs.map(p=>`<option value="${esc(''+p)}">P.${esc(''+p)}</option>`).join('');
     phongSel.value=phongs.map(String).includes(cur)?cur:''; }
   const fPhong=phongSel?phongSel.value:'';
   const fLoai=document.getElementById('yc-tk-loai')?.value||'';
   const ngayLabel = from===to ? from.split('-').reverse().join('/') : `${from.split('-').reverse().join('/')} → ${to.split('-').reverse().join('/')}`;
   const ycNgay=YC_DATA.filter(yc=>{
+    if(yc&&yc.kind==='cfg-items') return false;
     const iso=vnToIso(yc.ngay);
     if(from&&iso<from) return false;
     if(to&&iso>to) return false;
