@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.21a';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.21b';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -7393,7 +7393,7 @@ function saveSxItem(){const ten=document.getElementById('sx-ten').value.trim();i
 function exportSetupXe(){const rows=[['Tên','SL Setup','SL Thực tế','Tồn/Thiếu','Ghi chú']];document.querySelectorAll('#sx-tbody tr').forEach(tr=>{const tds=[...tr.querySelectorAll('td')];if(tds.length>=5)rows.push(tds.slice(0,5).map(td=>td.innerText.trim()));});const csv='\uFEFF'+rows.map(r=>r.map(c=>`"${c}"`).join(',')).join('\n');const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='SetupXe.csv';a.click();}
 
 const YC_THAY_DO=['Ga','Bọc mền','Áo gối','Khăn tắm','Khăn tay','Thảm chân','Kimono'];
-const YC_THEM_DO=['Gối','Mền/chăn','Khăn tắm','Khăn tay','Thảm chân','Suối free','Trà','Cà phê','Đường','Bàn chải','Lược','Chụp tóc','Tăm bông','Dao cạo râu','Giấy vệ sinh'];
+const YC_THEM_DO=['Gối','Mền/chăn','Khăn tắm','Khăn tay','Thảm chân','Suối free','Trà','Cà phê','Đường','Bàn chải','Lược','Chụp tóc','Tăm bông','Dao cạo râu','Giấy vệ sinh','Móc'];
 const YC_MUON_DO=['Bàn ủi','Ổ cắm điện','Ổ chuyển đổi','Tô','Ly nước','Đĩa','Muỗng','Đũa','Nĩa','Cân'];
 const YC_LOAI_LABEL={'don-phong':'Dọn phòng','ko-don-phong':'KO dọn phòng (NNS)','dnd':'DND','thay-do':'Thay đồ','them-do':'Thêm đồ','muon-do':'Mượn đồ','laundry':'Laundry','ui-do':'Ủi đồ'};
 const YC_LOAI_OPTS=[['don-phong','Dọn phòng'],['ko-don-phong','KO dọn phòng (NNS)'],['dnd','DND'],['thay-do','Thay đồ'],['them-do','Thêm đồ'],['muon-do','Mượn đồ'],['laundry','Laundry'],['ui-do','Ủi đồ']];
