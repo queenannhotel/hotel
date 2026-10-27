@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.21b';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.21c';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -452,8 +452,15 @@ textarea{resize:vertical;min-height:68px;}
 .modal-overlay.open{display:flex;}
 .modal{background:var(--white);border-radius:16px;width:640px;max-width:96vw;max-height:92vh;overflow-y:auto;box-shadow:var(--shadow-lg);padding:26px;}
 .modal-lg{width:800px;}
+#modal-de-xuat .modal{width:980px;}
+#dx-items{overflow-x:auto;}
+.dx-item-row{min-width:780px;}
 .dx-item-row .form-group{min-width:0;}
 .dx-item-row .form-group input{min-width:0;width:100%;box-sizing:border-box;}
+.dx-item-row .form-group input,.dx-item-row .form-group select{padding:7px 7px;font-size:12.5px;}
+.dx-item-row input[type=number]{-moz-appearance:textfield;}
+.dx-item-row input[type=number]::-webkit-outer-spin-button,
+.dx-item-row input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
 .modal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid var(--border);}
 .modal-title{font-family:'Playfair Display',serif;font-size:17px;color:var(--navy);}
 .close-btn{background:none;border:none;font-size:17px;cursor:pointer;color:var(--text-muted);padding:4px;border-radius:4px;}
@@ -7877,7 +7884,7 @@ function canDeleteDx(d){
 }
 // ----- Form: các dòng hàng động -----
 function dxRowHtml(){
-  return `<div class="dx-item-row" data-item-id="" style="display:grid;grid-template-columns:1.4fr 1.05fr 42px 48px 74px 74px 96px 1fr 28px;gap:6px;align-items:end;margin-bottom:8px;padding:8px;background:var(--cream);border:1px solid var(--border);border-radius:8px;">
+  return `<div class="dx-item-row" data-item-id="" style="display:grid;grid-template-columns:1.4fr 1.05fr 60px 48px 74px 74px 96px 1fr 28px;gap:6px;align-items:end;margin-bottom:8px;padding:8px;background:var(--cream);border:1px solid var(--border);border-radius:8px;">
     <div class="form-group" style="margin:0;"><label style="font-size:10px;">Tên hàng <span style="color:var(--red);">*</span></label>
       <div class="select-wrap"><input class="dxr-ten" autocomplete="off" placeholder="Gõ để tìm mặt hàng..." oninput="dxTenInput(this)" onfocus="dxTenInput(this)" onblur="setTimeout(()=>dxCloseDd(this),200)"><div class="dropdown-list dxr-ten-dd"></div></div>
     </div>
