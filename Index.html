@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.21c';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.21d';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -9251,7 +9251,8 @@ function switchKhoTab(tab,el){
       <button class="btn btn-ghost btn-sm" onclick="openKhoRecover()" title="Khôi phục món kho đã xoá còn lưu trên máy chủ">🛟 Khôi phục từ cloud</button>
       <button class="btn btn-ghost btn-sm" onclick="openKhoTrash()" title="Thùng rác kho — khôi phục mặt hàng vừa xoá">🗑 Thùng rác kho</button>
       <button class="btn btn-ghost btn-sm" onclick="khoStorageReport()" title="Xem dung lượng bộ nhớ máy đang dùng, ảnh chiếm bao nhiêu, còn ghi được không">🔍 Kiểm tra bộ nhớ</button>
-      <button class="btn btn-ghost btn-sm" onclick="khoDedupeTransfers()" title="Dọn bút toán chuyển kho bị trùng (do bấm Chuyển lại nhiều lần)">🧹 Dọn phiếu chuyển trùng</button>`:''}
+      <button class="btn btn-ghost btn-sm" onclick="khoDedupeTransfers()" title="Dọn bút toán chuyển kho bị trùng (do bấm Chuyển lại nhiều lần)">🧹 Dọn phiếu chuyển trùng</button>${currentUser?.role==='giamdoc'?`
+      <button class="btn btn-ghost btn-sm" onclick="khoRepairWizard()" title="Dọn dòng lỗi ký tự + sửa Tồn đầu bị nhân đôi (có xem trước)">🩹 Sửa lỗi kho</button>`:''}`:''}
       <button class="btn btn-gold btn-sm" onclick="openKhoAddItem()">+ Thêm hàng</button>`;
   }
   renderKhoTab();
@@ -9279,6 +9280,28 @@ function _khoLichSuSig(h){
   if(h.refTr) return 'R|'+h.refTr+'|'+h.loai;
   if(h.ref_chi) return 'C|'+h.ref_chi+'|'+h.loai;
   return 'S|'+[h.ngay,h.loai,h.sl,h.tu||'',h.den||'',h.lydo||'',h.nguoi||'',h.vitri||''].join('|');
+}
+// Tồn đầu suy từ lichSu: tổng sl các bút toán "Nhập đầu kỳ" (lichSu đã khử trùng trước khi gọi).
+// Trả null nếu KHÔNG có bút toán đầu kỳ nào (để bên gọi quyết định giữ nguyên ton_dau cũ).
+function khoTonDauFromLichSu(lichSu){
+  const dk=(lichSu||[]).filter(h=>h&&h.loai==='nhap'&&(h.lydo||'').includes('đầu kỳ'));
+  if(!dk.length) return null;
+  return dk.reduce((s,h)=>s+(parseFloat(h.sl)||0),0);
+}
+// Dòng kho "rác": mã/tên dính ký tự nhị phân/điều khiển (do import .xlsx đọc nhầm thành text).
+function khoIsGarbage(it){
+  if(!it) return false;
+  const s=((it.ma||'')+' '+(it.ten||''));
+  if(!s.trim()) return false;
+  if(/[\u0000-\u0008\u000B\u000C\u000E-\u001F�]/.test(s)) return true;   // ký tự điều khiển / thay thế
+  // Tỉ lệ ký tự điều khiển/định dạng/surrogate (\p{C}) cao → rác. Emoji & chữ tiếng Việt KHÔNG thuộc \p{C}.
+  let bad=0, tot=0;
+  for(const ch of s){
+    if(/\s/.test(ch)) continue;
+    tot++;
+    if(/\p{C}/u.test(ch)) bad++;
+  }
+  return tot>=4 && bad/tot>0.2;
 }
 function khoMergeDuplicates(){
   const groups=new Map();
@@ -9309,7 +9332,7 @@ function khoMergeDuplicates(){
       dvt:bestDvt,
       bophan:primary.bophan,
       vitri:primary.vitri||rows.map(it=>it.vitri).find(v=>v)||khoVitriDefault(primary.bophan),
-      ton_dau:rows.reduce((s,it)=>s+(parseFloat(it.ton_dau)||0),0),
+      ton_dau:0,   // tính lại bên dưới từ lichSu đã khử trùng — KHÔNG cộng dồn (chống nhân đôi khi đồng bộ)
       img:rows.map(it=>it.img).find(im=>im&&/^(https?:|data:|blob:)/.test(im))||primary.img||'📦',
       ghichu:rows.map(it=>(it.ghichu||'').trim()).find(g=>g)||'',
       lichSu:[]
@@ -9317,6 +9340,10 @@ function khoMergeDuplicates(){
     // Nối lichSu NHƯNG khử trùng: 2 dòng kho trùng key (do đồng bộ tách ra) hay chồng bút toán → chỉ giữ 1 bản/bút toán.
     const seenLs=new Set();
     rows.forEach(it=>{ if(Array.isArray(it.lichSu)) it.lichSu.forEach(h=>{ const k=_khoLichSuSig(h); if(seenLs.has(k)) return; seenLs.add(k); m.lichSu.push(h); }); });
+    // Tồn đầu của dòng gộp: ưu tiên tổng các bút toán "Nhập đầu kỳ" đã khử trùng (nguồn sạch, không phình
+    // khi gộp lặp/đa máy). Nhóm không có bút toán đầu kỳ nào → giữ ton_dau của dòng chính (không nhân).
+    const dkTon=khoTonDauFromLichSu(m.lichSu);
+    m.ton_dau = (dkTon!=null) ? dkTon : (parseFloat(primary.ton_dau)||0);
     result.push(m);
     merged+=rows.length-1;
   });
@@ -10107,23 +10134,36 @@ function pushDxToKho(item, dx){
 function importKhoExcel(input){
   const file=input.files[0];if(!file)return;
   const reader=new FileReader();
+  const isXlsx=/\.xlsx?$/i.test(file.name);
+  // Đưa mảng dòng CSV (mỗi dòng là mảng cột) vào KHO_DATA — dùng chung cho cả .xlsx (đã giải nén) và .csv.
+  function pushRows(lines){
+    let n=0, skip=0;
+    lines.slice(1).forEach(line=>{
+      const cols=Array.isArray(line)?line:line.split(',');
+      const ma=(cols[0]||'').trim().replace(/"/g,'');
+      const ten=(cols[1]||'').trim().replace(/"/g,'');
+      if(!ma||!ten||KHO_DATA.find(x=>x.ma===ma))return;
+      const dvt=(cols[2]||'Cái').trim().replace(/"/g,'');
+      if(khoIsGarbage({ma,ten})){ skip++; return; }   // chặn byte nhị phân lọt vào làm mã/tên
+      KHO_DATA.push({id:'KH'+Date.now()+n,ma,ten,dvt,bophan:'kt',vitri:khoVitriDefault('kt'),ton_dau:0,img:'📦',ghichu:'Import Excel',lichSu:[]});
+      n++;
+    });
+    showToast(`✅ Import ${n} mặt hàng${skip?` (bỏ ${skip} dòng lỗi ký tự)`:''}! Cột: Mã, Tên, ĐVT`,2800,'success');
+    renderKhoTab();
+  }
   reader.onload=e=>{
     try{
-      const lines=e.target.result.split('\n').filter(l=>l.trim());
-      let n=0;
-      lines.slice(1).forEach(line=>{
-        const cols=line.split(',');
-        const ma=(cols[0]||'').trim().replace(/"/g,'');
-        const ten=(cols[1]||'').trim().replace(/"/g,'');
-        if(!ma||!ten||KHO_DATA.find(x=>x.ma===ma))return;
-        KHO_DATA.push({id:'KH'+Date.now()+n,ma,ten,dvt:(cols[2]||'Cái').trim().replace(/"/g,''),bophan:'kt',vitri:khoVitriDefault('kt'),ton_dau:0,img:'📦',ghichu:'Import Excel',lichSu:[]});
-        n++;
-      });
-      showToast(`✅ Import ${n} mặt hàng thành công! Format CSV: Mã,Tên,ĐVT`,2500,'success');
-      renderKhoTab();
-    }catch(err){showToast('Lỗi: '+err.message,3000,'error');}
+      if(isXlsx){
+        const wb=XLSX.read(e.target.result,{type:'array'});
+        const ws=wb.Sheets[wb.SheetNames[0]];
+        const rawData=XLSX.utils.sheet_to_csv(ws,{blankrows:false});
+        pushRows(rawData.split('\n').filter(l=>l.trim()).map(l=>l.split(',')));
+      }else{
+        pushRows(e.target.result.split('\n').filter(l=>l.trim()));
+      }
+    }catch(err){showToast('Lỗi đọc file: '+err.message,3000,'error');}
   };
-  reader.readAsText(file,'utf-8');
+  if(isXlsx) reader.readAsArrayBuffer(file); else reader.readAsText(file,'utf-8');
   input.value='';
 }
 
@@ -10259,6 +10299,50 @@ function khoDedupeTransfers(){
   try{ renderKhoTab(); }catch(e){}
   syncNow();
   showToast(removed? `🧹 Đã gộp ${removed} bút toán chuyển kho trùng` : 'Không có bút toán chuyển kho trùng',3000, removed?'success':'info');
+}
+// 🩹 Sửa lỗi kho (Giám đốc): dọn dòng rác (ký tự lạ) + sửa Tồn đầu bị nhân đôi khi đồng bộ.
+// Có bước XEM TRƯỚC + xác nhận. Dòng rác chuyển vào Thùng rác kho (khôi phục được).
+// skipConfirm chỉ dùng cho test headless.
+function khoRepairWizard(skipConfirm){
+  if(currentUser?.role!=='giamdoc'){ showToast('Chỉ Giám đốc dùng được',2500,'error'); return; }
+  // 1) Quét dòng rác
+  const garbage=(KHO_DATA||[]).filter(khoIsGarbage);
+  // 2) Quét dòng Tồn đầu nghi phình: có bút toán "Nhập đầu kỳ" và ton_dau hiện > tổng đầu kỳ (sau khử trùng)
+  const fixTon=[];
+  (KHO_DATA||[]).forEach(it=>{
+    if(khoIsGarbage(it)) return;
+    const seen=new Set(); const dk=[];
+    (it.lichSu||[]).forEach(h=>{ const k=_khoLichSuSig(h); if(seen.has(k))return; seen.add(k); dk.push(h); });
+    const t=khoTonDauFromLichSu(dk);
+    if(t!=null && (parseFloat(it.ton_dau)||0) > t) fixTon.push({it, from:parseFloat(it.ton_dau)||0, to:t});
+  });
+  if(!garbage.length && !fixTon.length){ showToast('✅ Kho sạch — không có dòng rác hay Tồn đầu bất thường.',3000,'success'); return; }
+  // Xem trước
+  const ex=fixTon.slice(0,5).map(f=>`• ${esc(f.it.ten)}: ${f.from} → ${f.to}`).join('\n');
+  const msg=`SỬA LỖI KHO — xem trước:\n\n`
+    +`• Dòng lỗi ký tự (mã/tên rác): ${garbage.length}  → chuyển vào Thùng rác kho (khôi phục được)\n`
+    +`• Tồn đầu nghi nhân đôi: ${fixTon.length} món  → đặt lại theo lịch sử 'Nhập đầu kỳ'\n`
+    +(ex?`\nVí dụ Tồn đầu sẽ sửa:\n${ex}${fixTon.length>5?'\n…':''}\n`:'')
+    +`\nCác dòng không suy ra được sẽ GIỮ NGUYÊN để bạn sửa tay.\n(Chỉ phần Tồn đầu là không tự hoàn tác; dòng rác vẫn ở Thùng rác.)\n\nTiến hành?`;
+  if(!skipConfirm && !confirm(msg)) return;
+  const now=new Date();
+  // a) Dòng rác → Thùng rác kho
+  const garbageIds=new Set(garbage.map(it=>it.id));
+  garbage.forEach(it=>{ KHO_DELETED.unshift({...it, del_by:currentUser?.fullname||currentUser?.role||'', del_ngay:now.toLocaleDateString('vi-VN'), del_gio:now.toTimeString().slice(0,5)}); });
+  if(garbageIds.size) KHO_DATA=KHO_DATA.filter(it=>!garbageIds.has(it.id));
+  // b) Dọn phiếu chuyển trùng + gộp dòng trùng (idempotent, tự tính lại Tồn đầu từ lichSu)
+  try{ khoMergeDuplicates(); }catch(e){}
+  // c) Đặt lại Tồn đầu cho dòng nghi phình còn lại sau khi gộp
+  let fixed=0;
+  (KHO_DATA||[]).forEach(it=>{
+    const seen=new Set(); const dk=[];
+    (it.lichSu||[]).forEach(h=>{ const k=_khoLichSuSig(h); if(seen.has(k))return; seen.add(k); dk.push(h); });
+    const t=khoTonDauFromLichSu(dk);
+    if(t!=null && (parseFloat(it.ton_dau)||0) > t){ it.ton_dau=t; fixed++; }
+  });
+  try{ renderKhoTab(); }catch(e){}
+  syncNow();
+  showToast(`🩹 Đã dọn ${garbage.length} dòng lỗi (vào Thùng rác) & sửa ${fixed} Tồn đầu.`,4000,'success');
 }
 // Xoá mọi bút toán transfer có cùng refTr (khắp KHO_DATA) → để chuyển lại là THAY THẾ, không cộng dồn (chống nhân đôi).
 function khoRemoveTransferRef(refTr){
