@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.21f';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.21g';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -2511,6 +2511,17 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
     <div id="kho-trash-body" style="max-height:56vh;overflow-y:auto;"></div>
     <div style="display:flex;justify-content:flex-end;margin-top:14px;">
       <button class="btn btn-ghost" onclick="closeModal('modal-kho-trash')">Đóng</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-kho-manual">
+  <div class="modal modal-lg">
+    <div class="modal-header"><span class="modal-title">📋 Tồn đầu cần kiểm tra / sửa tay</span><button class="close-btn" onclick="closeModal('modal-kho-manual')">✕</button></div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Các món có Tồn đầu lớn nhưng KHÔNG có mốc "Nhập đầu kỳ" trong lịch sử nên công cụ không tự tính lại được. Cột <b>Nếu Tồn đầu = 0</b> là Còn lại tính từ giao dịch thực (transfer/nhập/xuất). Bấm <b>✏️ Sửa</b> để chỉnh ô Tồn đầu.</div>
+    <div id="kho-manual-body" style="max-height:60vh;overflow-y:auto;"></div>
+    <div style="display:flex;justify-content:flex-end;margin-top:14px;">
+      <button class="btn btn-ghost" onclick="closeModal('modal-kho-manual')">Đóng</button>
     </div>
   </div>
 </div>
@@ -9253,7 +9264,8 @@ function switchKhoTab(tab,el){
       <button class="btn btn-ghost btn-sm" onclick="openKhoTrash()" title="Thùng rác kho — khôi phục mặt hàng vừa xoá">🗑 Thùng rác kho</button>
       <button class="btn btn-ghost btn-sm" onclick="khoStorageReport()" title="Xem dung lượng bộ nhớ máy đang dùng, ảnh chiếm bao nhiêu, còn ghi được không">🔍 Kiểm tra bộ nhớ</button>
       <button class="btn btn-ghost btn-sm" onclick="khoDedupeTransfers()" title="Dọn bút toán chuyển kho bị trùng (do bấm Chuyển lại nhiều lần)">🧹 Dọn phiếu chuyển trùng</button>${currentUser?.role==='giamdoc'?`
-      <button class="btn btn-ghost btn-sm" onclick="khoRepairWizard()" title="Dọn dòng lỗi ký tự + sửa Tồn đầu bị nhân đôi (có xem trước)">🩹 Sửa lỗi kho</button>${(KHO_REPAIR_BAK||[]).length?`
+      <button class="btn btn-ghost btn-sm" onclick="khoRepairWizard()" title="Dọn dòng lỗi ký tự + sửa Tồn đầu bị nhân đôi (có xem trước)">🩹 Sửa lỗi kho</button>
+      <button class="btn btn-ghost btn-sm" onclick="openKhoManualFix()" title="Liệt kê món Tồn đầu to không có mốc 'Nhập đầu kỳ' để sửa tay">📋 Tồn đầu cần sửa</button>${(KHO_REPAIR_BAK||[]).length?`
       <button class="btn btn-ghost btn-sm" onclick="khoUndoRepair()" title="Khôi phục Tồn đầu về trước lần Sửa lỗi kho gần nhất">↩ Hoàn tác Sửa lỗi kho</button>`:''}`:''}`:''}
       <button class="btn btn-gold btn-sm" onclick="openKhoAddItem()">+ Thêm hàng</button>`;
   }
@@ -10386,9 +10398,10 @@ function khoRepairWizard(skipConfirm){
       +`• Tồn đầu đã đặt lại: ${fixed} món\n`
       +(manual.length?`• Chưa tự sửa được (thiếu mốc 'Nhập đầu kỳ'), cần sửa tay: ${manual.length} món\n`:'');
     if(changes.length) rep+=`\nTồn đầu (cũ → mới):\n`+changes.slice(0,20).map(c=>`• ${c.ten}: ${c.from} → ${c.to}`).join('\n')+(changes.length>20?'\n…':'');
-    if(manual.length) rep+=`\n\nCần sửa tay (bấm ✏️ của món, chỉnh ô Tồn đầu):\n`+manual.slice(0,20).map(x=>`• ${x.it.ten}: ${x.cur}`).join('\n')+(manual.length>20?'\n…':'');
+    if(manual.length) rep+=`\n\nĐang mở bảng "Tồn đầu cần sửa tay" để bạn chỉnh trực tiếp (cũng có nút 📋 trên thanh công cụ).`;
     if(fixed) rep+=`\n\n↩ Nếu sai, bấm "Hoàn tác Sửa lỗi kho" để khôi phục Tồn đầu.`;
     alert(rep);
+    if(manual.length){ try{ openKhoManualFix(); }catch(e){} }
   }
 }
 // ↩ Hoàn tác lần "Sửa lỗi kho" gần nhất: khôi phục Tồn đầu (và các bút toán đầu kỳ đã cắt) cho từng món.
@@ -10409,6 +10422,37 @@ function khoUndoRepair(){
   syncNow();
   showToast(`↩ Đã hoàn tác: khôi phục Tồn đầu cho ${restored} món.`,4000,'success');
 }
+// Danh sách món có Tồn đầu lớn nhưng KHÔNG có mốc "Nhập đầu kỳ" → công cụ không tự tính được, liệt kê để sửa tay.
+function khoManualFixList(){
+  return (KHO_DATA||[]).filter(it=>{
+    if(khoIsGarbage(it)) return false;
+    if(khoTonDauFromLichSu(it.lichSu)!=null) return false;   // có mốc đầu kỳ → đã/ sẽ tự sửa
+    return (parseFloat(it.ton_dau)||0) > 20;
+  }).map(it=>{
+    const s=calcKyStats(it);
+    return { it, ton_dau:parseFloat(it.ton_dau)||0, con:s.con, conIf0:s.nhap-s.xuat-s.huy };
+  }).sort((a,b)=>b.ton_dau-a.ton_dau);
+}
+function openKhoManualFix(){ renderKhoManualFix(); openModal('modal-kho-manual'); }
+function renderKhoManualFix(){
+  const box=document.getElementById('kho-manual-body'); if(!box) return;
+  const rows=khoManualFixList();
+  if(!rows.length){ box.innerHTML='<div style="padding:20px;text-align:center;color:var(--text-muted);">Không có món nào cần sửa tay. 🎉</div>'; return; }
+  box.innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:13px;">
+    <thead><tr style="text-align:left;color:var(--text-muted);border-bottom:1px solid var(--border);">
+      <th style="padding:6px 8px;">Tên hàng</th><th style="padding:6px 8px;">Kho</th>
+      <th style="padding:6px 8px;text-align:center;">Tồn đầu</th><th style="padding:6px 8px;text-align:center;">Còn lại</th>
+      <th style="padding:6px 8px;text-align:center;color:var(--green);">Nếu Tồn đầu = 0</th><th style="padding:6px 8px;"></th>
+    </tr></thead><tbody>${rows.map(r=>`<tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:6px 8px;font-weight:500;">${esc(r.it.ten)}</td>
+      <td style="padding:6px 8px;color:var(--text-muted);">${esc(KHO_BP_LABELS[r.it.bophan]||r.it.bophan||'')}</td>
+      <td style="padding:6px 8px;text-align:center;font-weight:600;color:var(--red);">${r.ton_dau}</td>
+      <td style="padding:6px 8px;text-align:center;">${r.con}</td>
+      <td style="padding:6px 8px;text-align:center;font-weight:600;color:var(--green);">${r.conIf0}</td>
+      <td style="padding:6px 8px;text-align:right;"><button class="btn btn-gold btn-sm" onclick="khoManualEdit('${r.it.id}')">✏️ Sửa</button></td>
+    </tr>`).join('')}</tbody></table>`;
+}
+function khoManualEdit(id){ closeModal('modal-kho-manual'); editKhoItem(id); }
 // Xoá mọi bút toán transfer có cùng refTr (khắp KHO_DATA) → để chuyển lại là THAY THẾ, không cộng dồn (chống nhân đôi).
 function khoRemoveTransferRef(refTr){
   if(!refTr) return 0; let n=0;
