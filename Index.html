@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.21d';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.21e';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -9281,12 +9281,32 @@ function _khoLichSuSig(h){
   if(h.ref_chi) return 'C|'+h.ref_chi+'|'+h.loai;
   return 'S|'+[h.ngay,h.loai,h.sl,h.tu||'',h.den||'',h.lydo||'',h.nguoi||'',h.vitri||''].join('|');
 }
-// Tồn đầu suy từ lichSu: tổng sl các bút toán "Nhập đầu kỳ" (lichSu đã khử trùng trước khi gọi).
-// Trả null nếu KHÔNG có bút toán đầu kỳ nào (để bên gọi quyết định giữ nguyên ton_dau cũ).
+// Tồn đầu suy từ lichSu: dựa trên các bút toán "Nhập đầu kỳ".
+// Các bút toán đầu kỳ TRÙNG SỐ LƯỢNG được coi là nhân bản do đồng bộ đa máy (cùng 1 lần nhập đầu kỳ
+// bị ghi lại nhiều lần với ngày/người khác nhau) → mỗi mức sl chỉ tính 1 lần (chống phình).
+// "Nhập đầu kỳ (bổ sung)" với sl khác vẫn được cộng thêm. Trả null nếu KHÔNG có bút toán đầu kỳ nào.
 function khoTonDauFromLichSu(lichSu){
   const dk=(lichSu||[]).filter(h=>h&&h.loai==='nhap'&&(h.lydo||'').includes('đầu kỳ'));
   if(!dk.length) return null;
-  return dk.reduce((s,h)=>s+(parseFloat(h.sl)||0),0);
+  const bySl=new Set(); let sum=0;
+  dk.forEach(h=>{ const sl=parseFloat(h.sl)||0; if(bySl.has(sl)) return; bySl.add(sl); sum+=sl; });
+  return sum;
+}
+// Bỏ các bút toán "Nhập đầu kỳ" TRÙNG SỐ LƯỢNG trong 1 dòng kho (giữ 1 bản mỗi mức sl) → lịch sử gọn,
+// khớp với Tồn đầu đã tính lại. Trả true nếu có cắt bớt.
+function khoPruneDupDauKy(it){
+  if(!it||!Array.isArray(it.lichSu)) return false;
+  const seenSl=new Set(); let changed=false; const keep=[];
+  it.lichSu.forEach(h=>{
+    if(h&&h.loai==='nhap'&&(h.lydo||'').includes('đầu kỳ')){
+      const sl=parseFloat(h.sl)||0;
+      if(seenSl.has(sl)){ changed=true; return; }
+      seenSl.add(sl);
+    }
+    keep.push(h);
+  });
+  if(changed) it.lichSu=keep;
+  return changed;
 }
 // Dòng kho "rác": mã/tên dính ký tự nhị phân/điều khiển (do import .xlsx đọc nhầm thành text).
 function khoIsGarbage(it){
@@ -10307,42 +10327,54 @@ function khoRepairWizard(skipConfirm){
   if(currentUser?.role!=='giamdoc'){ showToast('Chỉ Giám đốc dùng được',2500,'error'); return; }
   // 1) Quét dòng rác
   const garbage=(KHO_DATA||[]).filter(khoIsGarbage);
-  // 2) Quét dòng Tồn đầu nghi phình: có bút toán "Nhập đầu kỳ" và ton_dau hiện > tổng đầu kỳ (sau khử trùng)
-  const fixTon=[];
+  // 2) Quét Tồn đầu: món CÓ bút toán "Nhập đầu kỳ" → đặt lại = tổng đầu kỳ (đã gộp trùng số lượng).
+  //    Bắt cả 2 kiểu phình: ô ton_dau bị cộng dồn (baked), và nhiều dòng đầu kỳ trùng số lượng.
+  const fixTon=[];            // {it, from, to}
+  const manual=[];           // món KHÔNG có mốc đầu kỳ nhưng ton_dau to → phải sửa tay
   (KHO_DATA||[]).forEach(it=>{
     if(khoIsGarbage(it)) return;
-    const seen=new Set(); const dk=[];
-    (it.lichSu||[]).forEach(h=>{ const k=_khoLichSuSig(h); if(seen.has(k))return; seen.add(k); dk.push(h); });
-    const t=khoTonDauFromLichSu(dk);
-    if(t!=null && (parseFloat(it.ton_dau)||0) > t) fixTon.push({it, from:parseFloat(it.ton_dau)||0, to:t});
+    const cur=parseFloat(it.ton_dau)||0;
+    const t=khoTonDauFromLichSu(it.lichSu);
+    if(t!=null){ if(t!==cur) fixTon.push({it, from:cur, to:t}); }
+    else if(cur>50) manual.push({it, cur});
   });
-  if(!garbage.length && !fixTon.length){ showToast('✅ Kho sạch — không có dòng rác hay Tồn đầu bất thường.',3000,'success'); return; }
+  if(!garbage.length && !fixTon.length){
+    let m='✅ Không có dòng rác hay Tồn đầu cần sửa tự động.';
+    if(manual.length) m+=`\n\n⚠ ${manual.length} món có Tồn đầu to nhưng KHÔNG có mốc 'Nhập đầu kỳ' nên không tự suy ra được — cần sửa tay:\n`
+      +manual.slice(0,15).map(x=>`• ${x.it.ten}: ${x.cur}`).join('\n')+(manual.length>15?'\n…':'');
+    if(skipConfirm) return; alert(m); return;
+  }
   // Xem trước
-  const ex=fixTon.slice(0,5).map(f=>`• ${esc(f.it.ten)}: ${f.from} → ${f.to}`).join('\n');
+  const ex=fixTon.slice(0,6).map(f=>`• ${f.it.ten}: ${f.from} → ${f.to}`).join('\n');
   const msg=`SỬA LỖI KHO — xem trước:\n\n`
     +`• Dòng lỗi ký tự (mã/tên rác): ${garbage.length}  → chuyển vào Thùng rác kho (khôi phục được)\n`
-    +`• Tồn đầu nghi nhân đôi: ${fixTon.length} món  → đặt lại theo lịch sử 'Nhập đầu kỳ'\n`
-    +(ex?`\nVí dụ Tồn đầu sẽ sửa:\n${ex}${fixTon.length>5?'\n…':''}\n`:'')
-    +`\nCác dòng không suy ra được sẽ GIỮ NGUYÊN để bạn sửa tay.\n(Chỉ phần Tồn đầu là không tự hoàn tác; dòng rác vẫn ở Thùng rác.)\n\nTiến hành?`;
+    +`• Tồn đầu sẽ đặt lại theo 'Nhập đầu kỳ': ${fixTon.length} món\n`
+    +(manual.length?`• KHÔNG tự sửa được (thiếu mốc đầu kỳ), giữ nguyên để sửa tay: ${manual.length} món\n`:'')
+    +(ex?`\nVí dụ Tồn đầu sẽ sửa:\n${ex}${fixTon.length>6?'\n…':''}\n`:'')
+    +`\n(Phần Tồn đầu không tự hoàn tác; dòng rác vẫn ở Thùng rác kho.)\n\nTiến hành?`;
   if(!skipConfirm && !confirm(msg)) return;
   const now=new Date();
   // a) Dòng rác → Thùng rác kho
   const garbageIds=new Set(garbage.map(it=>it.id));
   garbage.forEach(it=>{ KHO_DELETED.unshift({...it, del_by:currentUser?.fullname||currentUser?.role||'', del_ngay:now.toLocaleDateString('vi-VN'), del_gio:now.toTimeString().slice(0,5)}); });
   if(garbageIds.size) KHO_DATA=KHO_DATA.filter(it=>!garbageIds.has(it.id));
-  // b) Dọn phiếu chuyển trùng + gộp dòng trùng (idempotent, tự tính lại Tồn đầu từ lichSu)
+  // b) Gộp dòng trùng (idempotent)
   try{ khoMergeDuplicates(); }catch(e){}
-  // c) Đặt lại Tồn đầu cho dòng nghi phình còn lại sau khi gộp
+  // c) Với mỗi dòng còn lại: bỏ bút toán đầu kỳ trùng số lượng + đặt lại Tồn đầu theo lịch sử
   let fixed=0;
   (KHO_DATA||[]).forEach(it=>{
-    const seen=new Set(); const dk=[];
-    (it.lichSu||[]).forEach(h=>{ const k=_khoLichSuSig(h); if(seen.has(k))return; seen.add(k); dk.push(h); });
-    const t=khoTonDauFromLichSu(dk);
-    if(t!=null && (parseFloat(it.ton_dau)||0) > t){ it.ton_dau=t; fixed++; }
+    khoPruneDupDauKy(it);
+    const t=khoTonDauFromLichSu(it.lichSu);
+    if(t!=null && (parseFloat(it.ton_dau)||0)!==t){ it.ton_dau=t; fixed++; }
   });
   try{ renderKhoTab(); }catch(e){}
   syncNow();
-  showToast(`🩹 Đã dọn ${garbage.length} dòng lỗi (vào Thùng rác) & sửa ${fixed} Tồn đầu.`,4000,'success');
+  let done=`🩹 Đã dọn ${garbage.length} dòng lỗi (vào Thùng rác) & sửa ${fixed} Tồn đầu.`;
+  showToast(done,4000,'success');
+  if(!skipConfirm && manual.length){
+    alert(`Còn ${manual.length} món có Tồn đầu to nhưng KHÔNG có mốc 'Nhập đầu kỳ' nên không tự sửa được.\nVui lòng bấm sửa từng món và chỉnh ô Tồn đầu:\n\n`
+      +manual.slice(0,20).map(x=>`• ${x.it.ten}: ${x.cur}`).join('\n')+(manual.length>20?'\n…':''));
+  }
 }
 // Xoá mọi bút toán transfer có cùng refTr (khắp KHO_DATA) → để chuyển lại là THAY THẾ, không cộng dồn (chống nhân đôi).
 function khoRemoveTransferRef(refTr){
