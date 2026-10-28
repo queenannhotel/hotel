@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.21e';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.21f';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -49,7 +49,7 @@ async function clearLocalData(){
   }
   lastSnapshot={};
   localStorage.removeItem(LS_KEY);
-  THU_DATA=[];CHI_DATA=[];DX_DATA=[];NCC_DATA=[];KHO_DATA=[];KHO_DELETED=[];
+  THU_DATA=[];CHI_DATA=[];DX_DATA=[];NCC_DATA=[];KHO_DATA=[];KHO_DELETED=[];KHO_REPAIR_BAK=[];
   YC_DATA=[];HV_LINEN=[];NS_LUONG=[];NS_BHXH=[];NS_TNCN=[];catalogItems=[];
   WS_DATA_BY_DATE={};ROOM_STATUS_BY_DATE={};AM_DATA_BY_DATE={};
   HV_REWASH_DATA={};HV_REWASH_COLS=[];
@@ -9214,6 +9214,7 @@ function migrateKhoVitriMoves(){
 
 let KHO_DATA = [];
 let KHO_DELETED = [];   // Thùng rác kho: mặt hàng đã xoá (giữ bản đầy đủ để khôi phục) — đồng bộ đa thiết bị
+let KHO_REPAIR_BAK = [];   // Backup lần "Sửa lỗi kho" gần nhất (giá trị Tồn đầu CŨ) để hoàn tác — đồng bộ đa thiết bị
 
 function calcKyStats(item){
   const inKy=(item.lichSu||[]).filter(h=>!(h.loai==='nhap'&&(h.lydo||'').includes('đầu kỳ')));
@@ -9252,7 +9253,8 @@ function switchKhoTab(tab,el){
       <button class="btn btn-ghost btn-sm" onclick="openKhoTrash()" title="Thùng rác kho — khôi phục mặt hàng vừa xoá">🗑 Thùng rác kho</button>
       <button class="btn btn-ghost btn-sm" onclick="khoStorageReport()" title="Xem dung lượng bộ nhớ máy đang dùng, ảnh chiếm bao nhiêu, còn ghi được không">🔍 Kiểm tra bộ nhớ</button>
       <button class="btn btn-ghost btn-sm" onclick="khoDedupeTransfers()" title="Dọn bút toán chuyển kho bị trùng (do bấm Chuyển lại nhiều lần)">🧹 Dọn phiếu chuyển trùng</button>${currentUser?.role==='giamdoc'?`
-      <button class="btn btn-ghost btn-sm" onclick="khoRepairWizard()" title="Dọn dòng lỗi ký tự + sửa Tồn đầu bị nhân đôi (có xem trước)">🩹 Sửa lỗi kho</button>`:''}`:''}
+      <button class="btn btn-ghost btn-sm" onclick="khoRepairWizard()" title="Dọn dòng lỗi ký tự + sửa Tồn đầu bị nhân đôi (có xem trước)">🩹 Sửa lỗi kho</button>${(KHO_REPAIR_BAK||[]).length?`
+      <button class="btn btn-ghost btn-sm" onclick="khoUndoRepair()" title="Khôi phục Tồn đầu về trước lần Sửa lỗi kho gần nhất">↩ Hoàn tác Sửa lỗi kho</button>`:''}`:''}`:''}
       <button class="btn btn-gold btn-sm" onclick="openKhoAddItem()">+ Thêm hàng</button>`;
   }
   renderKhoTab();
@@ -9293,20 +9295,20 @@ function khoTonDauFromLichSu(lichSu){
   return sum;
 }
 // Bỏ các bút toán "Nhập đầu kỳ" TRÙNG SỐ LƯỢNG trong 1 dòng kho (giữ 1 bản mỗi mức sl) → lịch sử gọn,
-// khớp với Tồn đầu đã tính lại. Trả true nếu có cắt bớt.
+// khớp với Tồn đầu đã tính lại. Trả về MẢNG các bút toán bị cắt (để backup/hoàn tác); rỗng nếu không cắt.
 function khoPruneDupDauKy(it){
-  if(!it||!Array.isArray(it.lichSu)) return false;
-  const seenSl=new Set(); let changed=false; const keep=[];
+  if(!it||!Array.isArray(it.lichSu)) return [];
+  const seenSl=new Set(); const removed=[]; const keep=[];
   it.lichSu.forEach(h=>{
     if(h&&h.loai==='nhap'&&(h.lydo||'').includes('đầu kỳ')){
       const sl=parseFloat(h.sl)||0;
-      if(seenSl.has(sl)){ changed=true; return; }
+      if(seenSl.has(sl)){ removed.push(h); return; }
       seenSl.add(sl);
     }
     keep.push(h);
   });
-  if(changed) it.lichSu=keep;
-  return changed;
+  if(removed.length) it.lichSu=keep;
+  return removed;
 }
 // Dòng kho "rác": mã/tên dính ký tự nhị phân/điều khiển (do import .xlsx đọc nhầm thành text).
 function khoIsGarbage(it){
@@ -10351,30 +10353,61 @@ function khoRepairWizard(skipConfirm){
     +`• Tồn đầu sẽ đặt lại theo 'Nhập đầu kỳ': ${fixTon.length} món\n`
     +(manual.length?`• KHÔNG tự sửa được (thiếu mốc đầu kỳ), giữ nguyên để sửa tay: ${manual.length} món\n`:'')
     +(ex?`\nVí dụ Tồn đầu sẽ sửa:\n${ex}${fixTon.length>6?'\n…':''}\n`:'')
-    +`\n(Phần Tồn đầu không tự hoàn tác; dòng rác vẫn ở Thùng rác kho.)\n\nTiến hành?`;
+    +`\n(Có thể bấm "↩ Hoàn tác Sửa lỗi kho" để khôi phục Tồn đầu; dòng rác vào Thùng rác kho.)\n\nTiến hành?`;
   if(!skipConfirm && !confirm(msg)) return;
-  const now=new Date();
+  const now=new Date(); const ts=now.toISOString(), by=currentUser?.fullname||currentUser?.role||'';
+  KHO_REPAIR_BAK=[];   // chỉ giữ backup của LẦN sửa gần nhất
   // a) Dòng rác → Thùng rác kho
   const garbageIds=new Set(garbage.map(it=>it.id));
-  garbage.forEach(it=>{ KHO_DELETED.unshift({...it, del_by:currentUser?.fullname||currentUser?.role||'', del_ngay:now.toLocaleDateString('vi-VN'), del_gio:now.toTimeString().slice(0,5)}); });
+  garbage.forEach(it=>{ KHO_DELETED.unshift({...it, del_by:by, del_ngay:now.toLocaleDateString('vi-VN'), del_gio:now.toTimeString().slice(0,5)}); });
   if(garbageIds.size) KHO_DATA=KHO_DATA.filter(it=>!garbageIds.has(it.id));
   // b) Gộp dòng trùng (idempotent)
   try{ khoMergeDuplicates(); }catch(e){}
-  // c) Với mỗi dòng còn lại: bỏ bút toán đầu kỳ trùng số lượng + đặt lại Tồn đầu theo lịch sử
-  let fixed=0;
+  // c) Với mỗi dòng còn lại: bỏ bút toán đầu kỳ trùng số lượng + đặt lại Tồn đầu theo lịch sử.
+  //    Lưu backup {id, ton_dau cũ, dkRemoved} TRƯỚC khi đổi → để Hoàn tác khôi phục đúng.
+  let fixed=0; const changes=[];
   (KHO_DATA||[]).forEach(it=>{
-    khoPruneDupDauKy(it);
+    const oldTon=parseFloat(it.ton_dau)||0;
+    const removed=khoPruneDupDauKy(it);
     const t=khoTonDauFromLichSu(it.lichSu);
-    if(t!=null && (parseFloat(it.ton_dau)||0)!==t){ it.ton_dau=t; fixed++; }
+    const willChange = (t!=null && oldTon!==t);
+    if(willChange || removed.length){
+      KHO_REPAIR_BAK.push({id:it.id, ten:it.ten, ton_dau:oldTon, dkRemoved:removed, ts, by});
+    }
+    if(willChange){ it.ton_dau=t; fixed++; changes.push({ten:it.ten, from:oldTon, to:t}); }
   });
   try{ renderKhoTab(); }catch(e){}
   syncNow();
-  let done=`🩹 Đã dọn ${garbage.length} dòng lỗi (vào Thùng rác) & sửa ${fixed} Tồn đầu.`;
-  showToast(done,4000,'success');
-  if(!skipConfirm && manual.length){
-    alert(`Còn ${manual.length} món có Tồn đầu to nhưng KHÔNG có mốc 'Nhập đầu kỳ' nên không tự sửa được.\nVui lòng bấm sửa từng món và chỉnh ô Tồn đầu:\n\n`
-      +manual.slice(0,20).map(x=>`• ${x.it.ten}: ${x.cur}`).join('\n')+(manual.length>20?'\n…':''));
+  showToast(`🩹 Đã dọn ${garbage.length} dòng lỗi & sửa ${fixed} Tồn đầu.`,4000,'success');
+  // Báo kết quả chi tiết
+  if(!skipConfirm){
+    let rep=`KẾT QUẢ SỬA LỖI KHO:\n\n`
+      +`• Dòng lỗi ký tự → Thùng rác kho: ${garbage.length}\n`
+      +`• Tồn đầu đã đặt lại: ${fixed} món\n`
+      +(manual.length?`• Chưa tự sửa được (thiếu mốc 'Nhập đầu kỳ'), cần sửa tay: ${manual.length} món\n`:'');
+    if(changes.length) rep+=`\nTồn đầu (cũ → mới):\n`+changes.slice(0,20).map(c=>`• ${c.ten}: ${c.from} → ${c.to}`).join('\n')+(changes.length>20?'\n…':'');
+    if(manual.length) rep+=`\n\nCần sửa tay (bấm ✏️ của món, chỉnh ô Tồn đầu):\n`+manual.slice(0,20).map(x=>`• ${x.it.ten}: ${x.cur}`).join('\n')+(manual.length>20?'\n…':'');
+    if(fixed) rep+=`\n\n↩ Nếu sai, bấm "Hoàn tác Sửa lỗi kho" để khôi phục Tồn đầu.`;
+    alert(rep);
   }
+}
+// ↩ Hoàn tác lần "Sửa lỗi kho" gần nhất: khôi phục Tồn đầu (và các bút toán đầu kỳ đã cắt) cho từng món.
+function khoUndoRepair(){
+  if(currentUser?.role!=='giamdoc'){ showToast('Chỉ Giám đốc dùng được',2500,'error'); return; }
+  const bak=(KHO_REPAIR_BAK||[]);
+  if(!bak.length){ showToast('Không có lần sửa nào để hoàn tác.',2500,'info'); return; }
+  if(!confirm(`Hoàn tác lần Sửa lỗi kho gần nhất?\nSẽ khôi phục Tồn đầu CŨ cho ${bak.length} món.`)) return;
+  let restored=0;
+  bak.forEach(b=>{
+    const it=(KHO_DATA||[]).find(x=>String(x.id)===String(b.id)); if(!it) return;
+    it.ton_dau=parseFloat(b.ton_dau)||0;
+    if(Array.isArray(b.dkRemoved)&&b.dkRemoved.length){ it.lichSu=(it.lichSu||[]).concat(b.dkRemoved); }
+    restored++;
+  });
+  KHO_REPAIR_BAK=[];
+  try{ renderKhoTab(); }catch(e){}
+  syncNow();
+  showToast(`↩ Đã hoàn tác: khôi phục Tồn đầu cho ${restored} món.`,4000,'success');
 }
 // Xoá mọi bút toán transfer có cùng refTr (khắp KHO_DATA) → để chuyển lại là THAY THẾ, không cộng dồn (chống nhân đôi).
 function khoRemoveTransferRef(refTr){
@@ -11252,6 +11285,7 @@ const COLLECTIONS = {
   ncc:       { read:()=>_byIdDump(NCC_DATA),  write:r=>{NCC_DATA=r.map(x=>x.obj);},  render:()=>{try{renderNccTable();}catch(e){} try{renderCatalog();}catch(e){} try{renderChiTab();}catch(e){}} },
   kho:       { read:()=>_byIdDump(KHO_DATA),  write:r=>{KHO_DATA=r.map(x=>x.obj);},  render:()=>{try{renderKhoTab();}catch(e){}} },
   khoDeleted:{ read:()=>_byIdDump(KHO_DELETED), write:r=>{KHO_DELETED=r.map(x=>x.obj);}, render:()=>{try{renderKhoTab();}catch(e){}} },
+  khoRepairBak:{ read:()=>_byIdDump(KHO_REPAIR_BAK), write:r=>{KHO_REPAIR_BAK=r.map(x=>x.obj);}, render:()=>{try{renderKhoTab();}catch(e){}} },
   yc:        { read:()=>_byIdDump(YC_DATA),   write:r=>{YC_DATA=r.map(x=>x.obj);},   render:()=>{try{renderYeuCau();}catch(e){}} },
   ycDeleted: { read:()=>_byIdDump(YC_DELETED),write:r=>{YC_DELETED=r.map(x=>x.obj);},render:()=>{try{renderYcDeleted();}catch(e){}} },
   transferReq:{ read:()=>_byIdDump(TR_DATA), write:r=>{TR_DATA=r.map(x=>x.obj);}, render:()=>{try{renderTrTab();}catch(e){}} },
@@ -11365,7 +11399,7 @@ const WRITE_MATRIX = {
   thu:['giamdoc','ketoan'], chi:['giamdoc','ketoan'],
   ncc:['giamdoc','ketoan'], catalog:['giamdoc','ketoan'],
   nsLuong:['giamdoc','hr'], bhxh:['giamdoc','hr'], tncn:['giamdoc','hr'], cats:['giamdoc'], dvtList:['giamdoc','ketoan'], hkStaff:['giamdoc','truong-bp','ketoan'], mbHistory:['giamdoc','truong-bp','ketoan'], hvNono:['giamdoc','truong-bp','ketoan'],
-  dx:['giamdoc','ketoan','truong-bp','hr'], kho:['giamdoc','ketoan','truong-bp','hr'], khoDeleted:['giamdoc','ketoan','truong-bp','hr'], yc:['giamdoc','ketoan','truong-bp','hr'], ycDeleted:['giamdoc','ketoan','truong-bp','hr'], transferReq:['giamdoc','ketoan','truong-bp','hr'],
+  dx:['giamdoc','ketoan','truong-bp','hr'], kho:['giamdoc','ketoan','truong-bp','hr'], khoDeleted:['giamdoc','ketoan','truong-bp','hr'], khoRepairBak:['giamdoc'], yc:['giamdoc','ketoan','truong-bp','hr'], ycDeleted:['giamdoc','ketoan','truong-bp','hr'], transferReq:['giamdoc','ketoan','truong-bp','hr'],
   wsData:['giamdoc','truong-bp'], roomStatus:['giamdoc','truong-bp'], amData:['giamdoc','truong-bp'],
   mbData:['giamdoc','truong-bp'], hvLinen:['giamdoc','truong-bp'], hvRewash:['giamdoc','truong-bp'],
   hvCols:['giamdoc','truong-bp'], sx:['giamdoc','truong-bp'],
