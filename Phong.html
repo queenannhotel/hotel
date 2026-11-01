@@ -667,11 +667,12 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
         </div>
         <div class="card-body">
           <div class="filter-row">
-            <select id="ls-room" onchange="renderHistory()"></select>
+            <input id="ls-room" list="ls-room-list" type="search" inputmode="numeric" placeholder="🔍 Số phòng" oninput="renderHistory()" style="width:150px;" title="Gõ số phòng (vd 305) hoặc đầu số tầng (vd 3 = cả tầng 3)"><datalist id="ls-room-list"></datalist>
             <label style="text-transform:none;letter-spacing:0;">Từ</label><input type="date" id="ls-from" onchange="renderHistory()">
             <label style="text-transform:none;letter-spacing:0;">tới</label><input type="date" id="ls-to" onchange="renderHistory()">
             <select id="ls-bp" onchange="renderHistory()"></select>
-            <select id="ls-dev" onchange="renderHistory()"></select>
+            <select id="ls-dev" onchange="onLsDevChange()"></select>
+            <select id="ls-loi" onchange="renderHistory()"></select>
             <button class="btn btn-ghost btn-sm" onclick="resetFilters('ls')">↺ Bỏ lọc</button>
           </div>
           <div class="table-wrap wide">
@@ -1274,25 +1275,41 @@ function reqFlowHtml(r){
 // ==================== BỘ LỌC ====================
 function initFilterSelects(){
   const roomOpts=FLOORS.map(f=>f.rooms).flat();
-  ['ls-room','yc-room'].forEach(id=>fillSelect(id, roomOpts, 'Tất cả phòng'));
+  fillSelect('yc-room', roomOpts, 'Tất cả phòng');
+  const dl=document.getElementById('ls-room-list'); if(dl) dl.innerHTML=roomOpts.map(r=>`<option value="${r}">`).join('');
   ['ls-bp','yc-bp'].forEach(id=>fillSelect(id, BOPHAN, 'Tất cả bộ phận'));
   const names=allDevNames();
   fillSelect('ls-dev', names, 'Tất cả thiết bị');
   fillSelect('sd-dev', names, 'Mọi thiết bị');
+  fillLsLoi();
 }
+// Lịch sử: Loại lỗi đi theo thiết bị đang lọc (danh sách lỗi ở Tab 4 + lỗi đã gặp trong lịch sử)
+function fillLsLoi(){
+  const el=document.getElementById('ls-loi'); if(!el) return;
+  const dev=document.getElementById('ls-dev').value;
+  if(!dev){ el.innerHTML='<option value="">Loại lỗi (chọn thiết bị trước)</option>'; el.value=''; el.disabled=true; return; }
+  const d=devByName(dev); const opts=[...((d&&d.loi)||[])];
+  REQS.forEach(r=>{ if(r.thietBi!==dev) return; const l=r.loaiLoi||UNCONFIRMED; if(!opts.includes(l)) opts.push(l); });
+  el.disabled=false;
+  fillSelect('ls-loi', opts, 'Tất cả loại lỗi');
+}
+function onLsDevChange(){ document.getElementById('ls-loi').value=''; fillLsLoi(); renderHistory(); }
 function resetFilters(pfx, silent){
-  [pfx+'-room',pfx+'-from',pfx+'-to',pfx+'-bp',pfx+'-dev'].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });
+  [pfx+'-room',pfx+'-from',pfx+'-to',pfx+'-bp',pfx+'-dev',pfx+'-loi'].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });
   if(pfx==='yc') document.getElementById('yc-status').value='open';
+  if(pfx==='ls') fillLsLoi();
   if(silent) return;
   if(pfx==='ls') renderHistory(); else renderRequests();
 }
 function applyCommonFilters(list, pfx){
-  const room=document.getElementById(pfx+'-room').value;
+  const room=String(document.getElementById(pfx+'-room').value||'').trim();
+  // Lịch sử: ô gõ — khớp đầu số (vd '3' = cả tầng 3, '305' = đúng phòng 305). Yêu cầu: chọn đúng phòng.
+  const roomOk=r=> pfx==='ls' ? String(r.phong||'').startsWith(room) : r.phong===room;
   const from=document.getElementById(pfx+'-from').value;
   const to=document.getElementById(pfx+'-to').value;
   const bp=document.getElementById(pfx+'-bp').value;
   return list.filter(r=>{
-    if(room && r.phong!==room) return false;
+    if(room && !roomOk(r)) return false;
     if(from && (r.ngay||'')<from) return false;
     if(to && (r.ngay||'')>to) return false;
     if(bp && r.bpYC!==bp && r.bpNhan!==bp) return false;   // bộ phận yêu cầu HOẶC bộ phận nhận
@@ -1305,6 +1322,8 @@ function historyRows(){
   let list=applyCommonFilters(REQS, 'ls');
   const dev=document.getElementById('ls-dev').value;
   if(dev) list=list.filter(r=>r.thietBi===dev);
+  const loi=dev?document.getElementById('ls-loi').value:'';
+  if(loi) list=list.filter(r=>(r.loaiLoi||UNCONFIRMED)===loi);
   return list.sort((a,b)=>(b.ngay||'').localeCompare(a.ngay||'') || reqTs(b)-reqTs(a));
 }
 function renderHistory(){
