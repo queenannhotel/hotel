@@ -25,8 +25,8 @@ create or replace function public.qah_can_write(coll text) returns boolean
         when 'ketoan'    then array['thu','chi','ncc','catalog','dvtList','dx','kho','khoDeleted','yc','ycDeleted','transferReq','quyTx','quyUng','hkStaff','mbHistory','hvNono','mbItemMap']
         when 'hr'        then array['nsLuong','bhxh','tncn','dx','kho','khoDeleted','yc','ycDeleted','transferReq']
         when 'truong-bp' then array['dx','kho','khoDeleted','yc','ycDeleted','transferReq','wsData','roomStatus','amData','mbData','hvLinen','hvRewash','hvCols','sx','hkStaff','mbHistory','hvNono','mbItemMap']
-        when 'quanly'    then array['phReq','phDevices','phStaff']
-        when 'kythuat'   then array['phReq']
+        when 'quanly'    then array['phReq','phDevices','phStaff','phClean','phItDev']
+        when 'kythuat'   then array['phReq','phClean']
         else array[]::text[] end )
     -- Web Tình trạng phòng (Phong.html): vai trò khác chỉ ghi được phReq khi Giám đốc cấp tab 'tinh-trang-phong'
     -- (xem dòng when 'phReq' bên dưới). Danh sách thiết bị (phDevices) chỉ Giám đốc / Quản lý.
@@ -46,7 +46,7 @@ create or replace function public.qah_can_write(coll text) returns boolean
                 when 'mbItemMap' then 'buong-phong' when 'hvNono' then 'buong-phong' when 'amData' then 'buong-phong'
                 when 'mbData' then 'buong-phong' when 'hvLinen' then 'buong-phong' when 'hvRewash' then 'buong-phong'
                 when 'hvCols' then 'buong-phong' when 'sx' then 'buong-phong'
-                when 'phReq' then 'tinh-trang-phong'
+                when 'phReq' then 'tinh-trang-phong' when 'phClean' then 'tinh-trang-phong'
                 else null end)
               in (select jsonb_array_elements_text(to_jsonb(up.tabs)))
       )
@@ -78,7 +78,7 @@ drop policy if exists records_update on public.records;
 drop policy if exists records_delete on public.records;
 -- Vai trò 'kythuat' (chỉ dùng web Tình trạng phòng) chỉ đọc được dữ liệu của web phòng.
 create policy records_select on public.records for select to authenticated
-  using (coalesce(public.qah_role(),'') <> 'kythuat' or collection in ('phReq','phDevices','phStaff'));
+  using (coalesce(public.qah_role(),'') <> 'kythuat' or collection in ('phReq','phDevices','phStaff','phClean','phItDev'));
 create policy records_insert on public.records for insert to authenticated with check (public.qah_can_write(collection));
 create policy records_update on public.records for update to authenticated using (public.qah_can_write(collection)) with check (public.qah_can_write(collection));
 create policy records_delete on public.records for delete to authenticated using (public.qah_can_write(collection));

@@ -545,6 +545,21 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
 .room-card.expanded .rc-tbl tr.rc-extra{display:table-row;}
 .rc-more{font-size:11px;color:var(--text-muted);text-align:center;padding:5px;cursor:pointer;user-select:none;border-top:1px dashed var(--border);}
 .rc-more:hover{color:var(--navy);background:var(--gold-pale);}
+/* Vệ sinh định kỳ */
+.vs-floor{display:flex;gap:10px;align-items:stretch;margin-bottom:10px;min-width:820px;}
+.vs-rooms{flex:1;display:grid;grid-template-columns:repeat(6,minmax(118px,1fr));gap:8px;}
+.vs-it-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;}
+.vs-cell{background:#fff;border:1px solid var(--border);border-radius:10px;padding:7px 9px;box-shadow:var(--shadow);}
+.vs-cell.done{background:var(--green-bg);border-color:#9fd3bd;}
+.vs-head{display:flex;align-items:center;justify-content:space-between;gap:6px;}
+.vs-no{font-weight:700;font-size:15px;color:var(--navy);}
+.vs-hist{border:1px solid var(--border);background:#fff;border-radius:6px;width:24px;height:24px;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.vs-hist:hover{border-color:var(--gold);background:var(--gold-pale);}
+.vs-pos{font-size:11px;color:var(--text-muted);margin-top:2px;}
+.vs-date{margin-top:5px;font-size:12px;cursor:pointer;padding:3px 6px;border-radius:6px;border:1px dashed var(--border);text-align:center;color:var(--navy);}
+.vs-date:hover{border-color:var(--gold);background:var(--gold-pale);}
+.vs-date.empty{color:var(--text-muted);}
+.vs-cell.done .vs-date{color:var(--green);font-weight:700;border-color:#9fd3bd;}
 .legend{display:flex;gap:12px;flex-wrap:wrap;align-items:center;font-size:11.5px;color:var(--text-muted);}
 /* Chip danh sách lỗi (Tab 4) */
 .chip{display:inline-block;padding:2px 8px;margin:2px;border-radius:12px;background:#EEF1F7;color:var(--navy);font-size:11px;}
@@ -588,6 +603,7 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
     <div class="nav-item active" onclick="showPage('so-do',this)"><span class="icon">🏨</span> Sơ đồ phòng</div>
     <div class="nav-item" onclick="showPage('lich-su',this)"><span class="icon">📜</span> Lịch sử</div>
     <div class="nav-item" onclick="showPage('yeu-cau',this)"><span class="icon">🔧</span> Yêu cầu Sửa chữa<span class="notif-dot" id="notif-req" style="display:none;"></span></div>
+    <div class="nav-item" onclick="showPage('ve-sinh',this)"><span class="icon">🧹</span> Vệ sinh định kỳ</div>
     <div class="nav-section">Hệ Thống</div>
     <div class="nav-item" onclick="showPage('thiet-bi',this)"><span class="icon">⚙️</span> Hệ thống - Thiết bị</div>
     <div class="nav-section">Queen Ann</div>
@@ -713,6 +729,30 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
               <tbody id="yc-tbody"></tbody>
             </table>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ VỆ SINH ĐỊNH KỲ ============ -->
+    <div class="page" id="page-ve-sinh">
+      <div class="bp-tabs" id="vs-tabs"></div>
+      <div class="card">
+        <div class="card-header" style="flex-wrap:wrap;gap:8px;">
+          <div class="card-title">🧹 <span id="vs-title">Vệ sinh định kỳ</span> <span id="vs-count" style="font-weight:400;color:var(--text-muted);font-size:12px;margin-left:6px;"></span></div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <span id="vs-month-wrap"><label style="text-transform:none;letter-spacing:0;margin-right:4px;">Tháng</label><input type="month" id="vs-month" onchange="renderVeSinh()"></span>
+            <span id="vs-year-wrap" style="display:none;"><label style="text-transform:none;letter-spacing:0;margin-right:4px;">Năm</label><select id="vs-year" onchange="renderVeSinh()"></select></span>
+            <button class="btn btn-ghost btn-sm mgr-only" id="vs-it-manage" style="display:none;" onclick="openItDevModal()">⚙ Danh sách thiết bị IT</button>
+            <button class="btn btn-gold" onclick="openVsModal()">＋ Ghi vệ sinh</button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="legend" style="margin-bottom:10px;">
+            <span><span class="stp green">dd/mm/yyyy</span> đã làm trong <span id="vs-period-word">tháng</span> đang xem</span>
+            <span><span class="stp" style="background:#fff;border:1px solid var(--border);color:var(--navy);">dd/mm/yyyy</span> lần làm gần nhất (trước đó)</span>
+            <span>· Bấm vào ô ngày để ghi vệ sinh · 🕘 xem lịch sử</span>
+          </div>
+          <div class="floor-wrap"><div id="vs-grid"></div></div>
         </div>
       </div>
     </div>
@@ -867,6 +907,59 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
   </div>
 </div>
 
+<!-- =================== MODAL: GHI VỆ SINH ĐỊNH KỲ =================== -->
+<div class="modal-overlay" id="vs-modal">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <div class="modal-title" id="vs-modal-title">🧹 Ghi vệ sinh</div>
+      <button class="close-btn" onclick="closeModal('vs-modal')">✕</button>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Ngày vệ sinh</label><input type="date" id="vs-ngay"></div>
+      <div class="form-group"><label id="vs-pick-label">Phòng đã vệ sinh</label>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+          <button class="btn btn-ghost btn-sm" type="button" onclick="vsSelectAll(true)">Chọn tất cả</button>
+          <button class="btn btn-ghost btn-sm" type="button" onclick="vsSelectAll(false)">Bỏ chọn</button>
+          <span style="font-size:12px;color:var(--text-muted);">Đã chọn: <b id="vs-sel-count">0</b></span>
+        </div>
+      </div>
+    </div>
+    <div id="vs-picker" style="max-height:48vh;overflow:auto;border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:14px;"></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;">
+      <button class="btn btn-ghost" onclick="closeModal('vs-modal')">Huỷ</button>
+      <button class="btn btn-primary" onclick="saveVs()">💾 Lưu</button>
+    </div>
+  </div>
+</div>
+
+<!-- =================== MODAL: LỊCH SỬ VỆ SINH 1 PHÒNG / 1 MÁY =================== -->
+<div class="modal-overlay" id="vs-hist-modal">
+  <div class="modal" style="width:520px;">
+    <div class="modal-header">
+      <div class="modal-title" id="vs-hist-title">🕘 Lịch sử vệ sinh</div>
+      <button class="close-btn" onclick="closeModal('vs-hist-modal')">✕</button>
+    </div>
+    <div class="table-wrap"><table><thead><tr><th>Ngày vệ sinh</th><th>Người ghi</th><th></th></tr></thead><tbody id="vs-hist-tbody"></tbody></table></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;" id="vs-hist-actions"></div>
+  </div>
+</div>
+
+<!-- =================== MODAL: DANH SÁCH THIẾT BỊ IT =================== -->
+<div class="modal-overlay" id="it-dev-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">⚙ Danh sách thiết bị IT</div>
+      <button class="close-btn" onclick="closeModal('it-dev-modal')">✕</button>
+    </div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Mỗi dòng 1 thiết bị, dạng <b>Mã thiết bị | Vị trí</b> (vd <code>PC-FO-01 | Quầy lễ tân</code>). Giữ nguyên mã thì lịch sử vệ sinh vẫn giữ; xoá dòng thì máy đó ẩn khỏi bảng.</div>
+    <div class="form-row full"><div class="form-group"><textarea id="it-dev-text" style="min-height:260px;font-family:monospace;" placeholder="PC-FO-01 | Quầy lễ tân&#10;PC-KT-01 | Phòng kế toán&#10;PRINTER-01 | Văn phòng"></textarea></div></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;">
+      <button class="btn btn-ghost" onclick="closeModal('it-dev-modal')">Huỷ</button>
+      <button class="btn btn-primary" onclick="saveItDevs()">💾 Lưu</button>
+    </div>
+  </div>
+</div>
+
 <!-- =================== MODAL: CHỌN NHÂN VIÊN ĐANG DÙNG (tài khoản dùng chung) =================== -->
 <div class="modal-overlay" id="staff-pick-modal">
   <div class="modal" style="width:420px;">
@@ -976,6 +1069,8 @@ const DEFAULT_DEVICES=[
 ];
 
 let DEVICES=[];   // {id, ten, order, macDinh, loi:[], ketLuan:[]}
+let CLEANS=[];    // vệ sinh định kỳ: {id, sheet, target (số phòng / id máy IT), ngay, nguoi, nguoiEmail, createdAt}
+let ITDEVS=[];    // thiết bị IT: {id, ma, viTri, order}
 let STAFF=[];     // {id: email viết thường, email, names:[]} — nhân viên dùng chung 1 tài khoản (vd Bellman)
 let REQS=[];      // {id, phong, priority, loai, thietBi, loaiLoi, tinhTrang, bpYC, ngay, ghichu, nguoi, createdAt,
                   //  status:'moi'|'nhan'|'xong', bpNhan, nguoiNhan, ngayNhan, ngayHT, ketLuan, thaoTac, tinhTrangSau, nguoiHT}
@@ -1071,7 +1166,7 @@ function canEditReq(r){
   const mine = r.nguoiEmail ? r.nguoiEmail===currentUser?.email : r.nguoi===currentUser?.fullname;
   return r.status!=='xong' && mine;
 }
-function canWriteColl(name){ return (name==='phDevices'||name==='phStaff') ? isManager() : !!currentUser; }
+function canWriteColl(name){ return (name==='phDevices'||name==='phStaff'||name==='phItDev') ? isManager() : !!currentUser; }
 
 // ----- Nhân viên dùng chung tài khoản -----
 function staffNames(email){ const e=String(email||'').toLowerCase(); const r=STAFF.find(x=>x.id===e); return (r&&Array.isArray(r.names))?r.names:[]; }
@@ -1679,7 +1774,152 @@ function deleteDev(id){
 }
 
 // ==================== ĐIỀU HƯỚNG ====================
-const PAGE_TITLES={'so-do':'Sơ Đồ Phòng','lich-su':'Lịch Sử Sửa Chữa','yeu-cau':'Yêu Cầu Sửa Chữa','thiet-bi':'Hệ Thống - Thiết Bị'};
+// ==================== VỆ SINH ĐỊNH KỲ ====================
+const VS_SHEETS=[
+  {id:'luoi-ml',      label:'Lưới ML'},
+  {id:'ve-sinh-ml',   label:'Vệ sinh ML'},
+  {id:'tuong',        label:'Tường'},
+  {id:'hoc-tu-minib', label:'Hộc tủ MiniB'},
+  {id:'xa-da-minib',  label:'Xả đá MiniB'},
+  {id:'lat-nem',      label:'Lật nệm'},
+  {id:'it',           label:'Vệ sinh IT', it:true},   // theo NĂM, theo thiết bị IT (không theo phòng)
+];
+let vsSheet='luoi-ml';
+try{ const v=localStorage.getItem('qah_ph_vs_sheet'); if(VS_SHEETS.some(x=>x.id===v)) vsSheet=v; }catch(e){}
+const vsIsIt=()=>vsSheet==='it';
+const vsSheetLabel=id=>(VS_SHEETS.find(x=>x.id===id)||{}).label||id;
+function itDevList(){ return ITDEVS.slice().sort((a,b)=>(a.order||999)-(b.order||999)||String(a.ma).localeCompare(String(b.ma),'vi')); }
+function itDevById(id){ return ITDEVS.find(x=>x.id===id); }
+function vsTargetLabel(sheet,target){ if(sheet==='it'){ const d=itDevById(target); return d?`${d.ma}${d.viTri?' — '+d.viTri:''}`:target; } return 'Phòng '+target; }
+// Kỳ đang xem: 'YYYY-MM' (sheet phòng) hoặc 'YYYY' (sheet IT)
+function vsPeriod(){
+  if(vsIsIt()){ const y=document.getElementById('vs-year'); return (y&&y.value)||String(new Date().getFullYear()); }
+  const m=document.getElementById('vs-month'); return (m&&m.value)||todayISO().slice(0,7);
+}
+// Lần vệ sinh gần nhất tính đến hết kỳ đang xem
+function vsLatest(sheet,target,period){
+  const cutoff=period.length===4?period+'-12-31':period+'-31';
+  let best=''; CLEANS.forEach(c=>{ if(c.sheet===sheet && c.target===target && c.ngay && c.ngay<=cutoff && c.ngay>best) best=c.ngay; });
+  return best;
+}
+function renderVeSinh(){
+  const tabs=document.getElementById('vs-tabs'); if(!tabs) return;
+  tabs.innerHTML=VS_SHEETS.map(t=>`<div class="bp-tab${t.id===vsSheet?' active':''}" onclick="switchVsSheet('${t.id}')">${esc(t.label)}</div>`).join('');
+  const it=vsIsIt();
+  document.getElementById('vs-month-wrap').style.display=it?'none':'';
+  document.getElementById('vs-year-wrap').style.display=it?'':'none';
+  document.getElementById('vs-it-manage').style.display=(it&&isManager())?'':'none';
+  document.getElementById('vs-period-word').textContent=it?'năm':'tháng';
+  document.getElementById('vs-title').textContent=vsSheetLabel(vsSheet);
+  const mEl=document.getElementById('vs-month'); if(!mEl.value) mEl.value=todayISO().slice(0,7);
+  // Năm: từ năm sớm nhất có dữ liệu IT tới năm sau
+  const yEl=document.getElementById('vs-year'); const cy=new Date().getFullYear();
+  const ys=CLEANS.filter(c=>c.sheet==='it'&&c.ngay).map(c=>+c.ngay.slice(0,4));
+  const y0=Math.min(cy,...ys), cur=yEl.value||String(cy);
+  yEl.innerHTML=Array.from({length:cy+1-y0+1},(_,i)=>String(cy+1-i)).map(y=>`<option value="${y}">${y}</option>`).join('');
+  yEl.value=cur;
+  const period=vsPeriod(); const grid=document.getElementById('vs-grid');
+  const cell=(target,top,sub)=>{
+    const d=vsLatest(vsSheet,target,period); const done=d&&d.startsWith(period);
+    return `<div class="vs-cell${done?' done':''}">
+      <div class="vs-head"><span class="vs-no">${top}</span><button class="vs-hist" title="Lịch sử vệ sinh" onclick="openVsHistory('${esc(target)}')">🕘</button></div>
+      ${sub!=null?`<div class="vs-pos">${sub||'—'}</div>`:''}
+      <div class="vs-date${d?'':' empty'}" title="Bấm để ghi vệ sinh" onclick="openVsModal('${esc(target)}')">${d?fmtDate(d):'+ Chọn ngày'}</div>
+    </div>`;
+  };
+  let done=0, total=0;
+  if(it){
+    const devs=itDevList(); total=devs.length;
+    devs.forEach(d=>{ const x=vsLatest('it',d.id,period); if(x&&x.startsWith(period)) done++; });
+    grid.innerHTML=devs.length?`<div class="vs-it-grid">${devs.map(d=>cell(d.id, esc(d.ma), esc(d.viTri||''))).join('')}</div>`
+      :`<div style="text-align:center;padding:30px;color:var(--text-muted);">Chưa có thiết bị IT nào.${isManager()?' Bấm <b>⚙ Danh sách thiết bị IT</b> để thêm.':' Nhờ Giám đốc / Quản lý thêm danh sách thiết bị.'}</div>`;
+  }else{
+    total=ALL_ROOMS.length;
+    ALL_ROOMS.forEach(p=>{ const x=vsLatest(vsSheet,p,period); if(x&&x.startsWith(period)) done++; });
+    grid.innerHTML=FLOORS.map(f=>`<div class="vs-floor"><div class="floor-label"><small>Tầng</small>${f.tang}</div><div class="vs-rooms">${f.rooms.map(p=>cell(p,p,null)).join('')}</div></div>`).join('');
+  }
+  const pl=it?('năm '+period):('tháng '+period.slice(5)+'/'+period.slice(0,4));
+  document.getElementById('vs-count').textContent=`· Đã làm ${done}/${total} ${it?'thiết bị':'phòng'} trong ${pl}`;
+}
+function switchVsSheet(id){ vsSheet=id; try{ localStorage.setItem('qah_ph_vs_sheet',id); }catch(e){} renderVeSinh(); }
+
+// ----- Ghi vệ sinh (chọn ngày + nhiều phòng / nhiều máy) -----
+function openVsModal(preTarget){
+  const it=vsIsIt();
+  if(it && !ITDEVS.length){ showToast('Chưa có thiết bị IT nào để ghi',2500,'error'); return; }
+  document.getElementById('vs-modal-title').textContent='🧹 Ghi vệ sinh — '+vsSheetLabel(vsSheet);
+  document.getElementById('vs-pick-label').textContent=it?'Thiết bị đã vệ sinh':'Phòng đã vệ sinh';
+  document.getElementById('vs-ngay').value=todayISO();
+  const chip=(v,l)=>`<span class="mb-room-chip${v===preTarget?' sel':''}" data-v="${esc(v)}" onclick="this.classList.toggle('sel');vsUpdateSel()">${l}</span>`;
+  document.getElementById('vs-picker').innerHTML=it
+    ? itDevList().map(d=>chip(d.id, `<b>${esc(d.ma)}</b>${d.viTri?` <span style="opacity:.75;">· ${esc(d.viTri)}</span>`:''}`)).join('')
+    : FLOORS.map(f=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">
+        <button class="btn btn-ghost btn-sm" type="button" onclick="vsToggleFloor(this)" style="min-width:68px;font-size:11px;">Tầng ${f.tang}</button>
+        <div style="flex:1;">${f.rooms.map(p=>chip(p,p)).join('')}</div></div>`).join('');
+  vsUpdateSel();
+  openModal('vs-modal');
+}
+function vsUpdateSel(){ document.getElementById('vs-sel-count').textContent=document.querySelectorAll('#vs-picker .mb-room-chip.sel').length; }
+function vsSelectAll(on){ document.querySelectorAll('#vs-picker .mb-room-chip').forEach(c=>c.classList.toggle('sel',!!on)); vsUpdateSel(); }
+function vsToggleFloor(btn){
+  const chips=[...btn.nextElementSibling.querySelectorAll('.mb-room-chip')];
+  const all=chips.every(c=>c.classList.contains('sel')); chips.forEach(c=>c.classList.toggle('sel',!all)); vsUpdateSel();
+}
+function saveVs(){
+  const ngay=document.getElementById('vs-ngay').value;
+  const targets=[...document.querySelectorAll('#vs-picker .mb-room-chip.sel')].map(c=>c.dataset.v);
+  if(!ngay){ showToast('Vui lòng chọn ngày vệ sinh!',2000,'error'); return; }
+  if(!targets.length){ showToast(vsIsIt()?'Chọn ít nhất 1 thiết bị!':'Chọn ít nhất 1 phòng!',2000,'error'); return; }
+  let added=0;
+  targets.forEach(t=>{
+    if(CLEANS.some(c=>c.sheet===vsSheet&&c.target===t&&c.ngay===ngay)) return;   // đã ghi đúng ngày này
+    CLEANS.push({id:newId('VS'), sheet:vsSheet, target:t, ngay, nguoi:actorName(), nguoiEmail:currentUser?.email||'', createdAt:Date.now()});
+    added++;
+  });
+  closeModal('vs-modal'); lsSave(); renderAll();
+  showToast(`✅ Đã ghi ${vsSheetLabel(vsSheet)} ngày ${fmtDate(ngay)} cho ${added} ${vsIsIt()?'thiết bị':'phòng'}`+(targets.length>added?` (bỏ ${targets.length-added} đã ghi trước)`:''),2800,'success');
+}
+// ----- Lịch sử 1 phòng / 1 máy -----
+let _vsHistTarget=null;
+function openVsHistory(target){
+  _vsHistTarget=target;
+  document.getElementById('vs-hist-title').textContent=`🕘 ${vsSheetLabel(vsSheet)} — ${vsTargetLabel(vsSheet,target)}`;
+  renderVsHistory();
+  document.getElementById('vs-hist-actions').innerHTML=`<button class="btn btn-gold" onclick="closeModal('vs-hist-modal');openVsModal('${esc(target)}')">＋ Ghi vệ sinh</button><button class="btn btn-ghost" onclick="closeModal('vs-hist-modal')">Đóng</button>`;
+  openModal('vs-hist-modal');
+}
+function renderVsHistory(){
+  const list=CLEANS.filter(c=>c.sheet===vsSheet&&c.target===_vsHistTarget).sort((a,b)=>(b.ngay||'').localeCompare(a.ngay||'')||(b.createdAt||0)-(a.createdAt||0));
+  document.getElementById('vs-hist-tbody').innerHTML=list.length?list.map(c=>{
+    const canDel=isManager()||(c.nguoiEmail&&c.nguoiEmail===currentUser?.email);
+    return `<tr><td style="font-weight:600;">${fmtDate(c.ngay)}</td><td>${esc(c.nguoi||'—')}<div style="font-size:10.5px;color:var(--text-muted);">${fmtDateTime(c.createdAt)}</div></td>
+      <td>${canDel?`<button class="btn btn-danger btn-sm" onclick="deleteVs('${c.id}')" title="Xoá">🗑</button>`:''}</td></tr>`;
+  }).join(''):`<tr><td colspan="3" style="text-align:center;padding:18px;color:var(--text-muted);">Chưa từng vệ sinh</td></tr>`;
+}
+function deleteVs(id){
+  const c=CLEANS.find(x=>x.id===id); if(!c) return;
+  if(!confirm(`Xoá lần vệ sinh ngày ${fmtDate(c.ngay)}?`)) return;
+  CLEANS=CLEANS.filter(x=>x.id!==id); lsSave(); renderAll(); renderVsHistory();
+}
+// ----- Danh sách thiết bị IT (Giám đốc / Quản lý) -----
+function openItDevModal(){
+  if(!isManager()) return;
+  document.getElementById('it-dev-text').value=itDevList().map(d=>`${d.ma} | ${d.viTri||''}`.trim()).join('\n');
+  openModal('it-dev-modal');
+}
+function saveItDevs(){
+  const seen=new Set(), next=[];
+  document.getElementById('it-dev-text').value.split('\n').forEach((line,i)=>{
+    const [ma,...rest]=line.split('|'); const m=String(ma||'').trim(); if(!m) return;
+    const key=m.toLowerCase(); if(seen.has(key)) return; seen.add(key);
+    const old=ITDEVS.find(d=>String(d.ma).toLowerCase()===key);   // giữ id cũ → giữ lịch sử
+    next.push({id:old?old.id:newId('IT'), ma:m, viTri:rest.join('|').trim(), order:i+1});
+  });
+  ITDEVS=next; closeModal('it-dev-modal'); lsSave(); renderAll();
+  showToast(`✅ Đã lưu ${next.length} thiết bị IT`,2000,'success');
+}
+
+const PAGE_TITLES={'so-do':'Sơ Đồ Phòng','lich-su':'Lịch Sử Sửa Chữa','yeu-cau':'Yêu Cầu Sửa Chữa','ve-sinh':'Vệ Sinh Định Kỳ','thiet-bi':'Hệ Thống - Thiết Bị'};
 function showPage(id,el){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById('page-'+id).classList.add('active');
@@ -1700,6 +1940,7 @@ function renderAll(){
   if(id==='lich-su') renderHistory();
   if(id==='yeu-cau') renderRequests();
   if(id==='thiet-bi'){ renderDevices(); renderStaffTable(); }
+  if(id==='ve-sinh') renderVeSinh();
 }
 function toggleAnySidebar(){
   const sb=document.querySelector('.sidebar');
@@ -1728,7 +1969,7 @@ document.getElementById('app-version').textContent='v'+APP_VERSION;
 let _dirty=false;
 function lsSave(){
   _dirty=true;
-  try{ localStorage.setItem(LS_KEY, JSON.stringify({phDevices:DEVICES, phReq:REQS, phStaff:STAFF})); }catch(e){ console.warn('LS', e); }
+  try{ localStorage.setItem(LS_KEY, JSON.stringify({phDevices:DEVICES, phReq:REQS, phStaff:STAFF, phClean:CLEANS, phItDev:ITDEVS})); }catch(e){ console.warn('LS', e); }
   scheduleFlush();
 }
 function lsLoad(){
@@ -1737,6 +1978,8 @@ function lsLoad(){
     if(Array.isArray(d.phDevices)) DEVICES=d.phDevices;
     if(Array.isArray(d.phReq)) REQS=d.phReq;
     if(Array.isArray(d.phStaff)) STAFF=d.phStaff;
+    if(Array.isArray(d.phClean)) CLEANS=d.phClean;
+    if(Array.isArray(d.phItDev)) ITDEVS=d.phItDev;
   }catch(e){}
 }
 
@@ -1751,6 +1994,8 @@ const COLLS={
   phDevices:{ read:()=>_dump(DEVICES), write:r=>{ DEVICES=r.map(x=>x.obj); } },
   phReq:    { read:()=>_dump(REQS),    write:r=>{ REQS=r.map(x=>x.obj); } },
   phStaff:  { read:()=>_dump(STAFF),   write:r=>{ STAFF=r.map(x=>x.obj); } },
+  phClean:  { read:()=>_dump(CLEANS),  write:r=>{ CLEANS=r.map(x=>x.obj); } },
+  phItDev:  { read:()=>_dump(ITDEVS),  write:r=>{ ITDEVS=r.map(x=>x.obj); } },
 };
 let lastSnapshot={};
 function setSyncStatus(state){
@@ -1782,7 +2027,7 @@ async function cloudPull(manual){
     });
     cloudReady=true;
     if(ensureDevicesSeeded()) _dirty=true;   // lần đầu: Giám đốc/Quản lý khởi tạo danh sách thiết bị mặc định
-    try{ localStorage.setItem(LS_KEY, JSON.stringify({phDevices:DEVICES, phReq:REQS, phStaff:STAFF})); }catch(e){}
+    try{ localStorage.setItem(LS_KEY, JSON.stringify({phDevices:DEVICES, phReq:REQS, phStaff:STAFF, phClean:CLEANS, phItDev:ITDEVS})); }catch(e){}
     renderAll();
     ensureStaffPicked();
     setSyncStatus('ok');
@@ -1844,7 +2089,7 @@ function startRealtime(){
         c.write(rows);
         lastSnapshot[name]=lastSnapshot[name]||{}; lastSnapshot[name][id]=JSON.stringify(obj);
       }
-      try{ localStorage.setItem(LS_KEY, JSON.stringify({phDevices:DEVICES, phReq:REQS, phStaff:STAFF})); }catch(e){}
+      try{ localStorage.setItem(LS_KEY, JSON.stringify({phDevices:DEVICES, phReq:REQS, phStaff:STAFF, phClean:CLEANS, phItDev:ITDEVS})); }catch(e){}
       clearTimeout(_rtRenderT); _rtRenderT=setTimeout(()=>{ renderAll(); if(name==='phStaff') ensureStaffPicked(); }, 250);
     })
     .subscribe(st=>{ if(st==='CHANNEL_ERROR'||st==='TIMED_OUT') setSyncStatus('err'); });
