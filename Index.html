@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.21g';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.21h';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -3124,6 +3124,15 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
         <button class="btn btn-gold" onclick="saveItem()">💾 Lưu & Tính giá tự động</button>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- MODAL LỊCH SỬ MUA (toàn bộ) của 1 mặt hàng trong Danh mục -->
+<div class="modal-overlay" id="modal-cat-history">
+  <div class="modal modal-lg">
+    <div class="modal-header"><span class="modal-title" id="cat-history-title">📋 Lịch sử mua</span><button class="close-btn" onclick="closeModal('modal-cat-history')">✕</button></div>
+    <div id="cat-history-body" style="max-height:62vh;overflow-y:auto;"></div>
+    <div style="display:flex;justify-content:flex-end;margin-top:14px;"><button class="btn btn-ghost" onclick="closeModal('modal-cat-history')">Đóng</button></div>
   </div>
 </div>
 
@@ -7673,7 +7682,7 @@ document.getElementById('catalog-tbody').innerHTML=items.map(it=>{
     <td>${fmt(p.avg)}<div style="font-size:9px;color:var(--text-muted);">t\u1ef1 t\u00ednh</div></td>
     <td><div style="font-weight:600;">${fmt(p.last)}</div><div style="font-size:10px;color:var(--text-muted);">${p.lastDate}</div></td>
     <td>${catVatParts(it).map(v=>`<span class="badge ${v.hasVat?'badge-green':'badge-navy'}" style="margin:1px;font-size:10px;">${v.nm?esc(v.nm)+': ':''}${v.txt}</span>`).join('')||'—'}</td>
-    <td style="min-width:160px;">${histRows}</td>
+    <td style="min-width:160px;">${histRows||'<span style="font-size:11px;color:var(--text-muted);">Ch\u01b0a c\u00f3</span>'}<div><button class="btn btn-ghost btn-sm" style="margin-top:4px;" onclick="openCatalogHistory('${it.id}')">\ud83d\udccb Xem t\u1ea5t c\u1ea3</button></div></td>
     <td><div style="display:flex;gap:4px;"><button class="btn btn-ghost btn-sm" onclick="editItem('${it.id}')">\u270f S\u1eeda</button><button class="btn btn-danger btn-sm" onclick="deleteItem('${it.id}')" title="Xo\u00e1 m\u1eb7t h\u00e0ng">\ud83d\uddd1</button></div></td>
   </tr>`;
 }).join('')||`<tr><td colspan="11" style="text-align:center;padding:30px;color:var(--text-muted);">Kh\u00f4ng t\u00ecm th\u1ea5y m\u1eb7t h\u00e0ng n\u00e0o</td></tr>`;
@@ -7732,6 +7741,32 @@ function itemPriceHistory(item){
   (item.suppliers||[]).forEach(s=>(s.history||[]).forEach(x=>h.push(x)));
   (item.purchaseHistory||[]).forEach(x=>h.push(x));
   return h;
+}
+// Mở modal xem TOÀN BỘ lịch sử mua của 1 mặt hàng (gộp mọi NCC + bản ghi cũ), mới nhất trước.
+function openCatalogHistory(id){
+  const it=(catalogItems||[]).find(x=>x.id===id);
+  if(!it){ showToast('Không tìm thấy mặt hàng',2500,'error'); return; }
+  const rows=[];
+  (it.suppliers||[]).forEach(s=>{ const nm=nccName(s.nccId)||''; (s.history||[]).forEach(h=>rows.push({...h,ncc:nm})); });
+  (it.purchaseHistory||[]).forEach(h=>rows.push({...h,ncc:h.ncc||''}));
+  rows.sort((a,b)=>(vnToIso(b.date)||'').localeCompare(vnToIso(a.date)||''));
+  const p=calcPrices(it);
+  const title=document.getElementById('cat-history-title');
+  if(title) title.textContent='📋 Lịch sử mua — '+(it.name||'');
+  const body=document.getElementById('cat-history-body');
+  if(body){
+    const summary=`<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+      <div style="padding:8px 14px;background:var(--cream);border-radius:8px;font-size:13px;"><div style="font-size:10px;color:var(--text-muted);">Tổng số lần mua</div><div style="font-weight:700;">${rows.length}</div></div>
+      <div style="padding:8px 14px;background:var(--cream);border-radius:8px;font-size:13px;"><div style="font-size:10px;color:var(--text-muted);">Giá thấp nhất năm</div><div style="font-weight:700;color:var(--green);">${fmt(p.min)}</div></div>
+      <div style="padding:8px 14px;background:var(--cream);border-radius:8px;font-size:13px;"><div style="font-size:10px;color:var(--text-muted);">Giá TB năm</div><div style="font-weight:700;">${fmt(p.avg)}</div></div>
+      <div style="padding:8px 14px;background:var(--cream);border-radius:8px;font-size:13px;"><div style="font-size:10px;color:var(--text-muted);">Lần mua gần nhất</div><div style="font-weight:700;">${fmt(p.last)} <span style="font-size:10px;color:var(--text-muted);font-weight:400;">${esc(p.lastDate)}</span></div></div>
+    </div>`;
+    const list=rows.length
+      ? rows.map(h=>`<div class="purchase-row"><span style="min-width:80px;">${esc(h.date)||'—'}</span>${h.ncc?`<span class="badge badge-blue" style="font-size:10px;">${esc(h.ncc)}</span>`:''}<span style="font-weight:600;color:var(--navy);">${fmt(h.price)}</span>${h.note?`<span style="color:var(--text-muted);font-size:10px;">${esc(h.note)}</span>`:''}</div>`).join('')
+      : '<div style="font-size:13px;color:var(--text-muted);padding:14px 0;text-align:center;">Chưa có lịch sử mua.</div>';
+    body.innerHTML=summary+list;
+  }
+  openModal('modal-cat-history');
 }
 function calcPrices(item){
 let hist=itemPriceHistory(item);
