@@ -1790,7 +1790,23 @@ const vsIsIt=()=>vsSheet==='it';
 const vsSheetLabel=id=>(VS_SHEETS.find(x=>x.id===id)||{}).label||id;
 function itDevList(){ return ITDEVS.slice().sort((a,b)=>(a.order||999)-(b.order||999)||String(a.ma).localeCompare(String(b.ma),'vi')); }
 function itDevById(id){ return ITDEVS.find(x=>x.id===id); }
-function vsTargetLabel(sheet,target){ if(sheet==='it'){ const d=itDevById(target); return d?`${d.ma}${d.viTri?' — '+d.viTri:''}`:target; } return 'Phòng '+target; }
+// Sheet Lưới ML / Vệ sinh ML có thêm các khu ngoài phòng khách (thêm ở dưới cùng)
+const VS_EXTRA_SHEETS=['luoi-ml','ve-sinh-ml'];
+const VS_EXTRA_FLOORS=[
+  {tang:'B',   units:[{id:'B-bar',l:'ML Bar'},{id:'B-buffet',l:'ML Buffet'},{id:'B-ngoai',l:'ML ngoài'},{id:'B-trong',l:'ML trong'}]},
+  {tang:'G',   units:[{id:'G-trong',l:'ML trong'},{id:'G-ngoai',l:'ML ngoài'}]},
+  {tang:'Sếp', units:[{id:'S-sep',l:'P. Sếp'},{id:'S-dung',l:'P. Dũng'},{id:'S-khach',l:'P. Khách'},{id:'S-minh',l:'P. Minh'},{id:'S-quynh',l:'P. Quỳnh'},{id:'S-bep',l:'Bếp'}]},
+];
+// Các tầng + ô của 1 sheet phòng: [{tang, units:[{id,l}]}]
+function vsFloors(sheet){
+  const base=FLOORS.map(f=>({tang:f.tang, units:f.rooms.map(p=>({id:p,l:p}))}));
+  return VS_EXTRA_SHEETS.includes(sheet)?base.concat(VS_EXTRA_FLOORS):base;
+}
+function vsTargetLabel(sheet,target){
+  if(sheet==='it'){ const d=itDevById(target); return d?`${d.ma}${d.viTri?' — '+d.viTri:''}`:target; }
+  for(const f of VS_EXTRA_FLOORS){ const u=f.units.find(x=>x.id===target); if(u) return `Tầng ${f.tang} — ${u.l}`; }
+  return 'Phòng '+target;
+}
 // Kỳ đang xem: 'YYYY-MM' (sheet phòng) hoặc 'YYYY' (sheet IT)
 function vsPeriod(){
   if(vsIsIt()){ const y=document.getElementById('vs-year'); return (y&&y.value)||String(new Date().getFullYear()); }
@@ -1834,12 +1850,13 @@ function renderVeSinh(){
     grid.innerHTML=devs.length?`<div class="vs-it-grid">${devs.map(d=>cell(d.id, esc(d.ma), esc(d.viTri||''))).join('')}</div>`
       :`<div style="text-align:center;padding:30px;color:var(--text-muted);">Chưa có thiết bị IT nào.${isManager()?' Bấm <b>⚙ Danh sách thiết bị IT</b> để thêm.':' Nhờ Giám đốc / Quản lý thêm danh sách thiết bị.'}</div>`;
   }else{
-    total=ALL_ROOMS.length;
-    ALL_ROOMS.forEach(p=>{ const x=vsLatest(vsSheet,p,period); if(x&&x.startsWith(period)) done++; });
-    grid.innerHTML=FLOORS.map(f=>`<div class="vs-floor"><div class="floor-label"><small>Tầng</small>${f.tang}</div><div class="vs-rooms">${f.rooms.map(p=>cell(p,p,null)).join('')}</div></div>`).join('');
+    const floors=vsFloors(vsSheet), units=floors.flatMap(f=>f.units);
+    total=units.length;
+    units.forEach(u=>{ const x=vsLatest(vsSheet,u.id,period); if(x&&x.startsWith(period)) done++; });
+    grid.innerHTML=floors.map(f=>`<div class="vs-floor"><div class="floor-label"><small>Tầng</small>${esc(f.tang)}</div><div class="vs-rooms">${f.units.map(u=>cell(u.id,esc(u.l),null)).join('')}</div></div>`).join('');
   }
   const pl=it?('năm '+period):('tháng '+period.slice(5)+'/'+period.slice(0,4));
-  document.getElementById('vs-count').textContent=`· Đã làm ${done}/${total} ${it?'thiết bị':'phòng'} trong ${pl}`;
+  document.getElementById('vs-count').textContent=`· Đã làm ${done}/${total} ${it?'thiết bị':(VS_EXTRA_SHEETS.includes(vsSheet)?'vị trí':'phòng')} trong ${pl}`;
 }
 function switchVsSheet(id){ vsSheet=id; try{ localStorage.setItem('qah_ph_vs_sheet',id); }catch(e){} renderVeSinh(); }
 
@@ -1853,9 +1870,9 @@ function openVsModal(preTarget){
   const chip=(v,l)=>`<span class="mb-room-chip${v===preTarget?' sel':''}" data-v="${esc(v)}" onclick="this.classList.toggle('sel');vsUpdateSel()">${l}</span>`;
   document.getElementById('vs-picker').innerHTML=it
     ? itDevList().map(d=>chip(d.id, `<b>${esc(d.ma)}</b>${d.viTri?` <span style="opacity:.75;">· ${esc(d.viTri)}</span>`:''}`)).join('')
-    : FLOORS.map(f=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">
-        <button class="btn btn-ghost btn-sm" type="button" onclick="vsToggleFloor(this)" style="min-width:68px;font-size:11px;">Tầng ${f.tang}</button>
-        <div style="flex:1;">${f.rooms.map(p=>chip(p,p)).join('')}</div></div>`).join('');
+    : vsFloors(vsSheet).map(f=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">
+        <button class="btn btn-ghost btn-sm" type="button" onclick="vsToggleFloor(this)" style="min-width:68px;font-size:11px;">Tầng ${esc(f.tang)}</button>
+        <div style="flex:1;">${f.units.map(u=>chip(u.id,esc(u.l))).join('')}</div></div>`).join('');
   vsUpdateSel();
   openModal('vs-modal');
 }
