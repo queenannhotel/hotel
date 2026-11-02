@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.21j';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.21k';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -5103,7 +5103,8 @@ function cnCkGroups(){
       ncc:[...new Set(recs.map(r=>r.ten_ncc).filter(n=>n&&n!=='—'))].join(', ')||'—',
       paid:first.cn_status==='da',
     };
-  }).sort((a,b)=>vnToIso(b.first.ngay).localeCompare(vnToIso(a.first.ngay)));
+  }).sort((a,b)=> (a.paid?1:0)-(b.paid?1:0)   // Chưa thanh toán lên đầu; đã thanh toán tụt xuống
+               || vnToIso(b.first.ngay).localeCompare(vnToIso(a.first.ngay)));   // rồi theo ngày mới→cũ
 }
 // Tập phiếu CK khớp bộ lọc hiện tại (đồng thời đổ lại dropdown NCC).
 function cnCkFiltered(){
