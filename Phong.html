@@ -939,7 +939,7 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
       <div class="modal-title" id="vs-hist-title">🕘 Lịch sử vệ sinh</div>
       <button class="close-btn" onclick="closeModal('vs-hist-modal')">✕</button>
     </div>
-    <div class="table-wrap"><table><thead><tr><th>Ngày vệ sinh</th><th>Người ghi</th><th></th></tr></thead><tbody id="vs-hist-tbody"></tbody></table></div>
+    <div class="table-wrap"><table style="min-width:0;"><thead><tr><th>Ngày vệ sinh</th><th>Người ghi</th><th style="width:1%;"></th></tr></thead><tbody id="vs-hist-tbody"></tbody></table></div>
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;" id="vs-hist-actions"></div>
   </div>
 </div>
@@ -1882,24 +1882,39 @@ function saveVs(){
 // ----- Lịch sử 1 phòng / 1 máy -----
 let _vsHistTarget=null;
 function openVsHistory(target){
-  _vsHistTarget=target;
+  _vsHistTarget=target; _vsEditId=null;
   document.getElementById('vs-hist-title').textContent=`🕘 ${vsSheetLabel(vsSheet)} — ${vsTargetLabel(vsSheet,target)}`;
   renderVsHistory();
   document.getElementById('vs-hist-actions').innerHTML=`<button class="btn btn-gold" onclick="closeModal('vs-hist-modal');openVsModal('${esc(target)}')">＋ Ghi vệ sinh</button><button class="btn btn-ghost" onclick="closeModal('vs-hist-modal')">Đóng</button>`;
   openModal('vs-hist-modal');
 }
+let _vsEditId=null;   // lần vệ sinh đang sửa ngày trong bảng lịch sử
 function renderVsHistory(){
   const list=CLEANS.filter(c=>c.sheet===vsSheet&&c.target===_vsHistTarget).sort((a,b)=>(b.ngay||'').localeCompare(a.ngay||'')||(b.createdAt||0)-(a.createdAt||0));
   document.getElementById('vs-hist-tbody').innerHTML=list.length?list.map(c=>{
-    const canDel=isManager()||(c.nguoiEmail&&c.nguoiEmail===currentUser?.email);
-    return `<tr><td style="font-weight:600;">${fmtDate(c.ngay)}</td><td>${esc(c.nguoi||'—')}<div style="font-size:10.5px;color:var(--text-muted);">${fmtDateTime(c.createdAt)}</div></td>
-      <td>${canDel?`<button class="btn btn-danger btn-sm" onclick="deleteVs('${c.id}')" title="Xoá">🗑</button>`:''}</td></tr>`;
+    const canEdit=isManager()||(c.nguoiEmail&&c.nguoiEmail===currentUser?.email);
+    const editing=canEdit&&_vsEditId===c.id;
+    const who=`${esc(c.nguoi||'—')}<div style="font-size:10.5px;color:var(--text-muted);">${fmtDateTime(c.createdAt)}${c.editedBy?` · sửa: ${esc(c.editedBy)}`:''}</div>`;
+    if(editing) return `<tr style="background:var(--gold-pale);"><td><input type="date" id="vs-edit-ngay" value="${esc(c.ngay)}" style="padding:5px 8px;"></td><td>${who}</td>
+      <td style="white-space:nowrap;"><div class="req-actions" style="flex-wrap:nowrap;"><button class="btn btn-success btn-sm" onclick="saveVsEdit('${c.id}')" title="Lưu">✓</button><button class="btn btn-ghost btn-sm" onclick="cancelVsEdit()" title="Huỷ">✕</button><button class="btn btn-danger btn-sm" onclick="deleteVs('${c.id}')" title="Xoá lần vệ sinh này">🗑</button></div></td></tr>`;
+    return `<tr><td style="font-weight:600;">${fmtDate(c.ngay)}</td><td>${who}</td>
+      <td>${canEdit?`<button class="btn btn-ghost btn-sm" onclick="editVs('${c.id}')" title="Sửa ngày / xoá">✏</button>`:''}</td></tr>`;
   }).join(''):`<tr><td colspan="3" style="text-align:center;padding:18px;color:var(--text-muted);">Chưa từng vệ sinh</td></tr>`;
+}
+function editVs(id){ _vsEditId=id; renderVsHistory(); const i=document.getElementById('vs-edit-ngay'); if(i) i.focus(); }
+function cancelVsEdit(){ _vsEditId=null; renderVsHistory(); }
+function saveVsEdit(id){
+  const c=CLEANS.find(x=>x.id===id); if(!c) return;
+  const ngay=document.getElementById('vs-edit-ngay').value;
+  if(!ngay){ showToast('Vui lòng chọn ngày!',2000,'error'); return; }
+  if(ngay!==c.ngay && CLEANS.some(x=>x.id!==id&&x.sheet===c.sheet&&x.target===c.target&&x.ngay===ngay)){ showToast('Ngày '+fmtDate(ngay)+' đã có trong lịch sử — xoá dòng này nếu bị trùng',3000,'error'); return; }
+  if(ngay!==c.ngay){ c.ngay=ngay; c.editedBy=actorName(); c.editedAt=Date.now(); lsSave(); renderAll(); showToast('✅ Đã sửa ngày vệ sinh thành '+fmtDate(ngay),2200,'success'); }
+  _vsEditId=null; renderVsHistory();
 }
 function deleteVs(id){
   const c=CLEANS.find(x=>x.id===id); if(!c) return;
   if(!confirm(`Xoá lần vệ sinh ngày ${fmtDate(c.ngay)}?`)) return;
-  CLEANS=CLEANS.filter(x=>x.id!==id); lsSave(); renderAll(); renderVsHistory();
+  CLEANS=CLEANS.filter(x=>x.id!==id); _vsEditId=null; lsSave(); renderAll(); renderVsHistory();
 }
 // ----- Danh sách thiết bị IT (Giám đốc / Quản lý) -----
 function openItDevModal(){
