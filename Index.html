@@ -18,7 +18,7 @@
 // ==================== GOOGLE SHEETS — Apps Script ====================
 // ==================== LOCAL STORAGE + GOOGLE SHEETS SYNC ====================
 const LS_KEY='queen_ann_v4';
-const APP_VERSION='2026.08.21k';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
+const APP_VERSION='2026.08.21l';   // mốc phiên bản — hiện ở chân sidebar để biết máy đang chạy bản nào
 const GS_URL='https://script.google.com/macros/s/AKfycby3h3d4HY6nK56FhZPsZlrmlv6WNHdVifJnBkjCwF5hIUSyuuiTwnZX17tqn204nKD8/exec';
 
 // ==================== SUPABASE — CẤU HÌNH ĐỒNG BỘ ĐA THIẾT BỊ ====================
@@ -453,7 +453,7 @@ textarea{resize:vertical;min-height:68px;}
 .modal{background:var(--white);border-radius:16px;width:640px;max-width:96vw;max-height:92vh;overflow-y:auto;box-shadow:var(--shadow-lg);padding:26px;}
 .modal-lg{width:800px;}
 #modal-de-xuat .modal{width:980px;}
-#dx-items{overflow-x:auto;}
+#dx-items{overflow:visible;}
 .dx-item-row{min-width:780px;}
 .dx-item-row .form-group{min-width:0;}
 .dx-item-row .form-group input{min-width:0;width:100%;box-sizing:border-box;}
@@ -769,6 +769,12 @@ input[type="time"].ws-input::-webkit-calendar-picker-indicator{display:none;-web
   .modal-overlay{align-items:flex-end;}
   .modal-lg{width:100%!important;}
   .modal-title{font-size:15px;}
+  /* Đề xuất mua hàng: xếp dòng hàng theo cột dọc cho vừa màn hình điện thoại (hết tràn ngang & cắt dropdown) */
+  .dx-item-row{grid-template-columns:1fr 1fr!important;min-width:0!important;}
+  .dx-item-row>.form-group:nth-child(1),   /* Tên hàng */
+  .dx-item-row>.form-group:nth-child(2),   /* Nhà cung cấp */
+  .dx-item-row>.form-group:nth-child(8),   /* Lý do / Mục đích */
+  .dx-item-row>button{ grid-column:1 / -1; }   /* nút xoá dòng */
 
   /* === LOGIN === */
   .login-box{padding:28px 22px;border-radius:16px;}
